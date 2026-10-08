@@ -1,0 +1,6 @@
+@Nook.Api_HostAddress = http://localhost:5153
+
+GET {{Nook.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

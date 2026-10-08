@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nook.Api/Nook.Api.csproj" />
+  </Folder>
+</Solution>
