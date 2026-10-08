@@ -1,5 +1,14 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Nook.Algorithms/Nook.Algorithms.csproj" />
     <Project Path="src/Nook.Api/Nook.Api.csproj" />
+    <Project Path="src/Nook.Application/Nook.Application.csproj" />
+    <Project Path="src/Nook.Domain/Nook.Domain.csproj" />
+    <Project Path="src/Nook.Infrastructure/Nook.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nook.Algorithms.Tests/Nook.Algorithms.Tests.csproj" />
+    <Project Path="tests/Nook.Domain.Tests/Nook.Domain.Tests.csproj" />
+    <Project Path="tests/Nook.Integration.Tests/Nook.Integration.Tests.csproj" />
   </Folder>
 </Solution>
