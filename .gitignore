@@ -3,6 +3,10 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# 개인 학습 공간·개인 Claude 지시
+cs_trainning/
+CLAUDE.local.md
+
 # dotenv files
 .env
 
