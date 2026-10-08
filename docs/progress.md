@@ -1,8 +1,8 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D1 진행 중** — 솔루션 골격 완료, 유스케이스·ADR-001 남음
-- 다음 할 일: 원본 기능명세서 읽기 → `docs/design/usecases.md` 작성(유스케이스마다 실패 흐름 1개+) → ADR-001 → `feat/d1-skeleton` PR
+- 현재: **D1 진행 중** — 솔루션 골격 완료(PR #2 머지), 유스케이스 작성 중(PL-01·BM-01 완료)
+- 다음 할 일: BM-02 저장 해제 → RV-01 리뷰 작성 → GR-01 그룹 합류 → 나머지 유스케이스 → ADR-001 → `feat/d1-usecases` PR
 
 ## 세션 기록
 
@@ -20,8 +20,18 @@
 11. 나머지 classlib 4개·xunit 3개 생성, 참조 연결 (Infrastructure 참조 누락 발견 후 수정)
 12. 검증: `dotnet build` 오류 0, `dotnet test` 3/3 통과, 취약 패키지 0 → `feat/d1-skeleton` 커밋·푸시
 
-커밋: `6b0d250` 골격 · `40e1f97` 패키지 보안 업데이트 · `a92da37` 프로젝트·참조 (모두 `feat/d1-skeleton`, PR 미생성)
+커밋: `6b0d250` 골격 · `40e1f97` 패키지 보안 업데이트 · `a92da37` 프로젝트·참조 (모두 `feat/d1-skeleton`, PR #2로 머지)
 Claude가 작성: `.gitattributes`, `dotnet new`/참조 명령어
+
+### 2026-10-08 (D1-2)
+1. 브랜치 `feat/d1-usecases` 생성, `.gitignore`에 `cs_trainning/`·`CLAUDE.local.md` 제외 추가
+2. 유스케이스 작성 요령 학습: 시스템 경계, 기본/실패 흐름(갈라지는 단계 번호), 사후 조건은 화면이 아닌 DB 상태, "실패 시 보장"
+3. 원본 확인: 장소 검색은 프론트가 카카오 SDK로 직접 수행(`src/lib/kakao.ts`) → 백엔드 유스케이스는 "선택한 장소 확정"(PL-01)부터. 원본 `upsertPlace`(`src/lib/store.ts:125`)는 조회→INSERT 분리로 TOCTOU
+4. PL-01 장소 확정(Claude 예시), BM-01 장소 저장(사용자 작성, 리뷰 3회) — 별 상태는 북마크·리뷰 조합으로 계산되는 값, 존재하지 않는 장소, 동시 요청 실패 흐름 포함
+5. BM-02 빈 틀 추가(`TODO(human)`)
+
+커밋: `9f10d27` .gitignore · `6ea1d40` PL-01·BM-01 (`feat/d1-usecases`, 미푸시)
+Claude가 작성: PL-01(예시), BM-01·BM-02 빈 틀
 
 ## 체크리스트
 
@@ -44,6 +54,10 @@ Claude가 작성: `.gitattributes`, `dotnet new`/참조 명령어
 - [ ] D14 README·회고
 
 ## 미결 결정
+- 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
+- 북마크 테이블에 "북마크 여부" 컬럼이 필요한가(행 존재 = 북마크) — D3
+- 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
+- 북마크 API: 토글 vs PUT/DELETE — D5
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
 - API 스타일(Controllers vs Minimal API) — ADR-001 (골격은 Controllers로 생성함)
 - 리포지토리 인터페이스 위치(Domain vs Application) — ADR-001
