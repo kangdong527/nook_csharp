@@ -1,0 +1,7 @@
+<Project>
+  <!-- ADR-001 결정 3: 선언하지 않은 프로젝트 참조는 전이되지 않는다.
+       예) Api → Application → Domain 이어도 Api에서 Domain 타입을 쓰면 컴파일 에러. -->
+  <PropertyGroup>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+  </PropertyGroup>
+</Project>
