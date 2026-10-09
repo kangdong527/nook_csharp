@@ -1,8 +1,8 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D1 진행 중** — 솔루션 골격 완료(PR #2 머지), 유스케이스 작성 중(PL-01·BM-01·BM-02·RV-01 완료)
-- 다음 할 일: GR-01 그룹 합류 → 나머지 유스케이스 → ADR-001 → `feat/d1-usecases` PR
+- 현재: **D1 완료** (2026-10-09) — `feat/d1-usecases` 푸시·PR 남음
+- 다음 할 일: `feat/d1-usecases` 푸시·PR → **D2** 엔티티·값 객체 설계(R-STAR → `StarState`, R-GR → `Group.AddMember()`, 엔티티/값 객체 분류) — design-review 🔴 0
 
 ## 세션 기록
 
@@ -31,12 +31,26 @@ Claude가 작성: `.gitattributes`, `dotnet new`/참조 명령어
 5. BM-02 빈 틀 추가(`TODO(human)`)
 
 커밋: `9f10d27` .gitignore · `6ea1d40` PL-01·BM-01 (`feat/d1-usecases`, 미푸시)
+
+### 2026-10-09 (D1-3)
+1. BM-02 저장 해제 — 별 상태 비대칭, 실패 시 보장은 "요청 전과 비교해 변하지 않는 것"
+2. 공통 규칙 절 도입(R-PL·R-BM·R-RV·R-GR·R-STAR) — 규칙은 한 곳, 유스케이스는 ID 참조
+3. R-BM-2 저장·해제 경합: 나중에 처리된 요청이 최종 상태(초안 "둘 다 실패"는 서버가 동시를 감지할 수 없어 폐기)
+4. RV-01 리뷰 작성 — 싼 검증 → 이미지 업로드 → DB 저장 순서, 고아 이미지는 "노출되지 않음 + 정리 배치"
+5. GR-01 그룹 합류 — 미리 검사(3b·4b)와 최종 보장(5a·5b) 구분, 불변식 3줄(정원 ≤ 4, 참여 ≤ 3, 멤버십 0/1)
+6. 나머지 유스케이스 17개 목록(이름·실패 흐름 키워드), 원본 명세에서 "리뷰 같은 장소 1일 1회" 발견
+7. ADR-001 채택: Controllers, 리포지토리 인터페이스 Application, 전이 참조 차단 + Infrastructure→Domain 유지, 엔티티 겸용 + Fluent API + 지연 로딩 미사용
+8. `Directory.Build.props`에 `DisableTransitiveProjectReferences` — Api에서 Domain 타입 사용 시 CS0234 확인
+9. 검증: `dotnet build` 경고·오류 0, `dotnet test` 3/3 통과
+
+커밋: `411fc6e` BM-02·공통 규칙 · `97f7926` RV-01 · `b6cda93` GR-01 · `b39b259` build props · `d06fdea` 유스케이스 목록 · `c455bec` ADR-001 · `190f71c` 학습 로그 (`feat/d1-usecases`, 미푸시)
+Claude가 작성: PL-01 예시, 공통 규칙 재구성, R-BM-1·2, GR-01 불변식, 유스케이스 목록 17개, ADR-001 빈칸·결과 절, `Directory.Build.props`
 Claude가 작성: PL-01(예시), BM-01·BM-02 빈 틀
 
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
-- [ ] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
+- [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
 - [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0)
 - [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
@@ -63,9 +77,6 @@ Claude가 작성: PL-01(예시), BM-01·BM-02 빈 틀
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - 북마크 API: 토글 vs PUT/DELETE — D5
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
-- API 스타일(Controllers vs Minimal API) — ADR-001 (골격은 Controllers로 생성함)
-- 리포지토리 인터페이스 위치(Domain vs Application) — ADR-001
-- Infrastructure→Domain 직접 참조 유지 여부, 전이 참조 차단(`DisableTransitiveProjectReferences`) — ADR-001
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
 
