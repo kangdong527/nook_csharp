@@ -24,3 +24,13 @@
 - 내일 확인할 것:
 
 ---
+
+### D2-1 (2026-10-10) — 실패 표현 기반과 첫 값 객체
+- 배운 것:
+  1. 결과 반환 정의: Error, Result 클래스 작성(feat: 제네릭, 성공 시 null 리턴 고민)
+  2. 리뷰 값 객체(ReviewContent) 클래스 작성: 객체 생성 및 유효성 검사, Result & Error 활용한 반환 구현
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `ReviewErrors.cs` 전체와 `ReviewContent`의 오류 반환 줄 — Result에 오류를 반환하는 코드에서 막혀 요청(힌트 4단계). `ReviewContent` 리뷰 후 결함 수정(struct→sealed record, null 입력 처리, `Value` 공개, 길이 1회 계산, 상수 PascalCase) — 사용자 요청
+- 내일 확인할 것:
+
+---
