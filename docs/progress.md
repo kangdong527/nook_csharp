@@ -1,13 +1,13 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 진행 중** (2026-10-10) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반(`Error`·`Result<T>`·`Result`)과 첫 값 객체 `ReviewContent` 완료
+- 현재: **D2 진행 중** (2026-10-10) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개(`ReviewContent`·`Coordinate`·`Nickname`·`InviteCode`), 분류표(`docs/design/domain.md`) 완료. 달력 기준 약 1일 지연
 - 다음 할 일 (순서대로)
-  1. 커밋 `071120c` 메시지 오타 수정(`eat(` → `feat(`, 줄바꿈 정리) — 미푸시라 `git commit --amend` 가능
-  2. 학습 로그 D2-1 "배운 것" 작성(사용자)
-  3. `usecases.md` R-RV-1을 결정에 맞게 고치기: "앞뒤 공백 제거 후 10~50자, 코드 포인트 기준"(사용자)
-  4. **좌표 값 객체** — 열린 질문: 위·경도 범위에서 모든 비트 조합이 유효한가? `double` 특수값(NaN·Infinity)은? → `struct` vs `record class` 판단
-  5. 나머지 값 객체(닉네임·초대코드) → 엔티티 분류표 → `StarState`(R-STAR) → `Group.AddMember()`(R-GR) → `docs/design/domain.md` 다이어그램 → `/design-review src/Nook.Domain` 🔴 0
+  1. 학습 로그 D2-2 작성(사용자)
+  2. **클래스 다이어그램** — `domain.md` 2절, 분류표의 애그리거트·참조 열을 Mermaid로 옮긴다
+  3. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03)
+  4. **`Group.AddMember()`** — R-GR-01(정원)·R-GR-07(중복) 미리 검사. R-GR-02는 Application, 최종 보장은 DB(D6)
+  5. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
 
 ## 세션 기록
 
@@ -64,14 +64,30 @@ Claude가 작성: PL-01(예시), BM-01·BM-02 빈 틀
 9. `struct` 값 객체는 `default`로 검증 우회 → `sealed record`. 참조 타입이면 미초기화 시 CS8618로 컴파일 시점에 잡힘(측정 확인)
 10. 검증: `dotnet build` 경고·오류 0. 경계값(null·공백·9/10/50/51자·이모지 50/51)을 scratchpad 콘솔로 확인 — 단위 테스트는 D4
 
-커밋: `e1f2c3e` Error·Result<T> · `aee7eb2` 비제네릭 Result · `071120c` ReviewContent (`feat/d2-domain`, 미푸시)
+커밋: `e1f2c3e` Error·Result<T> · `aee7eb2` 비제네릭 Result · `4761604` ReviewContent(메시지 amend, 구 `071120c`) · `691f9d3` R-RV-01 문구 · `6aa7ab5` 진행 기록 (`feat/d2-domain`, 미푸시)
 Claude가 작성: `Error.cs`·`Result.cs`·`ReviewContent.cs` 빈 틀, `ReviewErrors.cs` 전체와 `ReviewContent`의 오류 반환 줄(사용자 요청, 힌트 4단계), `ReviewContent` 리뷰 후 수정(사용자 요청: struct→sealed record, null 처리, `Value` 공개, 길이 1회 계산, 상수 PascalCase)
+
+### 2026-10-10 (D2-2)
+1. Git 정리: 오타 커밋 `--amend`, 이미 쌓인 커밋에 `--fixup` + `rebase --autosquash`(비대화형 `GIT_SEQUENCE_EDITOR=:`). 원칙: 푸시 전이면 다듬고, 푸시 후면 쌓는다
+2. `Coordinate`: **불변식(물리 범위) vs 정책(서비스 지역)** 분리 — 값 객체·DB CHECK는 지구 범위, 한국 영역은 PL-01 1a(싼 검증, DB 조회 전). DB CHECK는 "규칙이 바뀌면 기존 데이터가 틀린 데이터가 되는가"로 판단 → 정책을 CHECK에 넣으면 정책 변경마다 마이그레이션(축소 시 기존 행 때문에 실패)
+3. NaN은 거부 조건(`< min || > max`)을 통과 → **허용 조건**(`is not (>= and <=)`)으로 검증. 첫 구현의 `&&` 실수도 함께 사라짐. 측정: NaN·±∞ 거부
+4. `struct` 조건 보강: 모든 비트 조합이 유효하고 **`default`가 의미 있는 값일 때만** — `(0,0)`은 유효하지만 미초기화와 구분 불가 → `sealed record`
+5. `Nickname`: NFC 정규화(측정: "강" NFC 1 / NFD 3 코드 포인트, 12음절 NFD 24) → trim → 길이 → **화이트리스트**(한글 완성형·ASCII 영문·숫자). `char.IsLetterOrDigit`는 모든 문자 체계 허용이라 제외. U+3164(투명 닉네임)·ZWSP·전각·아랍 숫자 거부 확인. 짝 없는 서로게이트는 `Normalize` 예외 → Result로 변환
+6. `InviteCode`: 생성(신뢰, 실패=예외)과 파싱(불신, 실패=Result) 두 경로. 생성은 `Func<int,int>` 주입(A안) → Domain leaf 유지, 테스트에서 `n => 0`. ASCII에만 `ToUpperInvariant`(Turkish I, `tr-TR`로 측정). 형식 오류는 공개 규칙이라 구분해도 정보 누출 없음 → 존재하지 않는 코드와 별도 `Code`
+7. 사고: `GroupErrors`/`PlaceErrors` 파일 내용이 뒤바뀜 — C#은 폴더와 namespace 불일치를 잡지 않아 빌드 성공. `git status`의 예상 밖 `M`으로 발견
+8. `.editorconfig` 추가(utf-8, lf, final newline) — VS의 BOM·CRLF로 생기던 `git add` 경고 제거. 작업 폴더 CRLF·mixed 파일 LF로 변환
+9. 분류표: 애그리거트 = 함께 일관성을 지켜야 하는 묶음. Bookmark·Like는 쓰기 경합 때문에 독립 루트, ReviewImage·GroupMember는 내부 엔티티. **다른 인스턴스와 비교해야 하는 규칙(유일성)은 저장소가 최종 보장**. 규칙 ID ↔ 분류표 대조로 R-GR-06·07 누락 발견
+10. 리뷰 수: B안(같은 장소 하루 1개, R-RV-03). 기준 UTC 00:00(KST 09:00), 작성일은 Domain이 `TimeProvider`로 결정
+11. 검증: `dotnet build` 경고·오류 0, `dotnet test` 3/3 통과. 값 객체 경계값은 scratchpad 콘솔로 확인(좌표 12, 닉네임 25, 초대코드 27) — 단위 테스트는 D4
+
+커밋: `660b44b`·`914ce8f` editorconfig · `9ae3875` Coordinate · `58533d5` Nickname · `6aa62d3` InviteCode · `38191aa` 규칙 추가·ID 통일 · `481bf46` 분류표 (`feat/d2-domain`, 미푸시)
+Claude가 작성: `Coordinate`·`Nickname`·`InviteCode` 빈 틀, `.editorconfig`, BOM·CRLF·final newline 일괄 정리, `domain.md` 분류표 틀, `usecases.md` 규칙 R-US-01·02·R-LK-01·R-GR-06·07 문구(사용자 요청, 내용은 사용자 결정)와 R-BM 참조 번호 변경, R-RV-03 초안(사용자가 반영), 분류표 🟡 수정(사용자 요청: R-US-02→User, R-GR-06 추가, Like 표기, R-GR-07 근거 보강)
 
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
-- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result·ReviewContent 완료
+- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 4개, 분류표 완료 / 다이어그램·엔티티 8개·AddMember 남음
 - [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
@@ -88,8 +104,6 @@ Claude가 작성: `Error.cs`·`Result.cs`·`ReviewContent.cs` 빈 틀, `ReviewEr
 - [ ] D14 README·회고
 
 ## 미결 결정
-- 초대 코드 제외 문자 확정(R-GR-05 초안: I·O·0·1 제외 32자, SSoT와 일치하는지) — D2
-- 같은 회원이 같은 장소에 리뷰를 몇 개 쓸 수 있나(중복 발행 처리 포함) — D2. 원본 명세: "같은 장소 1일 1회, 00시 기준 초기화"(장소 상세 바텀시트 2-5). 채택 여부와 기준 시간대(KST/UTC) 결정 필요
 - 리뷰 이미지 저장 형식: URL vs 스토리지 키 — D3
 - 고아 이미지 판별 기준(미참조 + 생성 후 N시간)과 정리 배치 — D3
 - 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
@@ -100,7 +114,12 @@ Claude가 작성: `Error.cs`·`Result.cs`·`ReviewContent.cs` 빈 틀, `ReviewEr
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
 - SSoT 상수 위치: 지금은 `ReviewContent.MinLength/MaxLength`. 닉네임·그룹명·이미지 수가 들어올 때 값 객체별 `const` 유지 vs 도메인 규칙 정적 클래스로 모으기 — D2
-- 리뷰 본문 trim 범위: `string.Trim()`은 전각 공백(U+3000)은 지우지만 폭 없는 공백(U+200B)은 남김 — 허용할지 D4 테스트에서 결정
+- 리뷰 본문 trim 범위: `string.Trim()`은 전각 공백(U+3000)은 지우지만 폭 없는 공백(U+200B)은 남김 — 허용할지 D4 테스트에서 결정 (닉네임은 화이트리스트로 해결됨)
+- `ReviewContent`에도 NFC 정규화를 적용할지 — NFD 입력은 코드 포인트가 부풀어 50자 제한에 먼저 걸림. D4에서 재현 후 결정
+- 닉네임 대소문자 무시 UNIQUE 방식: `lower(nickname)` 표현식 인덱스 vs `citext` — D3. C#은 `ToLowerInvariant`, PostgreSQL `lower()`와 결과 일치 확인 필요
+- R-RV-03 UNIQUE: `(created_at AT TIME ZONE ...)::date` 표현식 인덱스가 가능한가(IMMUTABLE 제약) vs `review_date` 컬럼 저장 — D3
+- 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
+- ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
 
 ## 확정된 결정 (D2)
 - 실패 = Result(예상 가능) / 예외(개발자 실수). Domain은 HTTP 모름
@@ -108,7 +127,15 @@ Claude가 작성: `Error.cs`·`Result.cs`·`ReviewContent.cs` 빈 틀, `ReviewEr
 - `TreatWarningsAsErrors` 끔 — 패키지 업데이트 경고로 빌드가 깨지는 위험이 nullable 강제 이득보다 큼. D5(Api 코드 증가) 이후 재검토
 - 값 없는 결과는 비제네릭 `Result`(C안)
 - 텍스트 길이 단위 = 코드 포인트(닉네임·그룹명에도 적용), 검사·저장 모두 trim 후 값
-- 불변식이 있는 값 객체는 `sealed record`(struct는 모든 비트 조합이 유효할 때만)
+- 불변식이 있는 값 객체는 `sealed record`(struct는 모든 비트 조합이 유효하고 `default`가 의미 있는 값일 때만)
+- 값 객체 생성 순서: 정규화 → 허용 조건 검증 → 정규화된 값 보관. 오류는 첫 번째만 반환(필드별 `Code` 분리, 클라이언트 대응이 다를 때만 나눔)
+- 좌표: 값 객체·DB CHECK는 지구 범위, 한국 영역은 Application 정책(PL-01 1a)
+- 닉네임: NFC + 화이트리스트(한글 완성형·영문·숫자), 원래 표기 저장, 대소문자 무시 유일(R-US-01·02). 길이 검사가 글자 검사보다 먼저
+- 초대 코드: 32자 집합 확정(I·O·0·1 제외, 원본과 일치), 생성은 `Func<int,int>` 주입, 소문자·앞뒤 공백은 정규화해 수용, 하이픈 거절
+- Domain `*Errors` 카탈로그에는 Domain이 반환하는 오류만 둔다(`InviteCodeNotFound`는 D5 Application)
+- 리뷰 수: 같은 장소 하루 1개(R-RV-03), 기준 UTC 00:00, 작성일은 Domain이 `TimeProvider`로 결정
+- 유일성 규칙(다른 인스턴스와 비교)은 저장소가 최종 보장. 애그리거트 안 비교(R-GR-07)는 루트가 미리 검사
+- 규칙 ID 형식: `R-영역-두자리`
 
 ## 막힌 점
 (없음)
