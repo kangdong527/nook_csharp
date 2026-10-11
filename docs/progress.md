@@ -3,11 +3,10 @@
 - 시작일: 2026-10-08
 - 현재: **D2 진행 중** (2026-10-10) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개(`ReviewContent`·`Coordinate`·`Nickname`·`InviteCode`), 분류표(`docs/design/domain.md`) 완료. 달력 기준 약 1일 지연
 - 다음 할 일 (순서대로)
-  1. 학습 로그 D2-2 작성(사용자)
-  2. **클래스 다이어그램** — `domain.md` 2절, 분류표의 애그리거트·참조 열을 Mermaid로 옮긴다
-  3. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03)
-  4. **`Group.AddMember()`** — R-GR-01(정원)·R-GR-07(중복) 미리 검사. R-GR-02는 Application, 최종 보장은 DB(D6)
-  5. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
+  1. ~~클래스 다이어그램~~ (2026-10-11 완료)
+  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03)
+  3. **`Group.AddMember()`** — R-GR-01(정원)·R-GR-07(중복) 미리 검사. R-GR-02는 Application, 최종 보장은 DB(D6)
+  4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
 
 ## 세션 기록
 
@@ -136,6 +135,11 @@ Claude가 작성: `Coordinate`·`Nickname`·`InviteCode` 빈 틀, `.editorconfig
 - 리뷰 수: 같은 장소 하루 1개(R-RV-03), 기준 UTC 00:00, 작성일은 Domain이 `TimeProvider`로 결정
 - 유일성 규칙(다른 인스턴스와 비교)은 저장소가 최종 보장. 애그리거트 안 비교(R-GR-07)는 루트가 미리 검사
 - 규칙 ID 형식: `R-영역-두자리`
+- 그룹 생애: 만든 회원이 첫 멤버(R-GR-08), 마지막 멤버 탈퇴 시 같은 트랜잭션에서 그룹 삭제(R-GR-09) — 빈 그룹 배치 정리안은 합류·정리 경합 때문에 기각. 다중성 `1..4`
+- 그룹 생성도 R-GR-02 검사·R-GR-04 사용자 행 잠금을 거친다 (그룹 생성 유스케이스 상세화 때 반영)
+- 탈퇴도 인원을 세기 전에 그룹 행을 잠근다(Write Skew 방지) — D6 재현 대상
+- 외래 키는 유지한다. 제거는 메타데이터 변경으로 싸고, 나중에 추가하는 쪽이 기존 행 검증으로 비싸다
+- 대리 키 제거: Bookmark·Like·GroupMember는 복합 키(D3에서 확정). 시간은 `DateTimeOffset`, 자식 컬렉션은 읽기 전용 타입으로 공개
 
 ## 막힌 점
 (없음)
