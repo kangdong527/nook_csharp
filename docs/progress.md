@@ -126,11 +126,9 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
-- SSoT 상수 위치: 지금은 `ReviewContent.MinLength/MaxLength`. 닉네임·그룹명·이미지 수가 들어올 때 값 객체별 `const` 유지 vs 도메인 규칙 정적 클래스로 모으기 — D2
 - 리뷰 본문 trim 범위: `string.Trim()`은 전각 공백(U+3000)은 지우지만 폭 없는 공백(U+200B)은 남김 — 허용할지 D4 테스트에서 결정 (닉네임은 화이트리스트로 해결됨)
 - `ReviewContent`에도 NFC 정규화를 적용할지 — NFD 입력은 코드 포인트가 부풀어 50자 제한에 먼저 걸림. D4에서 재현 후 결정
 - 닉네임 대소문자 무시 UNIQUE 방식: `lower(nickname)` 표현식 인덱스 vs `citext` — D3. C#은 `ToLowerInvariant`, PostgreSQL `lower()`와 결과 일치 확인 필요
-- R-RV-03 UNIQUE: `(created_at AT TIME ZONE ...)::date` 표현식 인덱스가 가능한가(IMMUTABLE 제약) vs `review_date` 컬럼 저장 — D3
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
 - 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
@@ -164,6 +162,10 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 엔티티 시각 검증: `Common/TimeGuard.Utc()` 정적 가드(값 객체 `UtcTimestamp` 기각). 근거: 시각이 들어오는 길은 `Create` 한 곳뿐이라 빠뜨려도 바로 보임, 값 객체는 D3 변환기·감싸기 비용이 이득보다 큼. `[CallerArgumentExpression]`으로 원래 인자 이름 유지(측정: `ParamName`=`createdAt`)
 - 리뷰 이미지는 **스토리지 키** 저장(URL 기각): CDN 도메인·버킷·환경이 바뀌어도 기존 행은 그대로, 키 → URL 변환 한 곳만 수정
 - `ReviewImage`: 생성은 `internal`(Application 차단, Domain 안 다른 코드는 만들 이유 없음 → 중첩 클래스 기각). 이미지 하나 규칙만 가짐. `sortOrder`는 클라이언트가 보내지 않고 `Review`가 목록 인덱스로 매김 → 중복·빈틈이 구조적으로 불가능
+- R-RV-03 기준 날짜: `Review.ReviewDate`(`DateOnly`, UTC) 속성 → `review_date` 컬럼 + `(user_id, place_id, review_date)` UNIQUE. 표현식 인덱스 기각(같은 계산이 SQL에도 생겨 규칙이 두 곳)
+- SSoT 상수: 규칙을 지키는 타입이 `const`를 가진다(`ReviewContent.MaxLength`, `Review.MaxImages`) — 정적 규칙 클래스로 모으지 않음
+- `Review.Images`: `List` backing field + `AsReadOnly()` 공개(캐스팅 우회 차단, 래퍼 할당은 3장 목록에서 무시)
+- `Review.Create` 실패 순서: 예외(호출 실수) 먼저 → Result(회원 입력) 나중. 개별 키 검사는 장수 검사 뒤(의도된 예외, 코드 주석). 같은 스토리지 키 중복은 DB `UNIQUE(review_id, storage_key)` — D3
 
 ## 막힌 점
 (없음)
