@@ -9,4 +9,9 @@ public static class ReviewErrors
         "Review.ContentLength",
         $"리뷰 본문은 앞뒤 공백을 제외하고 {ReviewContent.MinLength}~{ReviewContent.MaxLength}자여야 합니다.",
         ErrorType.Validation);
+
+    public static readonly Error TooManyImages = new(
+        "Review.TooManyImages",
+        $"리뷰 이미지는 최대 {Review.MaxImages}장까지 첨부할 수 있습니다.",
+        ErrorType.Validation);
 }
