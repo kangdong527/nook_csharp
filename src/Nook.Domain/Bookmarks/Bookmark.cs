@@ -1,3 +1,4 @@
+using Nook.Domain.Common;
 using Nook.Domain.Places;
 using Nook.Domain.Users;
 
@@ -26,11 +27,6 @@ public sealed class Bookmark
         ArgumentNullException.ThrowIfNull(userId);
         ArgumentNullException.ThrowIfNull(placeId);
 
-        if (createdAt == default)
-            throw new ArgumentException("createdAt이 지정되지 않았습니다.", nameof(createdAt));
-        if (createdAt.Offset != TimeSpan.Zero)
-            throw new ArgumentException("createdAt은 UTC(오프셋 0)여야 합니다.", nameof(createdAt));
-
-        return new Bookmark(userId, placeId, createdAt);
+        return new Bookmark(userId, placeId, TimeGuard.Utc(createdAt));
     }
 }
