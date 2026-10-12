@@ -1,11 +1,11 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 진행 중** (2026-10-10) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개(`ReviewContent`·`Coordinate`·`Nickname`·`InviteCode`), 분류표(`docs/design/domain.md`) 완료. 달력 기준 약 1일 지연
+- 현재: **D2 진행 중** (2026-10-11) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개, 분류표, 클래스 다이어그램(`docs/design/domain.md`) 완료. 달력 기준 약 3일 지연
 - 다음 할 일 (순서대로)
-  1. ~~클래스 다이어그램~~ (2026-10-11 완료)
-  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03)
-  3. **`Group.AddMember()`** — R-GR-01(정원)·R-GR-07(중복) 미리 검사. R-GR-02는 Application, 최종 보장은 DB(D6)
+  1. 학습 로그 D2-3 작성(사용자)
+  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03). 자식 컬렉션은 읽기 전용 타입으로 공개, 시간은 `DateTimeOffset`
+  3. **`Group.Create()`·`AddMember()`·`RemoveMember()`** — 생성 시 만든 회원이 첫 멤버(R-GR-08). 합류는 R-GR-01(정원)·R-GR-07(중복) 미리 검사. 탈퇴는 "마지막 멤버였음"을 결과로 알리고 그룹 삭제는 Application(R-GR-09). R-GR-02는 Application, 최종 보장은 DB(D6)
   4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
 
 ## 세션 기록
@@ -82,11 +82,25 @@ Claude가 작성: `Error.cs`·`Result.cs`·`ReviewContent.cs` 빈 틀, `ReviewEr
 커밋: `660b44b`·`914ce8f` editorconfig · `9ae3875` Coordinate · `58533d5` Nickname · `6aa62d3` InviteCode · `38191aa` 규칙 추가·ID 통일 · `481bf46` 분류표 (`feat/d2-domain`, 미푸시)
 Claude가 작성: `Coordinate`·`Nickname`·`InviteCode` 빈 틀, `.editorconfig`, BOM·CRLF·final newline 일괄 정리, `domain.md` 분류표 틀, `usecases.md` 규칙 R-US-01·02·R-LK-01·R-GR-06·07 문구(사용자 요청, 내용은 사용자 결정)와 R-BM 참조 번호 변경, R-RV-03 초안(사용자가 반영), 분류표 🟡 수정(사용자 요청: R-US-02→User, R-GR-06 추가, Like 표기, R-GR-07 근거 보강)
 
+### 2026-10-11 (D2-3)
+1. 애그리거트 경계 = 한 트랜잭션에서 함께 바뀌고 일관성이 보장되는 묶음. 경계 밖은 ID로만 참조 — Review가 Place 객체를 들면 Place 규칙(R-PL-02)을 우회하는 두 번째 변경 경로가 생기고, 로딩·추적·잠금 범위가 커진다
+2. 클래스 다이어그램(Mermaid): 애그리거트별 `namespace`, 경계 안 `*--`, 경계 밖 ID 속성 + `..>`. 다중성 숫자 = 불변식 선언이므로 분류표 "지키는 불변식" 열과 대조
+3. 생성 불변식(팩터리 한 곳) vs 생애 불변식(상태를 바꾸는 모든 메서드). 하한 `1..4`가 빈 그룹 배치 정리안과 충돌 → 정책 번복: 만든 회원이 첫 멤버(R-GR-08), 마지막 멤버 탈퇴 시 같은 트랜잭션에서 그룹 삭제(R-GR-09). 엔티티는 자기 삭제를 못 하므로 판정은 루트, 삭제는 Application. 불변식은 트랜잭션 경계에서 성립하면 된다
+4. 배치(최종적 일관성)를 쓰는 기준: 외부 I/O처럼 트랜잭션에 못 넣는 경우(이미지). 같은 애그리거트 DB 작업을 배치로 미루면 중간 상태(빈 그룹 + 살아 있는 초대 코드)와 합류·정리 경합을 떠안는다
+5. 외래 키 오해 정정: 제거(`DROP CONSTRAINT`)는 메타데이터 변경으로 싸고, 나중에 추가하는 쪽이 기존 행 검증으로 비싸다 → FK 유지. 대리 키 수와 FK 사용은 무관 — 복합 PK여도 FK는 건다
+6. 대리 키 정리: Bookmark·Like·GroupMember는 복합 키(유일성 규칙이 PK 자체가 됨, 인덱스 1개). ReviewImage는 순서·교체 때문에 식별자 유지. 경계 안 엔티티(GroupMember)에는 부모 ID를 두지 않음 — DB 매핑(D3) 관심사
+7. 엔티티 자식 컬렉션 ≠ 값 객체 컬렉션: 루트는 바꿀 수 있어야 하고 EF Core가 채워야 함 → backing field. `ImmutableArray` 매핑 여부는 D3에서 확인
+8. Write Skew: 남은 두 멤버가 동시 탈퇴 → 서로 다른 행을 지워 행 잠금 충돌 없이 둘 다 "1명 남음"으로 판단 → 빈 그룹. 원본 nook의 "정원 초과"와 "고아 그룹"은 같은 원인. 해법은 공통 행(그룹 행)을 **인원을 세기 전에** 잠그기. Read Committed는 문장마다 새 스냅샷이라 대기 후 다음 SELECT가 커밋을 본다
+9. 그룹 생성도 R-GR-02 검사·R-GR-04 사용자 행 잠금 대상(2개 참여 중 동시 생성)
+
+커밋: `0789312` 클래스 다이어그램·R-GR-08·09·분류표 (`feat/d2-domain`, 미푸시)
+Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문구와 R-GR-09 동시성 근거(사용자 요청, 내용은 사용자 결정), `progress.md` 갱신
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
-- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 4개, 분류표 완료 / 다이어그램·엔티티 8개·AddMember 남음
+- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 4개, 분류표, 다이어그램 완료 / 엔티티 8개·Group 메서드 남음
 - [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
@@ -118,6 +132,9 @@ Claude가 작성: `Coordinate`·`Nickname`·`InviteCode` 빈 틀, `.editorconfig
 - 닉네임 대소문자 무시 UNIQUE 방식: `lower(nickname)` 표현식 인덱스 vs `citext` — D3. C#은 `ToLowerInvariant`, PostgreSQL `lower()`와 결과 일치 확인 필요
 - R-RV-03 UNIQUE: `(created_at AT TIME ZONE ...)::date` 표현식 인덱스가 가능한가(IMMUTABLE 제약) vs `review_date` 컬럼 저장 — D3
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
+- 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
+- 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
+- ADR 후보(번호 미정, ADR-003은 D12 배포용으로 예정): 그룹 생애(빈 그룹 배치 정리 기각, 탈퇴 트랜잭션에서 삭제)와 FK 유지
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
 
 ## 확정된 결정 (D2)
