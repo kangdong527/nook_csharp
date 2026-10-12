@@ -117,7 +117,6 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - [ ] D14 README·회고
 
 ## 미결 결정
-- 리뷰 이미지 저장 형식: URL vs 스토리지 키 — D3
 - 고아 이미지 판별 기준(미참조 + 생성 후 N시간)과 정리 배치 — D3
 - 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
 - 북마크 테이블에 "북마크 여부" 컬럼이 필요한가(행 존재 = 북마크) — D3
@@ -162,6 +161,8 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 강타입 ID: `sealed record` + `IEntityId<TSelf>`(`Value`, `static abstract From`) 인터페이스, 타입별 최소 복사(C안). 비제네릭 공통 기반은 `userId == placeId`가 컴파일되어 기각(측정: A만 컴파일, 제네릭 기반·인터페이스는 CS0019). 제네릭 기반 record는 Empty 검사 1곳이지만 상속 구조가 두 겹이라 기각. 소스 생성기는 Domain leaf 유지 위해 기각. 인터페이스 목적 = D3 제네릭 값 변환기(`T.From`). `.Equals(object)` 교차 비교는 어느 안도 못 막음
 - 엔티티 동등성: 재정의 안 함(비교하는 코드 없음, 중복은 DB PK·UNIQUE). 엔티티 시각: `DateTimeOffset` 인자, `default`·비UTC는 예외(호출 경로 이탈 신호)
 - 엔티티 시각 검증: `Common/TimeGuard.Utc()` 정적 가드(값 객체 `UtcTimestamp` 기각). 근거: 시각이 들어오는 길은 `Create` 한 곳뿐이라 빠뜨려도 바로 보임, 값 객체는 D3 변환기·감싸기 비용이 이득보다 큼. `[CallerArgumentExpression]`으로 원래 인자 이름 유지(측정: `ParamName`=`createdAt`)
+- 리뷰 이미지는 **스토리지 키** 저장(URL 기각): CDN 도메인·버킷·환경이 바뀌어도 기존 행은 그대로, 키 → URL 변환 한 곳만 수정
+- `ReviewImage`: 생성은 `internal`(Application 차단, Domain 안 다른 코드는 만들 이유 없음 → 중첩 클래스 기각). 이미지 하나 규칙만 가짐. `sortOrder`는 클라이언트가 보내지 않고 `Review`가 목록 인덱스로 매김 → 중복·빈틈이 구조적으로 불가능
 
 ## 막힌 점
 (없음)

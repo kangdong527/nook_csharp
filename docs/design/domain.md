@@ -88,8 +88,8 @@ classDiagram
             <<Entity>>
             +ReviewImageId id
             +int sortOrder
-            +String url
-            %% D3 결정: URL vs 스토리지 키
+            +String storageKey
+            %% URL이 아니라 스토리지 키 저장(키 → URL 변환은 한 곳). sortOrder는 Review가 목록 인덱스로 매김
         }
         class ReviewContent {
             <<ValueObject>>
