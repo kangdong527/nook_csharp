@@ -1,8 +1,10 @@
+using Nook.Domain.Common;
+
 namespace Nook.Domain.Users;
 
 // 회원 식별자. Guid를 감싸 PlaceId·ReviewId 등과 섞어 넘기는 실수를 컴파일 시점에 막는다.
 // record class: default/배열 원소가 null이 되어 nullable 경고로 드러난다(struct면 Guid.Empty가 조용히 통과).
-public sealed record UserId
+public sealed record UserId : IEntityId<UserId>
 {
     public Guid Value { get; }
 
