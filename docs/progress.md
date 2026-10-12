@@ -161,6 +161,7 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 대리 키 제거: Bookmark·Like·GroupMember는 복합 키(D3에서 확정). 시간은 `DateTimeOffset`, 자식 컬렉션은 읽기 전용 타입으로 공개
 - 강타입 ID: `sealed record` + `IEntityId<TSelf>`(`Value`, `static abstract From`) 인터페이스, 타입별 최소 복사(C안). 비제네릭 공통 기반은 `userId == placeId`가 컴파일되어 기각(측정: A만 컴파일, 제네릭 기반·인터페이스는 CS0019). 제네릭 기반 record는 Empty 검사 1곳이지만 상속 구조가 두 겹이라 기각. 소스 생성기는 Domain leaf 유지 위해 기각. 인터페이스 목적 = D3 제네릭 값 변환기(`T.From`). `.Equals(object)` 교차 비교는 어느 안도 못 막음
 - 엔티티 동등성: 재정의 안 함(비교하는 코드 없음, 중복은 DB PK·UNIQUE). 엔티티 시각: `DateTimeOffset` 인자, `default`·비UTC는 예외(호출 경로 이탈 신호)
+- 엔티티 시각 검증: `Common/TimeGuard.Utc()` 정적 가드(값 객체 `UtcTimestamp` 기각). 근거: 시각이 들어오는 길은 `Create` 한 곳뿐이라 빠뜨려도 바로 보임, 값 객체는 D3 변환기·감싸기 비용이 이득보다 큼. `[CallerArgumentExpression]`으로 원래 인자 이름 유지(측정: `ParamName`=`createdAt`)
 
 ## 막힌 점
 (없음)
