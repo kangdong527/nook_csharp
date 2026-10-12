@@ -4,7 +4,7 @@
 - 현재: **D2 진행 중** (2026-10-11) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개, 분류표, 클래스 다이어그램(`docs/design/domain.md`) 완료. 달력 기준 약 3일 지연
 - 다음 할 일 (순서대로)
   1. 학습 로그 D2-3 작성(사용자)
-  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. `Review`는 작성일을 `TimeProvider`로 정한다(R-RV-03). 자식 컬렉션은 읽기 전용 타입으로 공개, 시간은 `DateTimeOffset`
+  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. 시각은 `DateTimeOffset` 인자로 받는다(`Review`의 R-RV-03 날짜 계산은 Domain). 자식 컬렉션은 읽기 전용 타입으로 공개, 시간은 `DateTimeOffset`
   3. **`Group.Create()`·`AddMember()`·`RemoveMember()`** — 생성 시 만든 회원이 첫 멤버(R-GR-08). 합류는 R-GR-01(정원)·R-GR-07(중복) 미리 검사. 탈퇴는 "마지막 멤버였음"을 결과로 알리고 그룹 삭제는 Application(R-GR-09). R-GR-02는 Application, 최종 보장은 DB(D6)
   4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
 
@@ -134,6 +134,9 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
 - 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
+- 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
+- ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
+- 엔티티 동등성: 엔티티별 `Equals` 재정의 vs 공통 기반 클래스 vs 재정의 안 함 — Bookmark에서 결정
 - ADR 후보(번호 미정, ADR-003은 D12 배포용으로 예정): 그룹 생애(빈 그룹 배치 정리 기각, 탈퇴 트랜잭션에서 삭제)와 FK 유지
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
 
@@ -149,7 +152,7 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 닉네임: NFC + 화이트리스트(한글 완성형·영문·숫자), 원래 표기 저장, 대소문자 무시 유일(R-US-01·02). 길이 검사가 글자 검사보다 먼저
 - 초대 코드: 32자 집합 확정(I·O·0·1 제외, 원본과 일치), 생성은 `Func<int,int>` 주입, 소문자·앞뒤 공백은 정규화해 수용, 하이픈 거절
 - Domain `*Errors` 카탈로그에는 Domain이 반환하는 오류만 둔다(`InviteCodeNotFound`는 D5 Application)
-- 리뷰 수: 같은 장소 하루 1개(R-RV-03), 기준 UTC 00:00, 작성일은 Domain이 `TimeProvider`로 결정
+- 리뷰 수: 같은 장소 하루 1개(R-RV-03), 기준 UTC 00:00, 작성 시각은 Application이 `DateTimeOffset` 인자로 넘기고 UTC 날짜 계산은 Domain (2026-10-12 `TimeProvider`안에서 변경)
 - 유일성 규칙(다른 인스턴스와 비교)은 저장소가 최종 보장. 애그리거트 안 비교(R-GR-07)는 루트가 미리 검사
 - 규칙 ID 형식: `R-영역-두자리`
 - 그룹 생애: 만든 회원이 첫 멤버(R-GR-08), 마지막 멤버 탈퇴 시 같은 트랜잭션에서 그룹 삭제(R-GR-09) — 빈 그룹 배치 정리안은 합류·정리 경합 때문에 기각. 다중성 `1..4`
