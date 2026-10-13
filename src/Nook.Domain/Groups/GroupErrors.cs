@@ -8,4 +8,14 @@ public static class GroupErrors
     "Group.InviteCodeInvalidFormat",
     $"초대 코드는 영문과 숫자로 된 {InviteCode.Length}자리입니다.",
     ErrorType.Validation);
+
+    public static readonly Error GroupNameLengthOutOfRange = new(
+    "Group.GroupNameLengthOutOfRange",
+    $"그룹명은 앞뒤 공백을 제외하고 {GroupName.MinLength}~{GroupName.MaxLength}자여야 합니다.",
+    ErrorType.Validation);
+
+    public static readonly Error GroupNameInvalidCharacters = new(
+    "Group.GroupNameInvalidCharacters",
+    "그룹명에는 한글, 영문, 숫자, 공백만 쓸 수 있습니다.",
+    ErrorType.Validation);
 }
