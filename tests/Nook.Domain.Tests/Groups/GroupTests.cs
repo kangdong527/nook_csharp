@@ -12,6 +12,8 @@ public class GroupTests
     // Create (R-GR-08)
     // - Create_WithCreator_CreatorIsOnlyMember
     // - Create_WithCreator_CreatorJoinedAtIsCreatedAt
+    // - Create_WhenNameIsNull_Throws
+    // - Create_WhenInviteCodeIsNull_Throws
     //
     // AddMember (R-GR-01, R-GR-07)
     // - AddMember_WhenNewUser_AddsMember
@@ -263,6 +265,20 @@ public class GroupTests
         var newUser = UserId.New();
 
         Assert.Throws<InvalidOperationException>(() => group.AddMember(newUser, Now));
+    }
+
+    [Fact]
+    public void Create_WhenNameIsNull_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => Group.Create(null!, UserId.New(), InviteCode.Generate(_ => 0), Now));
+    }
+
+    [Fact]
+    public void Create_WhenInviteCodeIsNull_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => Group.Create(ValidName(), UserId.New(), null!, Now));
     }
 
     private static Group NewGroup() =>
