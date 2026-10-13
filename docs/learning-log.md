@@ -56,3 +56,34 @@
 - 내일 확인할 것:
 
 ---
+
+### D2-4 (2026-10-12) — 엔티티와 강타입 ID
+> 이 칸은 사용자 요청으로 Claude가 세션 기록을 바탕으로 작성했다.
+
+- 배운 것:
+  1. 엔티티 기준을 Bookmark 하나에서 정하고 나머지가 따르게 했다: 동등성 재정의 안 함(비교하는 코드가 없고 중복은 DB PK가 막음), 실패할 규칙이 없으면 `Result` 없이 반환, 시각은 `DateTimeOffset` 인자 + `TimeGuard`. 같은 `Create`라도 **입력이 어디서 오느냐**(서버 코드 → 예외, 회원 → `Result`)가 실패 표현을 정한다
+  2. 강타입 ID는 `sealed record` + `IEntityId<TSelf>`. 측정해 보니 비제네릭 공통 기반만 `userId == placeId`가 컴파일되고, 제네릭 기반·인터페이스는 CS0019로 막혔다. 인터페이스의 목적은 중복 제거가 아니라 D3 제네릭 값 변환기(`T.From`)
+  3. 정합성 장치는 범위가 다르다: 엔티티 메서드(인스턴스 1개) < EF 식별 맵(DbContext 1개 = 요청 1개) < DB 제약·잠금(모든 요청). `Group`의 `.Any()` 같은 루트 검사는 미리 검사일 뿐 최종 보장이 아니다. 형식 검증(외부가 정한 형식은 느슨하게)과 크기 검증(불신 입력이면 항상)도 다른 축이다
+- 막혔던 것 / 어떻게 풀었나:
+  - 식별 맵이 R-BM-01을 지킨다고 생각함 → 요청마다 DbContext가 따로라 동시 요청은 DB PK만 막는다는 걸 확인(CS 퀴즈 F3과 같은 오해)
+  - `internal`의 범위, `sortOrder`를 누가 지키는지 모름 → "B를 지우면 C는?" 같은 구체 장면으로 풀어 보니 컬렉션 규칙은 루트, 순서는 목록 인덱스로 매기면 된다는 결론
+  - 컴파일러가 잡지 않는 사고 4건(`Reviews/UserId.cs` 파일명, 복사한 주석, 자동 `using`, `ReviewErrors` namespace 삭제) → 커밋 전 `git diff`·`grep`으로 발견
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `PlaceId`·`ReviewImageId`(같은 패턴 반복, 사용자 요청). `KakaoPlaceId` 64자 상한 검증 코드(사용자 요청, 상한값은 사용자 결정). `Review.cs` 키 검사 순서 주석(사용자 요청, 결정은 사용자). 엔티티 빈 틀·`TODO(human)`. `domain.md`·`usecases.md`의 스토리지 키·R-RV-03 문구 반영. `progress.md` 갱신. **이 학습 로그 칸과 ADR-004~007**(사용자 요청, 결정 내용은 사용자)
+- 내일 확인할 것:
+  - `Group` 질문 3개(그룹명 R-GR-10, `RemoveMember` 반환, `AddMember` 인자·검사 순서)
+  - ADR-004~007을 읽고 사용자 결정과 다른 서술이 있으면 고치기
+
+---
+
+### D2-5 (2026-10-13) — Group TDD와 D2 마무리
+- 배운 것:
+  1. 
+  2. 
+  3. 
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `GroupTests` 빈 틀·`TODO(human)`. ADR-004 결정 5(`RemoveMember` 구현)·6(방장 없음) 추가와 ADR-006 `GroupId` 반영(사용자 요청, 결정은 사용자). design-review 🔴 수정 — `Group.Create` null 인자 테스트 2개, null 검사, `Group.cs` 헤더 주석(사용자 요청). `progress.md` 갱신
+- 내일 확인할 것:
+  - PR 머지 후 D3 브랜치 생성
+  - design-review 🟡 3건(`progress.md` 미결 결정) 고칠지
+
+---

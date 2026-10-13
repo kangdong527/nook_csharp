@@ -1,17 +1,14 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 진행 중** (2026-10-12) — 브랜치 `feat/d2-domain`(미푸시). 엔티티 6개(`Bookmark`·`Like`·`ReviewImage`·`Review`·`Place`·`User`)와 강타입 ID 4개 완료, `Group`·`GroupMember`만 남음. 달력 기준 약 3일 지연
+- 현재: **D2 완료** (2026-10-13) — 브랜치 `feat/d2-domain`, design-review 🔴 0. 다음은 사용자가 푸시·PR → 머지 후 D3. 달력 기준 약 3일 지연
 - 다음 할 일 (순서대로)
-  1. ADR-004~007 검토(Claude 작성, 사용자 결정과 다른 서술 수정)
-  2. ~~`Group` 설계 질문 3개~~ (2026-10-13 답변, R-GR-10 신설)
-     - Q1 그룹명 규칙 R-GR-10 신설: SSoT "2~6자"가 `usecases.md`에 없음. 허용 문자(화이트리스트? 공백·이모지?), 그룹명 유일 여부
-     - Q2 `RemoveMember` 반환: "마지막 멤버였음"을 Application이 무시할 수 없게(`bool` vs 이름 있는 결과). 멤버 아닌 회원 탈퇴 = 실패 vs 멱등
-     - Q3 `AddMember` 인자(초대 코드가 필요한가?)와 R-GR-01(정원)·R-GR-07(중복) 검사 순서 — 정원이 찬 그룹에 이미 멤버인 회원이 합류 요청하면?
-  3. `GroupId`(Claude 복사) → `GroupMember`(`internal`) → **`Group.Create()`·`AddMember()`·`RemoveMember()`** — 생성 시 만든 회원이 첫 멤버(R-GR-08). R-GR-02는 Application, 최종 보장은 DB(D6)
-  4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → 푸시 → PR
-  - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D2 범위 밖이면 D5로
+  1. 푸시 → PR(`feat/d2-domain` → `main`) → 머지 (사용자)
+  2. 학습 로그 D2-5 "배운 것"·"막혔던 것" 작성 (사용자)
+  3. D3 시작: ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 — 새 브랜치 `feat/d3-schema`
+  - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
+  - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4
 
 ## 세션 기록
 
@@ -118,11 +115,28 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 커밋: `0789312`(구 `fd228c7` amend) · `1e64eff` D2-3 기록 · `3e0523a` UserId·PlaceId · `5fd4d92` Bookmark · `f3d0cd0` 시각 인자 통일 · `c67f266` IEntityId·ReviewId · `07d8a13` · `732a945` TimeGuard · `9121cd6` Like · `4b5fbfa` · `20b9534` 스토리지 키 · `71dc63e` ReviewImageId · `f12eed9` ReviewImage · `3d81c42` · `62a4a58` Review · `936b66c` · `4464585` Place·KakaoPlaceId · `f05d0eb` User·Email · `f6ec9ca` (`feat/d2-domain`, 미푸시)
 Claude가 작성: `PlaceId`·`ReviewImageId`(UserId·ReviewId 복사, 사용자 요청), 엔티티 빈 틀·`TODO(human)`, `KakaoPlaceId` 64자 상한 검증(사용자 요청, 상한값은 사용자 결정), `Review.cs` 키 검사 순서 주석(사용자 요청, 결정은 사용자), `domain.md`·`usecases.md` 스토리지 키 반영, R-RV-03 근거 문구 수정, `progress.md` 결정 기록
 
+### 2026-10-13 (D2-5)
+1. Group 설계 답변: 그룹명 R-GR-10, `AddMember(UserId, joinedAt)`, 검사 순서 중복 → 정원, `RemoveMember` 멱등 + `MemberRemoval` 3상태
+2. `GroupName`(값 객체, Nickname 복사 — 바뀌는 이유가 달라 공유 안 함), `GroupMember`(`internal`, 자연 키 UserId)
+3. **Group을 TDD로**(첫 TDD): 테스트 목록 먼저 → Red → Green. C#의 Red는 두 단계 — 없는 메서드는 컴파일 오류(올바른 실패 아님) → 시그니처 스텁(`NotImplementedException`) → 단언 실패
+4. TDD 실수와 교정: `Create`는 구현을 먼저 써서 Red를 못 봄 → **손으로 하는 뮤테이션 테스트**(`_members.Add` 주석 처리 → 59번 줄 `Expected 2 / Actual 1`)로 테스트 가치를 사후 증명. 경계·순서 테스트는 검사 순서를 뒤집어 실패 확인. 리뷰 중 나온 결정(빈 그룹 가드)이 테스트 없이 코드로 들어감 → 테스트 추가 후 Red → Green
+5. 첫 스텁의 `_ = Members.Append(...)` — LINQ `Append`는 새 시퀀스를 반환하고 원본을 안 바꿈. `_ =`가 경고까지 지움
+6. 생성자는 "데이터 복원", 행동(첫 멤버 추가)은 `Create` — EF Core가 속성과 맞는 생성자로 물질화하므로 생성자에 행동을 넣으면 로드할 때마다 실행
+7. `Create`는 `Group` 반환(회원 입력 실패 없음 — GroupName이 이미 검증), `MaxGroupMembers = 4`(첫 스텁의 3은 R-GR-02 값과 혼동)
+8. 방장 없음(ADR-004 결정 6): 읽는 유스케이스가 없음. 원본 `owner_id ... on delete cascade`는 방장 회원 탈퇴 시 남은 멤버의 그룹까지 삭제
+9. `MemberRemoval.NotMember = 0`: enum 기본값이 "아무 일도 없음"이라 미초기화 값이 그룹을 지우지 않음. `GroupEmptied`는 방금 0명이 됐을 때만 → 삭제 신호 중복 없음. 빈 그룹 `AddMember`는 `InvalidOperationException`(호출 코드 실수)
+10. 오류 `AlreadyMember`·`GroupFull`은 `Conflict`(입력이 아니라 서버 상태와 충돌 → D5 409). enum은 `Groups/` 바로 아래(package by feature, 폴더 = namespace)
+11. design-review(src/Nook.Domain): 🔴 1 — `Group.Create`가 null `GroupName`·`InviteCode`를 받아 그룹을 만듦(테스트로 Red 확인 후 수정). 🟡는 아래 미결 결정으로
+12. 검증: `dotnet build` 경고·오류 0, `dotnet test` Domain 21 · Algorithms 1 · Integration 1 통과
+
+커밋: `4913ea5` GroupMember · `a35b6bc` Group.Create · `705f38a` AddMember · `c941cd8` RemoveMember · `f0b3bd6` Group null 검사 (`feat/d2-domain`)
+Claude가 작성: `GroupTests` 빈 틀·`TODO(human)`, ADR-004 결정 5·6 추가(사용자 요청, 결정은 사용자), design-review 🔴 수정(`Group.Create` null 테스트 2개·null 검사·헤더 주석 — 사용자 요청), `progress.md` 갱신
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
-- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 6개(+KakaoPlaceId·Email), 강타입 ID 4개, 분류표, 다이어그램, 엔티티 6개 완료 / GroupId·GroupMember·Group 메서드·design-review 남음
+- [x] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — Error·Result, 값 객체 8개, 강타입 ID 5개, 분류표, 다이어그램, 엔티티 8개, Group 단위 테스트 21개, ADR-004~007
 - [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
@@ -157,8 +171,10 @@ Claude가 작성: `PlaceId`·`ReviewImageId`(UserId·ReviewId 복사, 사용자 
 - 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
-- ADR 번호: 002(원본과 다른 점, D3)·003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 004부터. 작성됨: 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(모두 Claude 작성·사용자 검토 필요)
+- ADR 번호: 002(원본과 다른 점, D3)·003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 004부터. 작성됨: 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
+- design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · `Group.Members`는 `IReadOnlyCollection`, `Review.Images`는 `IReadOnlyList`(위 컬렉션 공개 방식 결정과 함께 D3)
+- `AddMember`의 `joinedAt`이 그룹 `CreatedAt`보다 이른 값이어도 통과 — Domain이 검사할지, Application 시각 경로(`GetUtcNow` 한 번)로 충분한지 — D4
 
 ## 확정된 결정 (D2)
 - 실패 = Result(예상 가능) / 예외(개발자 실수). Domain은 HTTP 모름
@@ -190,6 +206,8 @@ Claude가 작성: `PlaceId`·`ReviewImageId`(UserId·ReviewId 복사, 사용자 
 - `Review.Images`: `List` backing field + `AsReadOnly()` 공개(캐스팅 우회 차단, 래퍼 할당은 3장 목록에서 무시)
 - `Review.Create` 실패 순서: 예외(호출 실수) 먼저 → Result(회원 입력) 나중. 개별 키 검사는 장수 검사 뒤(의도된 예외, 코드 주석). 같은 스토리지 키 중복은 DB `UNIQUE(review_id, storage_key)` — D3
 - 그룹(D2-4 답변): 그룹명 R-GR-10(화이트리스트 + ASCII 공백, 가운데·연속 공백 허용, 이모지 제외 — 나중에 넓히는 건 싸다, 유일하지 않음). `AddMember(UserId, joinedAt)` — 초대 코드는 Application 조회에만. 검사 순서 R-GR-07(중복) → R-GR-01(정원): 회원이 바꿀 수 없는 구체적 사실 먼저. `RemoveMember`는 멱등, 반환 `enum MemberRemoval { NotMember, Removed, GroupEmptied }`(3상태 — 테스트·로그에서 멱등 구분), `GroupEmptied`면 Application이 같은 트랜잭션에서 그룹 삭제. 방장(owner) 없음(2026-10-13) — 읽는 유스케이스가 없고, 넣으면 위임·탈퇴 규칙이 따라옴. 원본 `owner_id ... on delete cascade`는 방장 회원 탈퇴 시 다른 멤버의 그룹까지 삭제하는 결함. 이력(만든 회원)은 첫 멤버의 `JoinedAt = CreatedAt`로 남음. 필요해지면 컬럼 + 백필(가장 이른 `JoinedAt`)로 추가
+- Group 구현(D2-5): `Create`는 `Group` 반환, 생성자는 필드 대입만(첫 멤버 추가는 `Create`). `AddMember` → `Result`(`AlreadyMember`·`GroupFull`, 둘 다 `Conflict`). 빈 그룹 `AddMember`는 예외. `MemberRemoval`은 `Groups/MemberRemoval.cs`, `NotMember = 0`
+- 도메인 루트 메서드는 TDD로 쓴다(테스트 목록 → Red → Green). 처음부터 통과한 테스트는 뮤테이션으로 실패 가능성을 확인
 
 ## 막힌 점
 (없음)
