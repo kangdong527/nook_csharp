@@ -1,11 +1,11 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 완료** (2026-10-13) — 브랜치 `feat/d2-domain`, design-review 🔴 0. 다음은 사용자가 푸시·PR → 머지 후 D3. 달력 기준 약 3일 지연
+- 현재: **D2 완료** (2026-10-13) — PR #4로 `main`에 머지. 다음은 D3, 브랜치 `feat/d3-schema`. 달력 기준 약 3일 지연
 - 다음 할 일 (순서대로)
-  1. 푸시 → PR(`feat/d2-domain` → `main`) → 머지 (사용자)
-  2. 학습 로그 D2-5 "배운 것"·"막혔던 것" 작성 (사용자)
-  3. D3 시작: ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 — 새 브랜치 `feat/d3-schema`
+  1. ~~푸시 → PR → 머지~~ (2026-10-13, PR #4)
+  2. D3 시작: ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (`feat/d3-schema`)
+     - 첫 질문 후보: `GroupMember`의 `group_id`는 섀도 속성(`OwnsMany`), PK `(group_id, user_id)`로 R-GR-02의 `WHERE user_id = ?` 조회를 받을 수 있는가 → `EXPLAIN`
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
   - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4

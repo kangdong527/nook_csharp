@@ -77,11 +77,16 @@
 
 ### D2-5 (2026-10-13) — Group TDD와 D2 마무리
 - 배운 것:
-  1. 
-  2. 
-  3. 
+  1. GroupName, GroupMember 작성
+     - 그룹명 규칙 R-GR-10: 한글 완성형·영문·숫자 + ASCII 공백(가운데·연속 공백 허용), 2~6자는 공백 포함. 이모지는 일단 제외 — 허용 문자는 나중에 넓히는 게 싸다(기존 데이터가 그대로 유효). 그룹명은 유일하지 않음
+     - 허용 문자 검사를 `Nickname`과 공유하지 않고 복사: R-US-01과 R-GR-10은 다른 이유로 바뀌는 규칙(공백 허용에서 이미 갈림)
+     - `GroupMember`는 `internal(같은 컴포넌트 내 호출만)` 내부 엔티티. 그룹 안 식별자는 `UserId`(자연 키)라 별도 Id·부모 `GroupId` 없음, 탈퇴는 수정이 아니라 컬렉션 제거라 setter 없음
+  2. Group의 Create, AddMember, RemoveMember를 TDD로 구현
+     - `Create`는 `Result` 없이 `Group` 반환(그룹명은 이미 검증된 값 객체라 회원 입력 실패가 없음). 만든 회원이 첫 멤버(R-GR-08), 방장(owner)은 두지 않음 — 읽는 유스케이스가 없음
+     - `AddMember(UserId, joinedAt)` → `Result`: 중복(`AlreadyMember`)을 정원(`GroupFull`)보다 먼저 검사(회원이 바꿀 수 없는 구체적 사실 먼저), 둘 다 `Conflict`. 초대 코드는 인자로 받지 않음(Application이 그룹을 찾는 데만 씀)
+     - `RemoveMember`는 멱등, 반환은 `MemberRemoval { NotMember, Removed, GroupEmptied }`. `NotMember`를 기본값 0으로 둬 미초기화 값이 그룹을 지우지 않게 함. 빈 그룹에 합류시키면 호출 코드 실수로 보고 예외. enum은 `Groups/` 바로 아래
 - 막혔던 것 / 어떻게 풀었나:
-- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `GroupTests` 빈 틀·`TODO(human)`. ADR-004 결정 5(`RemoveMember` 구현)·6(방장 없음) 추가와 ADR-006 `GroupId` 반영(사용자 요청, 결정은 사용자). design-review 🔴 수정 — `Group.Create` null 인자 테스트 2개, null 검사, `Group.cs` 헤더 주석(사용자 요청). `progress.md` 갱신
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `GroupTests` 빈 틀·`TODO(human)`. ADR-004 결정 5(`RemoveMember` 구현)·6(방장 없음) 추가와 ADR-006 `GroupId` 반영(사용자 요청, 결정은 사용자). design-review 🔴 수정 — `Group.Create` null 인자 테스트 2개, null 검사, `Group.cs` 헤더 주석(사용자 요청). `progress.md` 갱신. "배운 것" 1·2의 하위 항목(사용자 요청, 내용은 사용자 결정)
 - 내일 확인할 것:
   - PR 머지 후 D3 브랜치 생성
   - design-review 🟡 3건(`progress.md` 미결 결정) 고칠지
