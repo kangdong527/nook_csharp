@@ -20,12 +20,13 @@
 | Review | 엔티티 | 루트 | UserId, PlaceId로만 참조 / ReviewContent·ReviewImage를 객체로 포함 | R-RV-01, R-RV-02, R-RV-03 (DB) | 작성·수정·삭제의 단위이고, 이미지 장수 제한을 자기 컬렉션만 보고 판단할 수 있다 |
 | ReviewImage | 엔티티 | Review | Review에 객체로 포함 | (R-RV-02는 루트가 지킴) | 리뷰 없이는 의미가 없고 리뷰와 함께 생성·삭제된다. 순서·교체를 위해 식별자가 필요해 값 객체가 아니다 |
 | Like | 엔티티 | 루트 | UserId, ReviewId로만 참조 | R-LK-01 (DB) | Bookmark와 같은 이유로 Review에 넣으면 인기 리뷰에서 경합이 생긴다 |
-| Group | 엔티티 | 루트 | GroupMember를 객체로 포함 / InviteCode를 값으로 포함 | R-GR-01, R-GR-03 (DB), R-GR-05, R-GR-06 (DB), R-GR-07 (DB), R-GR-08, R-GR-09 (App) | 정원 확인에 필요한 멤버 목록을 직접 가지므로 루트가 정원과 중복 합류를 미리 검사한다. 동시 합류의 선착순은 그룹 행 잠금이, 중복 합류는 (그룹, 회원) UNIQUE가 최종 보장한다. 초대 코드 유일성은 다른 그룹과 비교해야 하므로 저장소가 보장하고, 충돌하면 Application이 다시 생성한다. 생성자가 만든 회원을 첫 멤버로 넣으므로 멤버 없는 그룹은 만들어지지 않는다. 마지막 멤버의 탈퇴는 루트가 판정하지만 애그리거트 삭제는 저장소 작업이므로 Application이 같은 트랜잭션에서 그룹을 삭제한다 |
+| Group | 엔티티 | 루트 | GroupMember를 객체로 포함 / GroupName·InviteCode를 값으로 포함 | R-GR-01, R-GR-03 (DB), R-GR-05, R-GR-06 (DB), R-GR-07 (DB), R-GR-08, R-GR-09 (App) | 정원 확인에 필요한 멤버 목록을 직접 가지므로 루트가 정원과 중복 합류를 미리 검사한다. 동시 합류의 선착순은 그룹 행 잠금이, 중복 합류는 (그룹, 회원) UNIQUE가 최종 보장한다. 초대 코드 유일성은 다른 그룹과 비교해야 하므로 저장소가 보장하고, 충돌하면 Application이 다시 생성한다. 생성자가 만든 회원을 첫 멤버로 넣으므로 멤버 없는 그룹은 만들어지지 않는다. 마지막 멤버의 탈퇴는 루트가 판정하지만 애그리거트 삭제는 저장소 작업이므로 Application이 같은 트랜잭션에서 그룹을 삭제한다 |
 | GroupMember | 엔티티 | Group | Group에 객체로 포함 / UserId로만 참조 | R-GR-02 (App) | 그룹 없이는 의미가 없다. 회원당 3개 제한은 여러 그룹에 걸쳐 있어 어느 Group도 혼자 확인할 수 없으므로, User 행을 잠근 뒤(R-GR-04) Application이 참여 수를 센다 |
 | Nickname | 값 객체 | User | User에 값으로 포함 | R-US-01 (NFC·trim, 2~12자, 한글 완성형·영문·숫자) | 식별자 없이 값으로만 비교되고, 생성 시점에 형식을 강제한다 |
 | Coordinate | 값 객체 | Place | Place에 값으로 포함 | R-PL-02 | 위도·경도 한 쌍이 하나의 의미이며, 범위·NaN 검증을 한 곳에서 한다 |
 | ReviewContent | 값 객체 | Review | Review에 값으로 포함 | R-RV-01 | 같은 텍스트면 같은 값이고, trim·코드 포인트 길이 검증을 담당한다 |
 | InviteCode | 값 객체 | Group | Group에 값으로 포함 | R-GR-05 | 형식 검증과 생성(Generate)을 담당한다. 코드의 유일성은 값 자체가 아니라 저장소가 보장해야 한다 |
+| GroupName | 값 객체 | Group | Group에 값으로 포함 | R-GR-10 (NFC·trim, 2~6자, 한글 완성형·영문·숫자·공백) | 닉네임과 같은 이유로 값 객체. 유일하지 않으므로 저장소 보장은 없다 |
 
 ### StarState가 표에 없는 이유
 
@@ -110,7 +111,7 @@ classDiagram
         class Group {
             <<AggregateRoot>>
             +GroupId id
-            +String name
+            +GroupName name
             +InviteCode inviteCode
             +IReadOnlyCollection~GroupMember~ members
         }
@@ -118,6 +119,10 @@ classDiagram
             <<Entity>>
             +UserId userId
             +DateTimeOffset joinedAt
+        }
+        class GroupName {
+            <<ValueObject>>
+            +String value
         }
         class InviteCode {
             <<ValueObject>>
@@ -131,6 +136,7 @@ classDiagram
     Review "1" *-- "1" ReviewContent : 포함
     Review "1" *-- "0..3" ReviewImage : 포함 (R-RV-02)
     Group "1" *-- "1" InviteCode : 포함
+    Group "1" *-- "1" GroupName : 포함
     Group "1" *-- "1..4" GroupMember : 포함 (R-GR-01, 08, 09)
 
     %% 경계 밖: ID 참조

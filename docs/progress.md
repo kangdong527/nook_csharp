@@ -1,12 +1,17 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 진행 중** (2026-10-11) — 브랜치 `feat/d2-domain`(미푸시). 실패 표현 기반, 값 객체 4개, 분류표, 클래스 다이어그램(`docs/design/domain.md`) 완료. 달력 기준 약 3일 지연
+- 현재: **D2 진행 중** (2026-10-12) — 브랜치 `feat/d2-domain`(미푸시). 엔티티 6개(`Bookmark`·`Like`·`ReviewImage`·`Review`·`Place`·`User`)와 강타입 ID 4개 완료, `Group`·`GroupMember`만 남음. 달력 기준 약 3일 지연
 - 다음 할 일 (순서대로)
-  1. 학습 로그 D2-3 작성(사용자)
-  2. **엔티티 8개** — 가벼운 것(`Bookmark`·`Like`·`ReviewImage`)부터. 시각은 `DateTimeOffset` 인자로 받는다(`Review`의 R-RV-03 날짜 계산은 Domain). 자식 컬렉션은 읽기 전용 타입으로 공개, 시간은 `DateTimeOffset`
-  3. **`Group.Create()`·`AddMember()`·`RemoveMember()`** — 생성 시 만든 회원이 첫 멤버(R-GR-08). 합류는 R-GR-01(정원)·R-GR-07(중복) 미리 검사. 탈퇴는 "마지막 멤버였음"을 결과로 알리고 그룹 삭제는 Application(R-GR-09). R-GR-02는 Application, 최종 보장은 DB(D6)
-  4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → PR
+  1. ADR-004~007 검토(Claude 작성, 사용자 결정과 다른 서술 수정)
+  2. ~~`Group` 설계 질문 3개~~ (2026-10-13 답변, R-GR-10 신설)
+     - Q1 그룹명 규칙 R-GR-10 신설: SSoT "2~6자"가 `usecases.md`에 없음. 허용 문자(화이트리스트? 공백·이모지?), 그룹명 유일 여부
+     - Q2 `RemoveMember` 반환: "마지막 멤버였음"을 Application이 무시할 수 없게(`bool` vs 이름 있는 결과). 멤버 아닌 회원 탈퇴 = 실패 vs 멱등
+     - Q3 `AddMember` 인자(초대 코드가 필요한가?)와 R-GR-01(정원)·R-GR-07(중복) 검사 순서 — 정원이 찬 그룹에 이미 멤버인 회원이 합류 요청하면?
+  3. `GroupId`(Claude 복사) → `GroupMember`(`internal`) → **`Group.Create()`·`AddMember()`·`RemoveMember()`** — 생성 시 만든 회원이 첫 멤버(R-GR-08). R-GR-02는 Application, 최종 보장은 DB(D6)
+  4. `/design-review src/Nook.Domain` 🔴 0 → D2 게이트 → 푸시 → PR
+  - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D2 범위 밖이면 D5로
+  - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
 
 ## 세션 기록
 
@@ -96,11 +101,28 @@ Claude가 작성: `Coordinate`·`Nickname`·`InviteCode` 빈 틀, `.editorconfig
 커밋: `0789312` 클래스 다이어그램·R-GR-08·09·분류표 (`feat/d2-domain`, 미푸시)
 Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문구와 R-GR-09 동시성 근거(사용자 요청, 내용은 사용자 결정), `progress.md` 갱신
 
+### 2026-10-12 (D2-4)
+1. Git: `--amend`로 커밋 메시지 오타·줄바꿈 수정 → 해시가 바뀌므로 문서의 해시 참조도 갱신
+2. 강타입 ID: `record class`(struct는 `default`가 `Guid.Empty`로 조용히 통과). `New`(v7 발급)/`From`(복원, Empty는 예외). `From(Guid.Empty)`가 클라이언트 경로 값이면 500이 되는 문제 → D5 미결
+3. 공통화 측정(scratchpad): 비제네릭 공통 기반만 `userId == placeId`가 컴파일(항상 False), 제네릭 자기 타입 기반·인터페이스는 CS0019. `.Equals(object)`는 모두 컴파일 → C안(인터페이스 `IEntityId<TSelf>` + 최소 복사). 인터페이스 목적 = D3 제네릭 값 변환기(`static abstract From`)
+4. 엔티티 기준(Bookmark에서 확정): 동등성 재정의 안 함, 실패할 규칙이 없으면 `Result` 없이 반환, 시각은 `DateTimeOffset` 인자(`TimeProvider` 기각 — 도메인 순수성·한 유스케이스에서 같은 시각). `Review`도 통일
+5. `TimeGuard.Utc()`: `default`·비UTC는 호출 경로 이탈(`DateTimeOffset.Now`) → 예외. `[CallerArgumentExpression]`으로 원래 인자 이름 유지(측정). 값 객체 대신 가드 — 시각이 들어오는 길은 `Create` 한 곳
+6. 정합성 장치의 범위: 엔티티 메서드(인스턴스 1개) < EF 식별 맵(DbContext 1개 = 요청 1개) < DB 제약·잠금(모든 요청). `Group`의 `.Any()`는 미리 검사일 뿐
+7. `ReviewImage`: `internal`(어셈블리 단위 — Application 차단, Domain 안은 열림). 순서 변경 = 같은 Id, 교체 = 새 Id(RV-02 "교체된 이미지가 남음" 방지). `sortOrder`는 `Review`가 목록 인덱스로 → 중복·빈틈 구조적으로 불가능. 스토리지 키 저장(URL 기각)
+8. `Review`: `AsReadOnly()`로 캐스팅 우회 차단, `ReviewDate` 속성 → `review_date` 컬럼 UNIQUE(표현식 인덱스 기각), "예외 먼저 → Result 나중", `Review.MaxImages`(타입별 const로 SSoT 결정)
+9. `Place`: 입력은 카카오 응답이 아니라 **클라이언트 JSON**. 형식은 느슨하게(원본 seed `demo-1`), 크기 상한은 항상(`KakaoPlaceId` 64자 — UNIQUE 인덱스 보호). 형식 검증 ≠ 크기 검증
+10. `User`: `ChangeNickname`은 표기까지 같으면 멱등, 대소문자만 바꾸는 건 허용(R-US-02 보강). `Email` + R-US-03(느슨한 형식, 대소문자 무시 유일). 응답 DTO는 Api 몫 → `void`
+11. 사고: `Reviews/UserId.cs`(내용은 ReviewId), 복사한 주석 잔존, 자동 `using`, **`ReviewErrors`의 namespace 줄 삭제(전역 namespace로 이동, 빌드 통과)** — C# 컴파일러가 잡지 않는 종류. diff 확인으로 발견
+12. 검증: `dotnet build` 경고·오류 0, `dotnet test` 3/3 통과. `KakaoPlaceId` 경계값(null·공백·64/65자·이모지 64/65)은 scratchpad로 확인 — 단위 테스트는 D4
+
+커밋: `0789312`(구 `fd228c7` amend) · `1e64eff` D2-3 기록 · `3e0523a` UserId·PlaceId · `5fd4d92` Bookmark · `f3d0cd0` 시각 인자 통일 · `c67f266` IEntityId·ReviewId · `07d8a13` · `732a945` TimeGuard · `9121cd6` Like · `4b5fbfa` · `20b9534` 스토리지 키 · `71dc63e` ReviewImageId · `f12eed9` ReviewImage · `3d81c42` · `62a4a58` Review · `936b66c` · `4464585` Place·KakaoPlaceId · `f05d0eb` User·Email · `f6ec9ca` (`feat/d2-domain`, 미푸시)
+Claude가 작성: `PlaceId`·`ReviewImageId`(UserId·ReviewId 복사, 사용자 요청), 엔티티 빈 틀·`TODO(human)`, `KakaoPlaceId` 64자 상한 검증(사용자 요청, 상한값은 사용자 결정), `Review.cs` 키 검사 순서 주석(사용자 요청, 결정은 사용자), `domain.md`·`usecases.md` 스토리지 키 반영, R-RV-03 근거 문구 수정, `progress.md` 결정 기록
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
-- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 4개, 분류표, 다이어그램 완료 / 엔티티 8개·Group 메서드 남음
+- [ ] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — 진행 중: Error·Result, 값 객체 6개(+KakaoPlaceId·Email), 강타입 ID 4개, 분류표, 다이어그램, 엔티티 6개 완료 / GroupId·GroupMember·Group 메서드·design-review 남음
 - [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
@@ -122,6 +144,7 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
 - 북마크 테이블에 "북마크 여부" 컬럼이 필요한가(행 존재 = 북마크) — D3
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
+- 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
 - 북마크 API: 토글 vs PUT/DELETE — D5
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
@@ -134,7 +157,7 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
-- ADR 후보(번호 미정, ADR-003은 D12 배포용으로 예정): 그룹 생애(빈 그룹 배치 정리 기각, 탈퇴 트랜잭션에서 삭제)와 FK 유지
+- ADR 번호: 002(원본과 다른 점, D3)·003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 004부터. 작성됨: 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(모두 Claude 작성·사용자 검토 필요)
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
 
 ## 확정된 결정 (D2)
@@ -166,6 +189,7 @@ Claude가 작성: 다이어그램 빈 블록·`TODO(human)` 틀, R-GR-08·09 문
 - SSoT 상수: 규칙을 지키는 타입이 `const`를 가진다(`ReviewContent.MaxLength`, `Review.MaxImages`) — 정적 규칙 클래스로 모으지 않음
 - `Review.Images`: `List` backing field + `AsReadOnly()` 공개(캐스팅 우회 차단, 래퍼 할당은 3장 목록에서 무시)
 - `Review.Create` 실패 순서: 예외(호출 실수) 먼저 → Result(회원 입력) 나중. 개별 키 검사는 장수 검사 뒤(의도된 예외, 코드 주석). 같은 스토리지 키 중복은 DB `UNIQUE(review_id, storage_key)` — D3
+- 그룹(D2-4 답변): 그룹명 R-GR-10(화이트리스트 + ASCII 공백, 가운데·연속 공백 허용, 이모지 제외 — 나중에 넓히는 건 싸다, 유일하지 않음). `AddMember(UserId, joinedAt)` — 초대 코드는 Application 조회에만. 검사 순서 R-GR-07(중복) → R-GR-01(정원): 회원이 바꿀 수 없는 구체적 사실 먼저. `RemoveMember`는 멱등, 반환 `enum MemberRemoval { NotMember, Removed, GroupEmptied }`(3상태 — 테스트·로그에서 멱등 구분), `GroupEmptied`면 Application이 같은 트랜잭션에서 그룹 삭제
 
 ## 막힌 점
 (없음)
