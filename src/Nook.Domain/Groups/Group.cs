@@ -36,4 +36,16 @@ public sealed class Group
 
         return group;
     }
+
+    public Result AddMember(UserId userId, DateTimeOffset joinedAt)
+    {
+        if (_members.Any(m => m.UserId == userId))
+            return GroupErrors.AlreadyMember;      // R-GR-07: 중복을 정원보다 먼저
+
+        if (_members.Count >= MaxGroupMembers)
+            return GroupErrors.GroupFull;          // R-GR-01
+
+        _members.Add(GroupMember.Create(userId, joinedAt));
+        return Result.Success();
+    }
 }

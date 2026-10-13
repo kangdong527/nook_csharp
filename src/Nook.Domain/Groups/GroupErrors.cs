@@ -18,4 +18,14 @@ public static class GroupErrors
     "Group.GroupNameInvalidCharacters",
     "그룹명에는 한글, 영문, 숫자, 공백만 쓸 수 있습니다.",
     ErrorType.Validation);
+
+    public static readonly Error AlreadyMember = new(
+    "Group.AlreadyMember",
+    "이미 이 그룹의 멤버입니다.",
+    ErrorType.Conflict);
+
+    public static readonly Error GroupFull = new(
+    "Group.GroupFull",
+    $"그룹 정원({Group.MaxGroupMembers}명)이 가득 찼습니다.",
+    ErrorType.Conflict);
 }
