@@ -22,6 +22,7 @@ public class GroupTests
     // - AddMember_WhenFullAndAlreadyMember_ReturnsAlreadyMember   (중복이 정원보다 먼저)
     // - AddMember_WhenGroupIsFull_DoesNotChangeMembers
     // - AddMember_WhenSeatFreedByRemoval_Succeeds            (가득 찬 그룹에서 1명 탈퇴 후 합류)
+    // - AddMember_WhenGroupEmptied_Throws
     //
     // RemoveMember (R-GR-09, 멱등, MemberRemoval 3상태)
     // - RemoveMember_WhenMember_ReturnsRemoved
@@ -149,6 +150,119 @@ public class GroupTests
 
         Assert.True(result.IsFailure(out var error));
         Assert.Equal(GroupErrors.AlreadyMember.Code, error.Code);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenMember_ReturnsRemoved()
+    {
+        var group = NewGroup();
+        var member = UserId.New();
+        group.AddMember(member, Now.AddMinutes(1));
+
+        var result = group.RemoveMember(member);
+
+        Assert.Equal(MemberRemoval.Removed, result);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenMember_RemovesFromMembers()
+    {
+        var group = NewGroup();
+        var member = UserId.New();
+        group.AddMember(member, Now.AddMinutes(1));
+
+        group.RemoveMember(member);
+
+        Assert.Single(group.Members);
+        Assert.DoesNotContain(group.Members, m => m.UserId == member);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenNotMember_ReturnsNotMember()
+    {
+        var group = NewGroup();
+
+        var result = group.RemoveMember(UserId.New());
+
+        Assert.Equal(MemberRemoval.NotMember, result);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenNotMember_DoesNotChangeMembers()
+    {
+        var group = NewGroup();
+        group.AddMember(UserId.New(), Now.AddMinutes(1));
+        var before = group.Members.Select(m => m.UserId).ToList();
+
+        group.RemoveMember(UserId.New());
+
+        Assert.Equal(before, group.Members.Select(m => m.UserId));
+    }
+
+    [Fact]
+    public void RemoveMember_WhenSameMemberTwice_SecondReturnsNotMember()
+    {
+        var group = NewGroup();
+        var member = UserId.New();
+        group.AddMember(member, Now.AddMinutes(1));
+        group.RemoveMember(member);
+
+        var result = group.RemoveMember(member);
+
+        Assert.Equal(MemberRemoval.NotMember, result);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenLastMember_ReturnsGroupEmptied()
+    {
+        var creator = UserId.New();
+        var group = Group.Create(ValidName(), creator, InviteCode.Generate(_ => 0),  Now);
+
+        var result = group.RemoveMember(creator);
+
+        Assert.Equal(MemberRemoval.GroupEmptied, result);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenLastMember_MembersIsEmpty()
+    {
+        var creator = UserId.New();
+        var group = Group.Create(ValidName(), creator, InviteCode.Generate(_ => 0), Now);
+
+        group.RemoveMember(creator);
+
+        Assert.Empty(group.Members);
+    }
+
+    [Fact]
+    public void AddMember_WhenSeatFreedByRemoval_Succeeds()
+    {
+        var group = NewGroup();
+        var leaving = UserId.New();
+        group.AddMember(leaving, Now.AddMinutes(1));
+        group.AddMember(UserId.New(), Now.AddMinutes(2));
+        group.AddMember(UserId.New(), Now.AddMinutes(3));      // 정원 도달
+        group.RemoveMember(leaving);                           // 한 자리 빔
+        var newcomer = UserId.New();
+
+        var result = group.AddMember(newcomer, Now.AddMinutes(4));
+
+        Assert.False(result.IsFailure(out var error), error?.Code);
+        Assert.Equal(4, group.Members.Count);
+        Assert.Contains(group.Members, m => m.UserId == newcomer);
+    }
+
+
+    [Fact]
+    public void AddMember_WhenGroupEmptied_Throws()
+    {
+        var creator = UserId.New();
+        var group = Group.Create(ValidName(), creator, InviteCode.Generate(_ => 0), Now);
+        group.RemoveMember(creator);
+
+        var newUser = UserId.New();
+
+        Assert.Throws<InvalidOperationException>(() => group.AddMember(newUser, Now));
     }
 
     private static Group NewGroup() =>
