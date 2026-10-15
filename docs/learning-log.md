@@ -92,3 +92,17 @@
   - design-review 🟡 3건(`progress.md` 미결 결정) 고칠지
 
 ---
+
+### D3-1 (2026-10-15) — ERD 초안(테이블 8개)
+- 배운 것:
+  1. ERD 작성 요령: 
+    - 쿼리, 컬럼별 타입 지정, 제약(PK, FK, UNIQUE, CHECK)
+    - 작성된 유스케이스, 도메인, 클래스 소스코드를 참고하며 일관성 유지 노력
+  2. 잠금 이해 및 충돌표 읽기: FOR KEY SHARE(FK가 있는 INSERT는 부모 행에 걸림), FOR NO KEY UPDATE(키 변경 없는 요청임을 약속), FOR UPDATE(키 변경 포함일 수 있는 요청)
+  3. ON DELETE(RESTRICT vs CASECADE) 결정 근거 도출
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `erd.md` 골격(형식만 — 시간 부족, 사용자 요청). places `ck_places_kakao_place_id` 행·`ck_places_name` 근거, users 메모 2줄(`btrim` 범위, `lower()` 일치 미확인), §3 `lower()`·북마크 여부 행, review_images "확인 항목", groups "FK (들어오는 것)" 행 — 모두 사용자 요청, 결정 내용은 사용자. `progress.md` 갱신
+- 내일 확인할 것:
+  - ERD §3 남은 미결 4개 → §4 원본 비교 → ADR-002
+
+---

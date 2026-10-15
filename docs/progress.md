@@ -1,11 +1,13 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D2 완료** (2026-10-13) — PR #4로 `main`에 머지. 다음은 D3, 브랜치 `feat/d3-schema`. 달력 기준 약 3일 지연
+- 현재: **D3 진행 중** (2026-10-15, D3-1) — `docs/design/erd.md` 테이블 8개 초안 완료(design-review 🔴 0). 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  1. ~~푸시 → PR → 머지~~ (2026-10-13, PR #4)
-  2. D3 시작: ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (`feat/d3-schema`)
-     - 첫 질문 후보: `GroupMember`의 `group_id`는 섀도 속성(`OwnsMany`), PK `(group_id, user_id)`로 R-GR-02의 `WHERE user_id = ?` 조회를 받을 수 있는가 → `EXPLAIN`
+  1. ERD §3 남은 미결: 별 상태 저장 여부, `storage_key` 길이, 고아 이미지 판별 기준, 자식 컬렉션 매핑
+  2. ERD §4 원본 `schema.sql` 비교 → ADR-002(원본과 다른 점) 작성
+  3. Mermaid 다이어그램(ERD §1)
+  4. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목")
+  5. 로컬 PostgreSQL(compose) + 시드 스크립트 위치 결정 → erd.md "예상" 표기 항목을 `EXPLAIN`으로 실측
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
   - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4
@@ -132,6 +134,19 @@ Claude가 작성: `PlaceId`·`ReviewImageId`(UserId·ReviewId 복사, 사용자 
 커밋: `4913ea5` GroupMember · `a35b6bc` Group.Create · `705f38a` AddMember · `c941cd8` RemoveMember · `f0b3bd6` Group null 검사 (`feat/d2-domain`)
 Claude가 작성: `GroupTests` 빈 틀·`TODO(human)`, ADR-004 결정 5·6 추가(사용자 요청, 결정은 사용자), design-review 🔴 수정(`Group.Create` null 테스트 2개·null 검사·헤더 주석 — 사용자 요청), `progress.md` 갱신
 
+### 2026-10-15 (D3-1)
+1. 복합 인덱스 leftmost prefix: `group_members` PK `(group_id, user_id)`는 `WHERE user_id = ?`를 범위로 좁히지 못함. PK도 인덱스라 같은 순서 인덱스를 또 만들면 중복 → PK `(group_id, user_id)` + 보조 `(user_id)`. 정원 검사는 Group 로딩 후 메모리 Count라 `COUNT(*)` 쿼리 없음
+2. `erd.md` 형식: 테이블마다 "읽는 쿼리(Q1~)" 표를 먼저 쓰고, 제약·인덱스마다 "받는 쿼리 / 막는 것"을 적는다
+3. users·places: `lower()` 표현식 UNIQUE(쿼리 모양을 `lower(col) = lower(?)`로 맞춰야 함), 닉네임·이메일·장소 CHECK 이중화. `btrim`은 ASCII 공백만 지움 → users·places는 최소 이중화, groups는 허용 공백이 ASCII뿐이라 완전 이중화
+4. design-review(users·places): 🔴 1 — `ux_places_kakao_place_id`가 `users`를 가리킴(수정). 🟡 PL-01 동시 등록 쿼리 누락(Q3 `ON CONFLICT` 추가), `kakao_place_id` CHECK 누락, 측정 안 한 EXPLAIN 결과 → "예상"으로 표기, 측정값 제거
+5. 행 잠금: FK 검사는 부모 행에 `FOR KEY SHARE` → `FOR UPDATE`와 충돌, `FOR NO KEY UPDATE`와는 충돌 안 함(자기 자신과는 충돌 → R-GR-04 직렬화 유지). `lock_timeout` 기본 0(무한 대기)
+6. R-BM-02 기준을 커밋 순서로 정함(A안): 네트워크에서 순서 역전 가능, 서버는 클릭 순서를 모름 → 클릭 순서는 클라이언트 책임. `usecases.md` 규칙·근거 수정
+7. bookmarks·reviews·review_images·likes·groups·group_members 작성. `ON DELETE` 기준 2개: ① 정상 삭제 경로가 있는가(없으면 RESTRICT — places) ② 지워도 깨지는 불변식이 있는가(있으면 RESTRICT + 앱 절차 — `group_members.user_id`)
+8. 결정을 미룰지는 되돌리는 비용으로: 인덱스는 나중에 `CONCURRENTLY`로 싸게 추가(BM-03·마이페이지 정렬 인덱스 보류), FK는 지금
+
+커밋: (이 세션 마무리 커밋)
+Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 행·`ck_places_name` 근거, users 메모 2줄(`btrim` 범위, `lower()` 일치 미확인), §3 `lower()`·북마크 여부 행, review_images "확인 항목", groups "FK (들어오는 것)" 행 — 모두 사용자 요청, 결정은 사용자. `progress.md` 갱신
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
@@ -156,16 +171,17 @@ Claude가 작성: `GroupTests` 빈 틀·`TODO(human)`, ADR-004 결정 5·6 추�
 - 고아 이미지 판별 기준(미참조 + 생성 후 N시간)과 정리 배치 — D3
 - `ReviewImage.StorageKey` 길이 상한: 키 생성 규칙이 정해지면 최대 길이 확정 → 컬럼 `varchar(n)` vs `text`, Domain에서도 상한 검사할지 — D3
 - 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
-- 북마크 테이블에 "북마크 여부" 컬럼이 필요한가(행 존재 = 북마크) — D3
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
-- 북마크 API: 토글 vs PUT/DELETE — D5
+- 북마크 API: 토글 vs PUT/DELETE — D5. R-BM-02 A안(커밋 순서, 클릭 순서는 클라이언트 책임) → 멱등한 PUT/DELETE 쪽으로 기움. likes(LK-01)도 같은 구조
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
 - 리뷰 본문 trim 범위: `string.Trim()`은 전각 공백(U+3000)은 지우지만 폭 없는 공백(U+200B)은 남김 — 허용할지 D4 테스트에서 결정 (닉네임은 화이트리스트로 해결됨)
 - `ReviewContent`에도 NFC 정규화를 적용할지 — NFD 입력은 코드 포인트가 부풀어 50자 제한에 먼저 걸림. D4에서 재현 후 결정
-- 닉네임·이메일 대소문자 무시 UNIQUE 방식(R-US-02·03): `lower()` 표현식 인덱스 vs `citext` — D3. C#은 `ToLowerInvariant`, PostgreSQL `lower()`와 결과 일치 확인 필요
+- 이메일 소문자 변환 일치: PostgreSQL `lower()`(DB `LC_CTYPE` 따름) vs C# `ToLowerInvariant()` — 비ASCII에서 다를 수 있음. DB를 띄운 뒤 `SELECT lower('ÄÖ')`로 확인
+- 회원 탈퇴 중 같은 회원의 다른 요청이 새 그룹에 합류하면 users DELETE가 RESTRICT 오류 → 탈퇴 트랜잭션도 처음에 users 행을 잠가야 하는가(R-GR-04와 연결) — D6
+- D4 테스트 항목: 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가), review_images 순서 맞바꾸기 저장(DEFERRABLE UNIQUE + EF 명령 순서)
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
 - 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
@@ -175,6 +191,16 @@ Claude가 작성: `GroupTests` 빈 틀·`TODO(human)`, ADR-004 결정 5·6 추�
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · `Group.Members`는 `IReadOnlyCollection`, `Review.Images`는 `IReadOnlyList`(위 컬렉션 공개 방식 결정과 함께 D3)
 - `AddMember`의 `joinedAt`이 그룹 `CreatedAt`보다 이른 값이어도 통과 — Domain이 검사할지, Application 시각 경로(`GetUtcNow` 한 번)로 충분한지 — D4
+
+## 확정된 결정 (D3)
+- 테이블·컬럼·제약 이름은 snake_case (`pk_`·`ux_`·`ix_`·`ck_`·`fk_` 접두사)
+- 대소문자 무시 UNIQUE는 `lower()` 표현식 인덱스(`citext` 기각: 확장 불필요, 비교 규칙이 쿼리에 드러남. 대가: 쿼리를 `lower(col) = lower(?)` 모양으로)
+- 북마크·좋아요 여부 컬럼 없음 — 행 존재 = 상태
+- `group_members` PK `(group_id, user_id)` + 보조 `(user_id)`, `likes` PK `(review_id, user_id)` + 보조 `(user_id)`, `bookmarks` PK `(user_id, place_id)`, 보조 없음
+- `ON DELETE`: users 자식은 CASCADE, 단 `group_members.user_id`만 RESTRICT(R-GR-09 판정을 거쳐야 함). places 자식은 RESTRICT(삭제 경로 없음). reviews 자식(review_images·likes)은 CASCADE. `group_members.group_id`는 CASCADE 유지(애그리거트 경계 표현, 버그 경로는 앱 테스트)
+- 이미지 최대 3장 DB 보장: `review_images (review_id, sort_order)` UNIQUE DEFERRABLE INITIALLY DEFERRED + `sort_order BETWEEN 0 AND 2`
+- R-BM-02: 커밋 순서상 나중 요청이 최종 상태, 클릭 순서는 클라이언트 책임
+- 측정 안 한 EXPLAIN 결과는 "예상"으로 표기
 
 ## 확정된 결정 (D2)
 - 실패 = Result(예상 가능) / 예외(개발자 실수). Domain은 HTTP 모름
