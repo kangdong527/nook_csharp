@@ -182,7 +182,7 @@ erDiagram
 |---|---|---|---|---|
 | id | `uuid` | NOT NULL | 없음 | 앱이 `ReviewImageId.New()`(UUID v7)로 발급(ADR-006). 순서 변경은 같은 id, 교체는 새 id |
 | review_id | `uuid` | NOT NULL | 없음 | 부모 리뷰. Domain에는 없는 섀도 키(내부 엔티티는 부모 ID를 두지 않음, D2 결정) |
-| storage_key | `text` | NOT NULL | 없음 | URL이 아니라 스토리지 키. 길이 상한은 키 생성 규칙이 정해지면 Domain 상수와 함께 `varchar(n)`으로 정한다(§3 미결) |
+| storage_key | `varchar(56)` | NOT NULL | 없음 | URL이 아니라 스토리지 키. 형식 `reviews/{yyyy}/{MM}/{dd}/{32자 hex}.{jpg\|png\|webp}`, 상한 56은 Domain 상수 `ReviewImage.StorageKeyMaxLength`를 `HasMaxLength`로 옮긴 값(§3.1) |
 | sort_order | `smallint` | NOT NULL | 없음 | 0부터 시작하는 표시 순서. `Review.Create`가 목록 인덱스로 넣는다 |
 
 - 생성 시각 컬럼은 두지 않는다. `ReviewImage`에 없고, 고아 판별의 "생성 후 N시간"은 DB 행이 아니라 스토리지 객체의 생성 시각이다
@@ -193,12 +193,12 @@ erDiagram
 | UNIQUE | `ux_review_images_review_storage_key (review_id, storage_key)` | 같은 리뷰에 같은 키 중복(서버 버그일 때만 생김). 앞 컬럼 `review_id`로 Q1·Q3도 받는다 | `Review.Create` 주석 |
 | UNIQUE | `ux_review_images_review_sort_order (review_id, sort_order) DEFERRABLE INITIALLY DEFERRED` | 한 리뷰 안에서 같은 순서 번호 중복. 아래 CHECK와 합쳐 **한 리뷰의 이미지는 최대 3행**이 DB에서도 보장된다. 순서 맞바꾸기(0↔1)는 행 단위 UPDATE 중간에 잠깐 중복이 생기므로 커밋 시점에 검사한다 | R-RV-02 |
 | CHECK | `ck_review_images_sort_order`: `sort_order BETWEEN 0 AND 2` | 음수 순서, 4번째 이상 이미지. 2는 `Review.MaxImages - 1` | R-RV-02, `ReviewImage.Create` |
-| CHECK | `ck_review_images_storage_key`: `btrim(storage_key) <> ''` | 빈 키. `ReviewImage.Create`의 `ThrowIfNullOrWhiteSpace`와 같은 조건 | `ReviewImage.Create` |
+| CHECK | `ck_review_images_storage_key`: `btrim(storage_key) <> ''` | 빈 키. `ReviewImage.Create`의 `ThrowIfNullOrWhiteSpace`와 같은 조건. 형식 검사 CHECK는 두지 않는다 — 키는 서버만 만들고 Domain이 검증한다(§3.1) | `ReviewImage.Create` |
 | FK | `fk_review_images_reviews`: `review_id → reviews(id) ON DELETE CASCADE` | 애그리거트 내부 엔티티라 루트와 생애가 같다. 리뷰 삭제(RV-03)·회원 탈퇴의 리뷰 CASCADE가 이미지 행까지 한 번에 지운다 | RV-03, PF-02 |
 
 메모
 - 스토리지 객체 삭제는 외부 I/O라 트랜잭션 안에서 하지 않는다(CLAUDE.md). 삭제 전에 키를 읽어 두고 DB 삭제 커밋 뒤 지우거나, 정리 배치가 Q4로 미참조 키를 찾아 지운다
-- Q4용 `storage_key` 단독 인덱스는 배치 방식이 정해지면 추가한다. 키가 전역 유일이면 `ux_review_images_review_storage_key` 대신 `(storage_key)` UNIQUE 하나로 둘 다 받을 수 있다(§3 미결과 함께 결정)
+- Q4용 `storage_key` 단독 인덱스는 배치 방식이 정해지면 추가한다. 키 식별자가 무작위 UUID v4(§3.1)라 키는 사실상 전역 유일하다 → `ux_review_images_review_storage_key (review_id, storage_key)`를 유지할지, `(storage_key)` UNIQUE로 바꿀지 **미결**. 바꾸면 Q1·Q3(`review_id`)을 받을 인덱스를 따로 정해야 한다
 - `DEFERRABLE` 제약은 `ON CONFLICT`의 대상이 될 수 없다. 이 테이블은 ON CONFLICT를 쓰지 않으므로 문제없다
 - **확인 항목 (D3 마이그레이션 · D4 통합 테스트)** — `ux_review_images_review_sort_order`
   - EF Core 마이그레이션 API는 `DEFERRABLE`을 표현하지 못한다 → `migrationBuilder.Sql("ALTER TABLE ... ADD CONSTRAINT ... UNIQUE (...) DEFERRABLE INITIALLY DEFERRED")`로 작성. `CREATE UNIQUE INDEX`로는 DEFERRABLE을 줄 수 없다
@@ -313,11 +313,52 @@ erDiagram
 | 결정 | 선택 | 이유 |
 |---|---|---|
 | 닉네임·이메일 대소문자 무시 UNIQUE: `lower()` 표현식 인덱스 vs `citext` | `lower()` 표현식 인덱스 (`ux_users_nickname_lower`·`ux_users_email_lower`) | 확장 설치 없이 표준 `text` 컬럼 유지, 대소문자 무시 비교가 쿼리에 드러난다. 대가: 쿼리를 `lower(col) = lower(?)` 모양으로 써야 인덱스를 탄다(users 메모). 이메일의 C#·DB 소문자 변환 일치는 미확인 |
-| 별 상태: 저장 컬럼 vs 조회 시 계산 | | |
+| 별 상태: 저장 컬럼 vs 조회 시 계산 | **저장하지 않는다. 조회 시 계산**한다 — (회원, 장소)마다 `EXISTS` bookmarks Q1 · reviews Q4 조합(R-STAR). 목록(BM-03·PF-03·근처 검색)은 장소마다 따로 묻지 않고 `place_id = ANY(@ids)` 또는 `user_id` 단위로 한 번에 계산한다(N+1 금지) | **계산 비용(예상, D8 실측)**: 두 쿼리 모두 `user_id`가 앞 컬럼인 인덱스(`pk_bookmarks`, `ux_reviews_user_place_date`)를 타므로 비용은 log N(전체 행) + k(그 회원의 행)이다. 전체 사용자 수보다 한 회원의 행 수와 heap 방문이 좌우한다. 별 계산은 `place_id`만 필요해 Index Only Scan 가능성이 있다<br>**저장의 매일 비용**: 서로 다른 두 애그리거트(Bookmark·Review)의 쓰기마다 같은 파생 행을 갱신해야 한다. 동시 북마크·리뷰 작성 시 전이 계산 방식은 lost update(Read Committed에서 대기한 UPDATE는 SET 값을 다시 계산하지 않음), 원천 재계산 방식은 write skew(서로 상대의 미커밋 쓰기를 못 봄)가 생긴다. 막으려면 모든 쓰기 경로에서 별 행을 먼저 잠가야(`FOR UPDATE`) 하고 하나라도 빠뜨리면 조용히 틀어진다. 계산하면 두 트랜잭션이 공유하는 행이 없어 이 문제가 구조적으로 없다(사실만 저장, 파생값은 읽을 때)<br>**전환 비용 비대칭**: 저장→계산은 컬럼 DROP과 읽기 쿼리 교체로 싸다. 계산→저장은 이중 쓰기 배포 + 운영 중 백필 + 검증 + 읽기 전환이라 비싸다. 그래도 계산을 고른 이유: 비싼 전환은 "한 번 × 실제로 필요해질 확률"이고, 저장의 동기화·정합성 비용은 매일 낸다<br>**재검토 시점**: D8 대용량 시드에서 BM-03·PF-03을 `EXPLAIN (ANALYZE, BUFFERS)`로 측정(일반 회원 vs 헤비 회원). 느리면 전체 저장 전에 D9 카운터(별 개수만 비정규화)나 D11 캐시를 먼저 검토 |
 | 북마크 여부 컬럼 필요 여부 (행 존재 = 북마크?) | 두지 않는다. 행 존재 = 북마크 | 여부 컬럼은 "행 없음 / false"가 같은 뜻인 상태 중복을 만들고, 해제가 UPDATE가 되어 false 행이 쌓인다 → bookmarks 메모 |
-| `review_images.storage_key` 길이: `varchar(n)` vs `text` | | |
-| 고아 이미지 판별 기준과 정리 배치 | | |
-| 자식 컬렉션 매핑: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` | | |
+| `review_images.storage_key` 규칙 | 형식: `reviews/{yyyy}/{MM}/{dd}/{식별자}.{확장자} 예: reviews/2026/10/16/3f2a9c0e7b1d4e8fa6c5d2b1e0f9a8c7.webp`, 길이: `varchar(56)`, 상한은 Domain 상수 `ReviewImage.StorageKeyMaxLength = 56`에서 가져온다 | 키는 서버가 고정 규칙으로 만드므로 최대 길이를 계산할 수 있다(§3.1 표 2). 계산 가능한 상한은 Domain 상수 한 곳에 두고 EF Core HasMaxLength로 컬럼에 옮긴다(CLAUDE.md SSoT). 규칙이 바뀌어 길어지면 varchar 확장은 카탈로그만 바꾸는 변경이라 싸다(**확인 예정**: 마이그레이션에서 `ALTER COLUMN ... TYPE varchar(60)` 전후 `pg_relation_filenode('review_images')` 비교 — 값이 바뀌면 테이블 재작성) |
+| 고아 이미지 판별 기준과 정리 배치 | **판별**: DB에서 미참조(Q4) **그리고** 객체 나이(스토리지 Last-Modified 기준) > N. N = **(미정)**<br>**배치(B안)**: 매일 최근 폴더(1일치) + 주 1회 전체 스캔<br>**즉시 삭제(A안)**: 리뷰 삭제·이미지 교체·탈퇴는 DB 커밋 후 스토리지 객체를 지운다. 실패분은 배치가 잡는다<br>**삭제 대기 목록(C안, transactional outbox)**: 지금은 두지 않는다. 스토리지 가용에 어려움이 생길 시 도입 | **나이 조건**: 업로드 완료 → DB 커밋 사이에 배치가 끼어들면 커밋될 이미지를 지운다. N의 하한 = 서버 요청 타임아웃(DB 호출까지 취소 토큰 전달) + 여유(시계 차이). DB 타임아웃은 겹치는 안전망이라 더하지 않는다. 실제 N은 손해 비대칭(아래 메모) 때문에 하한보다 넉넉하게 잡는다<br>**B안**: 업로드 실패 고아는 DB가 키를 모르므로 스토리지에서 출발하는 스캔만 찾을 수 있고, 항상 최근 폴더에 있다 → 매일 최근 폴더. 삭제 실패 고아는 작성일 폴더(오래된 폴더)에 있어 최근 스캔이 못 본다 → 주 1회 전체 스캔. 매일 비용이 이미지 총량과 무관하게 일정하다. PF-02 최대 노출 기간 = 약 7일 + N(**B안**)<br>**C안 보류**: B→C 전환 비용이 작다 — 새 테이블 추가뿐이고, 과거 고아는 B의 전체 스캔이 계속 잡아 백필이 없다. 전제: A안의 "키 읽기 → DB 삭제 → 커밋 → 스토리지 삭제" 흐름을 한 곳에 모은다(D5). 그러면 전환은 "키를 읽어 두는 바로 그 자리에 INSERT 한 줄 추가"다 |
+| 자식 컬렉션 매핑: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` | 해당 리스트의 객체 의미대로 공개 타입 지정(`ReviewImage -> IReadOnlyList`, `GroupMember -> IReadOnlyCollection`), **순서 보장 책임은 도메인(Review)**에 두기로 결정, 따라서 정렬 방식도 도메인 내부에서 SortOrder 기준 정렬하여 반환하도록 구현, ImmutableArray는 매핑 때 확인, D4 통합 테스트 시나리오(순서 맞바꾸기 → 다시 불러오기 → Images[i].SortOrder == i) 테스트 진행 예정 | 순서 보장 책임은 **EF 복원 시 순서가 보장되지 않는다(ORDER BY 없음, UPDATE마다 행 버전 위치가 바뀜)**는 문제로 인하여 도메인에 두기로 한다. 캐스팅 우회를 막는 것과 순서를 지키는 것 모두 엔티티가 보장한다. 공개 타입을 객체 의미대로 지정하는 이유는, 하나로 통일해서 일관성 및 가독성을 높이는 것 보다, 객체의 특성과 사용 용도(예: 유저가 의도하여 업로드한 이미지 순서를 항상 지켜서 보게 한다)에 따르는게 좋다고 판단. |
+
+메모
+- 고아 이미지 객체 나이 하한 설정 시 손해 비대칭: 
+  - N이 너무 작으면: 커밋된 리뷰의 이미지가 지워짐 → 데이터 손실, 되돌릴 수 없음
+  - N이 너무 크면: 고아가 조금 더 오래 남음 → 스토리지 비용 다소 증가
+
+
+### 3.1 `storage_key` 규칙 상세
+
+1) 구성
+
+| 부분 | 선택 | 이유 |
+|---|---|---|
+| 날짜 prefix | 업로드 시각의 UTC 날짜, `TimeProvider`가 정한 값 | 시간 기준 prefix(결정됨). 시각의 기준은 ADR-007과 같다. 정리 배치가 스토리지 목록을 훑을 **범위**를 prefix로 좁힐 수 있다(예: 최근 며칠치 폴더만). 단, prefix는 범위를 좁히는 용도일 뿐 **나이 판정에 쓰지 않는다** — 23:59:59에 업로드된 객체는 prefix로는 "어제"지만 실제 나이는 1초다. "생성 후 N시간"은 스토리지 객체의 생성 시각(Last-Modified)으로 판정한다(고아 판별 기준, §3) |
+| 식별자 | 무작위 UUID v4, 하이픈 없는 32자 소문자 hex (`Guid.NewGuid().ToString("N")`) | 리뷰 ID·이미지 ID를 넣지 않기로 했다(키로 리뷰를 찾을 일이 없음). 그래서 `Review.Create`가 ID를 미리 받는 구조 변경도 필요 없다. v7이 아니라 v4인 이유: 시각은 이미 prefix에 있고, 식별자까지 시간순일 이유가 없으며 추측하기 어려울수록 좋다(무작위 비트 v4 122 / v7 74). 하이픈을 빼서 4자를 줄인다 |
+| 확장자 | `jpg` · `png` · `webp` 중 하나. 업로드 파일 이름이 아니라 서버가 판별한 형식으로 정한다 | 회원이 보낸 파일명은 불신 입력이다(경로 조작, 개인정보 노출, 길이 예측 불가). 형식을 서버가 정하면 키에 들어가는 문자가 고정된다. `jpeg`가 아니라 `jpg`로 통일한다 |
+| 회원 ID | 넣지 않는다 | 넣으면 회원 ID(v7, 가입 시각 포함)가 이미지 URL로 노출된다(ADR-006). 탈퇴 시 이미지 정리 방식은 고아 판별 기준(§3)에서 정한다 — 최근 prefix만 훑는 배치는 오래된 폴더의 탈퇴 회원 이미지를 찾지 못하므로 PF-02 "모든 데이터 삭제"를 만족하는지 거기서 확인 |
+
+2) 최대 길이
+
+| 부분 | 글자 수 |
+|---|---|
+| `reviews/` | 8 |
+| `yyyy/` | 5 |
+| `MM/` | 3 |
+| `dd/` | 3 |
+| 식별자(32자 hex) | 32 |
+| `.` | 1 |
+| 확장자(가장 긴 `webp`) | 4 |
+| **합계** | **56** |
+
+- 날짜가 0으로 채운 고정 폭(MM, dd)이라 모든 키는 확장자 3자(jpg·png)면 55자, webp면 56자다
+- 전부 ASCII라 글자 수 = 바이트 수다
+
+3) 검증 위치
+
+| 질문 | 결정 | 이유 |
+|---|---|---|
+| 길이 검사 | Domain `ReviewImage.Create`가 `StorageKeyMaxLength` 초과 시 **예외** | 키는 서버가 만든다. 초과는 회원 입력이 아니라 서버 실수이므로 Result가 아니라 예외로 터뜨린다. DB `varchar(56)`은 이중 방어 |
+| 형식 CHECK | 두지 않는다 | 키는 서버만 만들고 Domain이 검증한다. 상한은 `varchar(56)`이 막는다 |
+| 상수와 생성기 불일치 | 키 생성기 단위 테스트가 실패해야 한다 | 형식을 바꾸면서 상수를 고치지 않으면 생성된 키가 Domain 검증을 통과하지 못해야 한다 |
 
 ## 4. 원본 스키마와 비교 (설계를 마친 뒤 작성)
 

@@ -1,12 +1,12 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D3 진행 중** (2026-10-15, D3-1) — `docs/design/erd.md` 테이블 8개 초안 완료(design-review 🔴 0). 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
+- 현재: **D3 진행 중** (2026-10-16, D3-2) — `docs/design/erd.md` §3 미결 6개 모두 결정. 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  1. ERD §3 남은 미결: 별 상태 저장 여부, `storage_key` 길이, 고아 이미지 판별 기준, 자식 컬렉션 매핑
+  1. `docs/learning-log.md` D3-2 기록(사용자 작성)
   2. ERD §4 원본 `schema.sql` 비교 → ADR-002(원본과 다른 점) 작성
   3. Mermaid 다이어그램(ERD §1)
-  4. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목")
+  4. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목"). 매핑 때 확인: `ImmutableArray` 네비게이션 매핑 가능 여부, `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교, `(review_id, sort_order)` DEFERRABLE 인덱스가 `WHERE review_id = ?`를 받는지 `EXPLAIN`
   5. 로컬 PostgreSQL(compose) + 시드 스크립트 위치 결정 → erd.md "예상" 표기 항목을 `EXPLAIN`으로 실측
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
@@ -147,6 +147,19 @@ Claude가 작성: `GroupTests` 빈 틀·`TODO(human)`, ADR-004 결정 5·6 추�
 커밋: (이 세션 마무리 커밋)
 Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 행·`ck_places_name` 근거, users 메모 2줄(`btrim` 범위, `lower()` 일치 미확인), §3 `lower()`·북마크 여부 행, review_images "확인 항목", groups "FK (들어오는 것)" 행 — 모두 사용자 요청, 결정은 사용자. `progress.md` 갱신
 
+### 2026-10-16 (D3-2)
+1. 별 상태: 저장 안 함, 조회 시 계산. 비용은 log N(전체) + k(그 회원의 행) — `user_id` 앞 컬럼 인덱스. 반대 순서 `(place_id, user_id)`면 범위를 못 좁혀 N에 비례. 저장하면 두 애그리거트가 같은 파생 행을 갱신 → 전이 계산은 lost update(RC에서 대기한 UPDATE는 SET 값을 재계산하지 않음), 원천 재계산은 write skew. 전환 비용은 계산→저장이 비싸지만(백필·이중 쓰기) 저장의 동기화 비용은 매일 냄
+2. `ORDER BY` 없는 SELECT는 순서 보장 없음. UPDATE는 새 행 버전을 쓰므로(MVCC) 물리적 순서도 바뀜
+3. `storage_key` 규칙: `reviews/{yyyy}/{MM}/{dd}/{32자 hex v4}.{jpg|png|webp}` → 최대 56자, `varchar(56)` + Domain `ReviewImage.StorageKeyMaxLength`(초과는 서버 실수 → 예외). 리뷰·이미지·회원 ID 미포함, 파일명 불신. 길이는 `Length`(≥ 코드 포인트 → DB보다 같거나 엄격). TDD로 55·56·57자 테스트(`ParamName` 단언 — 같은 예외 타입이 두 곳에서 나옴)
+4. prefix도 정렬 키: 배치의 질문("최근 생긴 것")과 맞는 시간 prefix. prefix는 범위만 좁히고 나이 판정은 객체 Last-Modified로(날짜 경계 23:59:59 업로드 → 배치 → 커밋 순서면 정상 이미지 삭제)
+5. 고아 이미지: 미참조 + 나이 > N(6시간). N 하한 = 서버 타임아웃(취소 토큰이 DB까지 전달될 때만 상한) + 여유. 클라이언트 타임아웃은 서버 작업을 멈추지 않음. 손해 비대칭(작으면 데이터 손실, 크면 비용) → 넉넉하게. 매일 06:00 최근 30시간(주기 + N) + 주 1회 전체 스캔(B안). Q4는 `= ANY(@keys)` 묶음 조회
+6. transactional outbox(C안) 보류: 전환 비용 작음(백필 없음 — B가 과거 고아 담당). 전제: 삭제 흐름("키 읽기 → DB 삭제 → 커밋 → 스토리지 삭제") 한 곳(D5). 도입 조건: 주 1회 전체 스캔이 너무 오래 걸릴 때
+7. `review_images` UNIQUE `(review_id, storage_key)` → `(storage_key)`: 다른 리뷰끼리 키 공유 시 즉시 삭제가 남의 이미지를 지움. Q1·Q3은 `(review_id, sort_order)` 앞 컬럼이 받는다고 예상
+8. 자식 컬렉션: 공개 타입은 의미대로(`Images` = `IReadOnlyList` 순서 있음, `Members` = `IReadOnlyCollection`) — D2-5 🟡 "불일치"는 의도된 차이로 종료. 순서 보장은 Review가(EF 복원 순서 비보장), getter에서 매번 `SortOrder` 정렬. 검증은 D4 통합 테스트
+
+커밋: (이 세션 마무리 커밋)
+Claude가 작성: erd.md §3.1 정리(사용자 내용 이전 + 🔴·🟡 반영), review_images 컬럼·UNIQUE·Q4·메모 갱신, §3 고아 이미지 행 선택/이유 분리와 N·범위 반영, C 도입 조건 문구, §3 별 상태 행 선택·이유(사용자 요청), `ReviewImage.cs`·`Review.cs` 주석 정리(`Images` 주석 포함). Claude가 결정(사용자 위임): 길이 검사 단위 `Length`. `progress.md` 갱신
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
@@ -168,9 +181,6 @@ Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 
 - [ ] D14 README·회고
 
 ## 미결 결정
-- 고아 이미지 판별 기준(미참조 + 생성 후 N시간)과 정리 배치 — D3
-- `ReviewImage.StorageKey` 길이 상한: 키 생성 규칙이 정해지면 최대 길이 확정 → 컬럼 `varchar(n)` vs `text`, Domain에서도 상한 검사할지 — D3
-- 별 상태: 저장 컬럼 vs 조회 시 계산 — D3
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
 - 북마크 API: 토글 vs PUT/DELETE — D5. R-BM-02 A안(커밋 순서, 클릭 순서는 클라이언트 책임) → 멱등한 PUT/DELETE 쪽으로 기움. likes(LK-01)도 같은 구조
@@ -181,15 +191,15 @@ Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 
 - `ReviewContent`에도 NFC 정규화를 적용할지 — NFD 입력은 코드 포인트가 부풀어 50자 제한에 먼저 걸림. D4에서 재현 후 결정
 - 이메일 소문자 변환 일치: PostgreSQL `lower()`(DB `LC_CTYPE` 따름) vs C# `ToLowerInvariant()` — 비ASCII에서 다를 수 있음. DB를 띄운 뒤 `SELECT lower('ÄÖ')`로 확인
 - 회원 탈퇴 중 같은 회원의 다른 요청이 새 그룹에 합류하면 users DELETE가 RESTRICT 오류 → 탈퇴 트랜잭션도 처음에 users 행을 잠가야 하는가(R-GR-04와 연결) — D6
-- D4 테스트 항목: 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가), review_images 순서 맞바꾸기 저장(DEFERRABLE UNIQUE + EF 명령 순서)
+- D4 테스트 항목: 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가), review_images 순서 맞바꾸기 저장(DEFERRABLE UNIQUE + EF 명령 순서), 순서 맞바꾼 리뷰를 다시 불러와 `Images[i].SortOrder == i`
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
-- 엔티티 자식 컬렉션 공개 방식: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` — EF Core 매핑 가능 여부 D3에서 확인
+- 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
 - ADR 번호: 002(원본과 다른 점, D3)·003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 004부터. 작성됨: 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
-- design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · `Group.Members`는 `IReadOnlyCollection`, `Review.Images`는 `IReadOnlyList`(위 컬렉션 공개 방식 결정과 함께 D3)
+- design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
 - `AddMember`의 `joinedAt`이 그룹 `CreatedAt`보다 이른 값이어도 통과 — Domain이 검사할지, Application 시각 경로(`GetUtcNow` 한 번)로 충분한지 — D4
 
 ## 확정된 결정 (D3)
@@ -201,6 +211,10 @@ Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 
 - 이미지 최대 3장 DB 보장: `review_images (review_id, sort_order)` UNIQUE DEFERRABLE INITIALLY DEFERRED + `sort_order BETWEEN 0 AND 2`
 - R-BM-02: 커밋 순서상 나중 요청이 최종 상태, 클릭 순서는 클라이언트 책임
 - 측정 안 한 EXPLAIN 결과는 "예상"으로 표기
+- 별 상태는 저장하지 않고 조회 시 계산(목록은 묶음 조회, N+1 금지). 재검토: D8 측정 → D9 카운터·D11 캐시 먼저
+- `storage_key`: `reviews/{yyyy}/{MM}/{dd}/{32자 hex v4}.{jpg|png|webp}`, `varchar(56)`, Domain 상수·예외, 형식 CHECK 없음, `UNIQUE(storage_key)`
+- 고아 이미지: 미참조 + 나이 > 6시간, 매일 06:00 최근 30시간 + 주 1회 전체(B안), 즉시 삭제는 커밋 후, outbox(C안)는 전체 스캔이 느려지면
+- 자식 컬렉션: 공개 타입은 의미대로, 순서는 Review getter가 정렬해 보장
 
 ## 확정된 결정 (D2)
 - 실패 = Result(예상 가능) / 예외(개발자 실수). Domain은 HTTP 모름
@@ -229,8 +243,8 @@ Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 
 - `ReviewImage`: 생성은 `internal`(Application 차단, Domain 안 다른 코드는 만들 이유 없음 → 중첩 클래스 기각). 이미지 하나 규칙만 가짐. `sortOrder`는 클라이언트가 보내지 않고 `Review`가 목록 인덱스로 매김 → 중복·빈틈이 구조적으로 불가능
 - R-RV-03 기준 날짜: `Review.ReviewDate`(`DateOnly`, UTC) 속성 → `review_date` 컬럼 + `(user_id, place_id, review_date)` UNIQUE. 표현식 인덱스 기각(같은 계산이 SQL에도 생겨 규칙이 두 곳)
 - SSoT 상수: 규칙을 지키는 타입이 `const`를 가진다(`ReviewContent.MaxLength`, `Review.MaxImages`) — 정적 규칙 클래스로 모으지 않음
-- `Review.Images`: `List` backing field + `AsReadOnly()` 공개(캐스팅 우회 차단, 래퍼 할당은 3장 목록에서 무시)
-- `Review.Create` 실패 순서: 예외(호출 실수) 먼저 → Result(회원 입력) 나중. 개별 키 검사는 장수 검사 뒤(의도된 예외, 코드 주석). 같은 스토리지 키 중복은 DB `UNIQUE(review_id, storage_key)` — D3
+- `Review.Images`: `List` backing field + `AsReadOnly()` 공개(캐스팅 우회 차단, 래퍼 할당은 3장 목록에서 무시) → D3-2에서 getter가 `SortOrder` 정렬한 복사본 반환으로 변경
+- `Review.Create` 실패 순서: 예외(호출 실수) 먼저 → Result(회원 입력) 나중. 개별 키 검사는 장수 검사 뒤(의도된 예외, 코드 주석). 같은 스토리지 키 중복은 DB UNIQUE — D3-2에서 `UNIQUE(storage_key)`로 확정
 - 그룹(D2-4 답변): 그룹명 R-GR-10(화이트리스트 + ASCII 공백, 가운데·연속 공백 허용, 이모지 제외 — 나중에 넓히는 건 싸다, 유일하지 않음). `AddMember(UserId, joinedAt)` — 초대 코드는 Application 조회에만. 검사 순서 R-GR-07(중복) → R-GR-01(정원): 회원이 바꿀 수 없는 구체적 사실 먼저. `RemoveMember`는 멱등, 반환 `enum MemberRemoval { NotMember, Removed, GroupEmptied }`(3상태 — 테스트·로그에서 멱등 구분), `GroupEmptied`면 Application이 같은 트랜잭션에서 그룹 삭제. 방장(owner) 없음(2026-10-13) — 읽는 유스케이스가 없고, 넣으면 위임·탈퇴 규칙이 따라옴. 원본 `owner_id ... on delete cascade`는 방장 회원 탈퇴 시 다른 멤버의 그룹까지 삭제하는 결함. 이력(만든 회원)은 첫 멤버의 `JoinedAt = CreatedAt`로 남음. 필요해지면 컬럼 + 백필(가장 이른 `JoinedAt`)로 추가
 - Group 구현(D2-5): `Create`는 `Group` 반환, 생성자는 필드 대입만(첫 멤버 추가는 `Create`). `AddMember` → `Result`(`AlreadyMember`·`GroupFull`, 둘 다 `Conflict`). 빈 그룹 `AddMember`는 예외. `MemberRemoval`은 `Groups/MemberRemoval.cs`, `NotMember = 0`
 - 도메인 루트 메서드는 TDD로 쓴다(테스트 목록 → Red → Green). 처음부터 통과한 테스트는 뮤테이션으로 실패 가능성을 확인
