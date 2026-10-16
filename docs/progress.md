@@ -1,13 +1,11 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D3 진행 중** (2026-10-16, D3-2) — `docs/design/erd.md` §3 미결 6개 모두 결정. 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
+- 현재: **D3 진행 중** (2026-10-17, D3-3) — erd.md §3 미결 6개 결정, §4 원본 비교·ADR-002 채택. 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  1. `docs/learning-log.md` D3-2 기록(사용자 작성)
-  2. ERD §4 원본 `schema.sql` 비교 → ADR-002(원본과 다른 점) 작성
-  3. Mermaid 다이어그램(ERD §1)
-  4. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목"). 매핑 때 확인: `ImmutableArray` 네비게이션 매핑 가능 여부, `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교, `(review_id, sort_order)` DEFERRABLE 인덱스가 `WHERE review_id = ?`를 받는지 `EXPLAIN`
-  5. 로컬 PostgreSQL(compose) + 시드 스크립트 위치 결정 → erd.md "예상" 표기 항목을 `EXPLAIN`으로 실측
+  1. Mermaid 다이어그램(ERD §1)
+  2. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목"). 매핑 때 확인: `ImmutableArray` 네비게이션 매핑 가능 여부, `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교, `(review_id, sort_order)` DEFERRABLE 인덱스가 `WHERE review_id = ?`를 받는지 `EXPLAIN`
+  3. 로컬 PostgreSQL(compose) + 시드 스크립트 위치 결정 → erd.md "예상" 표기 항목을 `EXPLAIN`으로 실측
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
   - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4
@@ -197,8 +195,8 @@ Claude가 작성: erd.md §3.1 정리(사용자 내용 이전 + 🔴·🟡 반�
 - 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
-- ADR 번호: 002(원본과 다른 점, D3)·003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 004부터. 작성됨: 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
-- ADR-002 "원본과 다른 점" 후보: 리뷰 길이 trim 후 계산, 리뷰 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC(원본은 제한 없음·UTF-16 길이), 닉네임 UNIQUE(원본은 DB 제약 없음)
+- ADR 번호: 003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
+- ADR-002 범위 = 스키마 차이만(D3-2 사용자 결정, 근거 erd.md §4). 닉네임 UNIQUE는 포함. 도메인 규칙 차이(리뷰 길이 trim 후 계산, 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC)를 어디에 남길지 미정 — `domain.md`에 이미 있으면 정리 불필요
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
 - `AddMember`의 `joinedAt`이 그룹 `CreatedAt`보다 이른 값이어도 통과 — Domain이 검사할지, Application 시각 경로(`GetUtcNow` 한 번)로 충분한지 — D4
 
