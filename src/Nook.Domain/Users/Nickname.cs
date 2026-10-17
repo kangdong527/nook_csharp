@@ -35,6 +35,16 @@ public sealed record Nickname
         return new Nickname(value);   // 대소문자 변환 없이 원래 표기 그대로 저장
     }
 
+    // DB 값 복원(EF Core 값 변환기 입력). 사용자 입력에는 Create를 쓴다.
+    // 길이·문자 규칙은 다시 검사하지 않는다: 저장된 값은 ck_users_nickname이 보장하고, 규칙이 바뀌어도 기존 회원을 읽을 수 있어야 한다.
+    // 값도 바꾸지 않는다(Trim·정규화 없음): 바꾸면 EF 스냅샷이 DB와 다른 값으로 시작한다. 빈 값은 데이터 손상으로 보고 예외.
+    public static Nickname From(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        return new Nickname(value);
+    }
+
     private static bool TryNormalize(string raw, out string normalized)
     {
         try

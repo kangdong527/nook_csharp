@@ -18,8 +18,10 @@ public sealed class Review
     public PlaceId PlaceId { get; }
     public ReviewContent Content { get; }
 
-    // AsReadOnly: List로 캐스팅해 Add하는 우회를 막는다(R-RV-02). 추가·교체는 Review 메서드로만.
-    public IReadOnlyList<ReviewImage> Images => _images.AsReadOnly();
+    // 순서(R-RV-02)는 Review가 지킨다. EF Core 복원 시 _images 순서는 보장되지 않으므로 읽을 때마다 SortOrder 순으로 정렬한 새 목록을 반환한다(erd.md §3).
+    // 복사본이라 원본 _images는 밖에서 바뀌지 않는다. AsReadOnly는 복사본에 Add하는 실수가 조용히 사라지지 않고 예외로 드러나게 한다.
+    // 추가·교체는 Review 메서드로만. 매 호출 정렬·할당이 생기므로 반복 접근 시 지역 변수에 담아 쓴다(최대 3장이라 비용은 작음).
+    public IReadOnlyList<ReviewImage> Images => _images.OrderBy(i => i.SortOrder).ToList().AsReadOnly();
 
     public DateTimeOffset CreatedAt { get; }
 
@@ -57,7 +59,7 @@ public sealed class Review
         // 3) 생성. sortOrder = 목록 인덱스. 개별 키의 null·공백은 ReviewImage.Create가 예외로 거부한다.
         //    "예외 먼저" 원칙의 의도된 예외: 키 검사가 장수 검사 뒤에 있어, 4장 이상이면서 null 키가 섞인 버그 호출은
         //    TooManyImages로 보고된다. 키 검사를 앞에 한 번 더 두는 중복보다, 3장 이하에서는 반드시 드러나는 쪽을 택했다.
-        //    같은 키 중복은 컬렉션 규칙이지만 서버가 만든 키라 버그일 때만 생기므로 DB UNIQUE(review_id, storage_key)에 맡긴다.
+        //    같은 키 중복은 컬렉션 규칙이지만 서버가 만든 키라 버그일 때만 생기므로 DB UNIQUE(storage_key)에 맡긴다(erd.md review_images).
         var review = new Review(ReviewId.New(), userId, placeId, content, utcCreatedAt);
         for (var i = 0; i < storageKeys.Count; i++)
             review._images.Add(ReviewImage.Create(storageKeys[i], i));

@@ -15,6 +15,15 @@ public sealed record GroupName
 
     private GroupName(string value) => Value = value;
 
+    // DB 값 복원(EF Core 값 변환기 입력). 사용자 입력에는 Create를 쓴다.
+    // 규칙은 다시 검사하지 않고 값도 바꾸지 않는다(Nickname.From과 같은 기준, 저장된 값은 ck_groups_name이 보장). 빈 값은 데이터 손상으로 보고 예외.
+    public static GroupName From(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        return new GroupName(value);
+    }
+
     public static Result<GroupName> Create(string? input)
     {
         // 1) NFC 정규화. 짝 없는 서로게이트가 있으면 Normalize가 ArgumentException을 던지므로 문자 오류(Result)로 바꾼다.

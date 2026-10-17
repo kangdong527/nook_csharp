@@ -77,13 +77,57 @@
 
 ### D2-5 (2026-10-13) — Group TDD와 D2 마무리
 - 배운 것:
-  1. 
-  2. 
-  3. 
+  1. GroupName, GroupMember 작성
+     - 그룹명 규칙 R-GR-10: 한글 완성형·영문·숫자 + ASCII 공백(가운데·연속 공백 허용), 2~6자는 공백 포함. 이모지는 일단 제외 — 허용 문자는 나중에 넓히는 게 싸다(기존 데이터가 그대로 유효). 그룹명은 유일하지 않음
+     - 허용 문자 검사를 `Nickname`과 공유하지 않고 복사: R-US-01과 R-GR-10은 다른 이유로 바뀌는 규칙(공백 허용에서 이미 갈림)
+     - `GroupMember`는 `internal(같은 컴포넌트 내 호출만)` 내부 엔티티. 그룹 안 식별자는 `UserId`(자연 키)라 별도 Id·부모 `GroupId` 없음, 탈퇴는 수정이 아니라 컬렉션 제거라 setter 없음
+  2. Group의 Create, AddMember, RemoveMember를 TDD로 구현
+     - `Create`는 `Result` 없이 `Group` 반환(그룹명은 이미 검증된 값 객체라 회원 입력 실패가 없음). 만든 회원이 첫 멤버(R-GR-08), 방장(owner)은 두지 않음 — 읽는 유스케이스가 없음
+     - `AddMember(UserId, joinedAt)` → `Result`: 중복(`AlreadyMember`)을 정원(`GroupFull`)보다 먼저 검사(회원이 바꿀 수 없는 구체적 사실 먼저), 둘 다 `Conflict`. 초대 코드는 인자로 받지 않음(Application이 그룹을 찾는 데만 씀)
+     - `RemoveMember`는 멱등, 반환은 `MemberRemoval { NotMember, Removed, GroupEmptied }`. `NotMember`를 기본값 0으로 둬 미초기화 값이 그룹을 지우지 않게 함. 빈 그룹에 합류시키면 호출 코드 실수로 보고 예외. enum은 `Groups/` 바로 아래
 - 막혔던 것 / 어떻게 풀었나:
-- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `GroupTests` 빈 틀·`TODO(human)`. ADR-004 결정 5(`RemoveMember` 구현)·6(방장 없음) 추가와 ADR-006 `GroupId` 반영(사용자 요청, 결정은 사용자). design-review 🔴 수정 — `Group.Create` null 인자 테스트 2개, null 검사, `Group.cs` 헤더 주석(사용자 요청). `progress.md` 갱신
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `GroupTests` 빈 틀·`TODO(human)`. ADR-004 결정 5(`RemoveMember` 구현)·6(방장 없음) 추가와 ADR-006 `GroupId` 반영(사용자 요청, 결정은 사용자). design-review 🔴 수정 — `Group.Create` null 인자 테스트 2개, null 검사, `Group.cs` 헤더 주석(사용자 요청). `progress.md` 갱신. "배운 것" 1·2의 하위 항목(사용자 요청, 내용은 사용자 결정)
 - 내일 확인할 것:
   - PR 머지 후 D3 브랜치 생성
   - design-review 🟡 3건(`progress.md` 미결 결정) 고칠지
+
+---
+
+### D3-1 (2026-10-15) — ERD 초안(테이블 8개)
+- 배운 것:
+  1. ERD 작성 요령: 
+    - 쿼리, 컬럼별 타입 지정, 제약(PK, FK, UNIQUE, CHECK)
+    - 작성된 유스케이스, 도메인, 클래스 소스코드를 참고하며 일관성 유지 노력
+  2. 잠금 이해 및 충돌표 읽기: FOR KEY SHARE(FK가 있는 INSERT는 부모 행에 걸림), FOR NO KEY UPDATE(키 변경 없는 요청임을 약속), FOR UPDATE(키 변경 포함일 수 있는 요청)
+  3. ON DELETE(RESTRICT vs CASECADE) 결정 근거 도출
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `erd.md` 골격(형식만 — 시간 부족, 사용자 요청). places `ck_places_kakao_place_id` 행·`ck_places_name` 근거, users 메모 2줄(`btrim` 범위, `lower()` 일치 미확인), §3 `lower()`·북마크 여부 행, review_images "확인 항목", groups "FK (들어오는 것)" 행 — 모두 사용자 요청, 결정 내용은 사용자. `progress.md` 갱신
+- 내일 확인할 것:
+  - ERD §3 남은 미결 4개 → §4 원본 비교 → ADR-002
+
+---
+
+### D3-2 (2026-10-16) — ERD §3 미결 결정 마무리
+- 배운 것:
+  1. 고아 이미지 정리(feat: prefix[장소 vs **✔️시간 - 데이터가 10년 치로 쌓여도 매일 훑는 양은 하루치로 거의 일정**], 최근은 매일 + 1주일 한번 전체 스캔 방식 도입, 업로드 완료 후부터 커밋 전 배치 수행에 대한 이미지 제거 문제 해결을 위한 나이 조건(N) 도입)
+  2. TDD 방식 - ReviewImage 스토리지 키 검증
+  3. 별 상태 저장 여부: 저장 안함 결정 -> 상태 계산 비용 미미 예상, 저장 시 lost update(북마크, 리뷰 시 리뷰 락 및 북마크 대기 후, 후 커밋으로 인한 gray) 위험
+  4. 자식 컬렉션 타입: 해당 객체 컬렉션 의미(이미지 정렬, 그룹 멤버 순서)에 따라 지정, 근거 세움
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): erd.md §3.1 정리(사용자 내용 이전 + 리뷰 🔴·🟡 반영), review_images 컬럼·UNIQUE·Q4·메모 갱신, §3 고아 이미지 행 선택/이유 분리와 N·범위 반영, C안 도입 조건 문구, §3 별 상태 행 선택·이유, `ReviewImage.cs`·`Review.cs` 주석 정리 — 모두 사용자 요청(문서 여러 곳에 퍼져 있어 직접 수정 시 실수 우려), 결정 내용은 사용자. Claude가 결정(사용자 위임): 키 길이 검사 단위 `Length`. `progress.md` 갱신
+- 내일 확인할 것:
+  - ERD §4 원본 `schema.sql` 비교 → ADR-002
+  - Mermaid 다이어그램(ERD §1) → EF Core 매핑·마이그레이션
+
+---
+
+### D3-3 (2026-10-17) — ERD 다이어그램과 EF Core 매핑·마이그레이션
+- 배운 것:
+  1. ERD mermaid 다이어그램 작성(feat: 식별과 비식별 구분, DB 제약 내용(앱 X)만 라벨로 작성)
+  2. Insfrastructure -> Configuration 및 강타입 EntityIdConverter, DbContext 및 OnModelCreate 작성(feat: Configuration 등록 방식 -> 현재 규모에 따라 Assembly 방식 대신 하나씩 등록)
+  3. 도메인 > 복원용 메서드(From) 작성: 규칙을 다시 검사하지 않고 빈 값 여부만 => "DB에 들어간 값은 CHECK를 통과했다" 신뢰
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): erd.md §3 "그룹 멤버 최소 1명 DB 보장" 행(기각 근거 중 '숨은 로직·늦은 실패'·'얻는 것이 작다'는 Claude가 덧붙임 — 확인 필요), `compose.yaml`·`.env.example`(보일러플레이트), EF Core 패키지·`dotnet-ef` 로컬 도구·user-secrets 설정, `Nickname`·`Email` `From` 테스트와 주석, `KakaoPlaceId`·`ReviewContent`·`GroupName`·`InviteCode` `From`과 테스트, `EntityIdConverter`·`NookDbContext`·Configuration 6개(users·places·bookmarks·reviews+review_images·likes·groups+group_members), `Place` EF 전용 생성자, `Init` 마이그레이션 SQL 3개, `AddInfrastructure` DI 등록, 라운드트립 실험 설계·실행, ADR-008, `progress.md` 갱신 — 사용자 요청(작성 위임), 결정은 사용자: 마이그레이션 위치(Infrastructure)·시작 프로젝트(Api), 버전 맞춤(명시적 참조), `From`은 빈 값만 검사, 이름 명시, 마이그레이션 A안(users 먼저 → Init으로 합침), Place 생성자 A안, DEFERRABLE은 EF 모델 밖, `ImmutableArray` 확인 닫기, 그룹 최소 1명은 DB 미보장
+- 내일 확인할 것:
 
 ---
