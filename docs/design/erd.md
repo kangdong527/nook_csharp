@@ -11,7 +11,85 @@
 
 ```mermaid
 erDiagram
+    users ||--o{ bookmarks : "user_id · CASCADE"
+    places ||--o{ bookmarks : "place_id · RESTRICT"
+    users ||..o{ reviews : "user_id · CASCADE"
+    places ||..o{ reviews : "place_id · RESTRICT"
+    reviews ||..o{ review_images : "review_id · CASCADE (0~3장)"
+    reviews ||--o{ likes : "review_id · CASCADE"
+    users ||--o{ likes : "user_id · CASCADE"
+    groups ||--o{ group_members : "group_id · CASCADE"
+    users ||--o{ group_members : "user_id · RESTRICT"
+
+    users {
+        uuid id PK "UUID v7, 앱 발급"
+        varchar(12) nickname UK "lower() 식 UNIQUE"
+        varchar(254) email UK "lower() 식 UNIQUE"
+    }
+
+    places {
+        uuid id PK "UUID v7, 앱 발급"
+        varchar(64) kakao_place_id UK
+        varchar(100) name
+        varchar(200) address
+        float8 latitude "double precision, -90~90"
+        float8 longitude "double precision, -180~180"
+    }
+
+    bookmarks {
+        uuid user_id PK, FK "PK (user_id, place_id)"
+        uuid place_id PK, FK
+        timestamptz created_at
+    }
+
+    reviews {
+        uuid id PK "UUID v7, 앱 발급"
+        uuid user_id FK, UK "UK (user_id, place_id, review_date)"
+        uuid place_id FK, UK "IX (place_id, created_at DESC)"
+        varchar(50) content "trim 후 10~50자"
+        timestamptz created_at
+        date review_date UK "created_at의 UTC 날짜"
+    }
+
+    review_images {
+        uuid id PK "UUID v7, 앱 발급"
+        uuid review_id FK, UK "UK (review_id, sort_order) DEFERRABLE"
+        varchar(56) storage_key UK "UK (storage_key)"
+        smallint sort_order UK "0~2"
+    }
+
+    likes {
+        uuid review_id PK, FK "PK (review_id, user_id)"
+        uuid user_id PK, FK "IX (user_id)"
+        timestamptz created_at
+    }
+
+    groups {
+        uuid id PK "UUID v7, 앱 발급"
+        varchar(6) name "2~6자, 유일하지 않음"
+        varchar(6) invite_code UK "0·O·1·I 제외 6자"
+        timestamptz created_at
+    }
+
+    group_members {
+        uuid group_id PK, FK "PK (group_id, user_id)"
+        uuid user_id PK, FK "IX (user_id)"
+        timestamptz joined_at
+    }
 ```
+
+**관계 범위와 보장 주체**
+
+라벨에 적은 범위는 DB 제약만으로 보장되는 것이다. 여러 행에 걸쳐 앱·잠금이 보장하는 범위는 라벨에 적지 않고 아래 표에 둔다.
+
+| 관계 | 범위 | 보장 주체 | 근거 |
+|---|---|---|---|
+| reviews → review_images | 리뷰당 0~3장 | **DB**: `ck_review_images_sort_order`(`sort_order BETWEEN 0 AND 2`) + `ux_review_images_review_sort_order (review_id, sort_order)` — 좌석 3개, 중복 불가 | R-RV-02 |
+| groups → group_members | 그룹당 최소 1명 (`o{`) | **앱 절차(ADR-004)**: 생성 시 첫 멤버를 같은 트랜잭션에서 추가(R-GR-08), 마지막 멤버 탈퇴 시 같은 트랜잭션에서 그룹 삭제(R-GR-09). 회원 탈퇴는 `fk_group_members_users` RESTRICT 때문에 이 절차를 건너뛸 수 없다 | R-GR-08 · R-GR-09, ADR-004 |
+| groups → group_members | 그룹당 최대 4명 | **잠금(D6)**: groups 행 잠금(groups Q2) 뒤 인원을 세고 INSERT | R-GR-01 · R-GR-03 |
+| users → group_members | 회원당 최대 3개 | **잠금(D6)**: users 행 잠금(users Q2) 뒤 참여 수를 세고 INSERT | R-GR-02 · R-GR-04 |
+
+- 앱·잠금이 보장하는 범위는 앱을 거치지 않은 쓰기(SQL 직접 수정, 시드)에서는 깨질 수 있다
 
 ## 2. 테이블
 
@@ -319,6 +397,7 @@ erDiagram
 | `review_images.storage_key` 규칙 | 형식: `reviews/{yyyy}/{MM}/{dd}/{식별자}.{확장자} 예: reviews/2026/10/16/3f2a9c0e7b1d4e8fa6c5d2b1e0f9a8c7.webp`, 길이: `varchar(56)`, 상한은 Domain 상수 `ReviewImage.StorageKeyMaxLength = 56`에서 가져온다 | 키는 서버가 고정 규칙으로 만드므로 최대 길이를 계산할 수 있다(§3.1 표 2). 계산 가능한 상한은 Domain 상수 한 곳에 두고 EF Core HasMaxLength로 컬럼에 옮긴다(CLAUDE.md SSoT). 규칙이 바뀌어 길어지면 varchar 확장은 카탈로그만 바꾸는 변경이라 싸다(**확인 예정**: 마이그레이션에서 `ALTER COLUMN ... TYPE varchar(60)` 전후 `pg_relation_filenode('review_images')` 비교 — 값이 바뀌면 테이블 재작성) |
 | 고아 이미지 판별 기준과 정리 배치 | **판별**: DB에서 미참조(Q4) **그리고** 객체 나이(스토리지 Last-Modified 기준) > N. N = **6시간**<br>**배치(B안)**: 매일 06:00 최근 30시간(주기 24시간 + N) prefix + 주 1회 전체 스캔<br>**즉시 삭제(A안)**: 리뷰 삭제·이미지 교체·탈퇴는 DB 커밋 후 스토리지 객체를 지운다. 실패분은 배치가 잡는다<br>**삭제 대기 목록(C안, transactional outbox)**: 지금은 두지 않는다. 도입 조건: 주 1회 전체 스캔이 너무 오래 걸릴 때(D8 소요 시간 측정) | **나이 조건**: 업로드 완료 → DB 커밋 사이에 배치가 끼어들면 커밋될 이미지를 지운다. N의 하한 = 서버 요청 타임아웃(DB 호출까지 취소 토큰 전달) + 여유(시계 차이). DB 타임아웃은 겹치는 안전망이라 더하지 않는다. 실제 N은 손해 비대칭(아래 메모) 때문에 하한보다 넉넉하게 잡는다<br>**B안**: 업로드 실패 고아는 DB가 키를 모르므로 스토리지에서 출발하는 스캔만 찾을 수 있고, 항상 최근 폴더에 있다 → 매일 최근 폴더. 삭제 실패 고아는 작성일 폴더(오래된 폴더)에 있어 최근 스캔이 못 본다 → 주 1회 전체 스캔. 매일 비용이 이미지 총량과 무관하게 일정하다. PF-02 최대 노출 기간 = 약 7일 + N(**B안**)<br>**C안 보류**: B→C 전환 비용이 작다 — 새 테이블 추가뿐이고, 과거 고아는 B의 전체 스캔이 계속 잡아 백필이 없다. 전제: A안의 "키 읽기 → DB 삭제 → 커밋 → 스토리지 삭제" 흐름을 한 곳에 모은다(D5). 그러면 전환은 "키를 읽어 두는 바로 그 자리에 INSERT 한 줄 추가"다 |
 | 자식 컬렉션 매핑: `IReadOnlyList`/`IReadOnlyCollection` + backing field vs `ImmutableArray` | 해당 리스트의 객체 의미대로 공개 타입 지정(`ReviewImage -> IReadOnlyList`, `GroupMember -> IReadOnlyCollection`), **순서 보장 책임은 도메인(Review)**에 두기로 결정, 따라서 정렬 방식도 도메인 내부에서 SortOrder 기준 정렬하여 반환하도록 구현, ImmutableArray는 매핑 때 확인, D4 통합 테스트 시나리오(순서 맞바꾸기 → 다시 불러오기 → Images[i].SortOrder == i) 테스트 진행 예정 | 순서 보장 책임은 **EF 복원 시 순서가 보장되지 않는다(ORDER BY 없음, UPDATE마다 행 버전 위치가 바뀜)**는 문제로 인하여 도메인에 두기로 한다. 캐스팅 우회를 막는 것과 순서를 지키는 것 모두 엔티티가 보장한다. 공개 타입을 객체 의미대로 지정하는 이유는, 하나로 통일해서 일관성 및 가독성을 높이는 것 보다, 객체의 특성과 사용 용도(예: 유저가 의도하여 업로드한 이미지 순서를 항상 지켜서 보게 한다)에 따르는게 좋다고 판단. |
+| 그룹 멤버 최소 1명(R-GR-09)을 DB에서도 보장할지: `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` vs 앱 절차만 | **DB에서 보장하지 않는다.** 앱 절차(ADR-004: 생성 시 첫 멤버 같은 트랜잭션, 마지막 멤버 탈퇴 시 그룹 삭제)가 보장하고, D4 통합 테스트로 고정한다. 다이어그램은 `o{`(§1 보장 주체 표) | **규칙 중복**: 같은 규칙이 Domain과 SQL 트리거 두 곳에 생긴다(`review_date` CHECK 기각과 같은 근거)<br>**숨은 로직·늦은 실패**: EF 마이그레이션 API로 표현할 수 없어 `migrationBuilder.Sql`로만 존재하고 EF 모델에 보이지 않는다. 지연 트리거는 COMMIT 시점에 실패해 오류가 원인 문장과 떨어진다. group_members를 쓰는 커밋마다 인원 확인 쿼리가 붙는다(미측정)<br>**얻는 것이 작다**: 트리거가 추가로 막는 것은 앱 우회 쓰기(SQL 직접 수정·시드)뿐이고, 이 경로는 §1 보장 주체 표에서 이미 감수했다. 회원 탈퇴 경로는 `fk_group_members_users` RESTRICT가 절차 우회를 막는다<br>**재검토 시점**: 운영에서 멤버 0명 그룹이 발견될 때(D13 장애 시나리오) |
 
 메모
 - 고아 이미지 객체 나이 하한 설정 시 손해 비대칭: 
