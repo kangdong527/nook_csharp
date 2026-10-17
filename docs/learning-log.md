@@ -120,3 +120,14 @@
   - Mermaid 다이어그램(ERD §1) → EF Core 매핑·마이그레이션
 
 ---
+
+### D3-3 (2026-10-17) — ERD 다이어그램과 EF Core 매핑·마이그레이션
+- 배운 것:
+  1. ERD mermaid 다이어그램 작성(feat: 식별과 비식별 구분, DB 제약 내용(앱 X)만 라벨로 작성)
+  2. Insfrastructure -> Configuration 및 강타입 EntityIdConverter, DbContext 및 OnModelCreate 작성(feat: Configuration 등록 방식 -> 현재 규모에 따라 Assembly 방식 대신 하나씩 등록)
+  3. 도메인 > 복원용 메서드(From) 작성: 규칙을 다시 검사하지 않고 빈 값 여부만 => "DB에 들어간 값은 CHECK를 통과했다" 신뢰
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): erd.md §3 "그룹 멤버 최소 1명 DB 보장" 행(기각 근거 중 '숨은 로직·늦은 실패'·'얻는 것이 작다'는 Claude가 덧붙임 — 확인 필요), `compose.yaml`·`.env.example`(보일러플레이트), EF Core 패키지·`dotnet-ef` 로컬 도구·user-secrets 설정, `Nickname`·`Email` `From` 테스트와 주석, `KakaoPlaceId`·`ReviewContent`·`GroupName`·`InviteCode` `From`과 테스트, `EntityIdConverter`·`NookDbContext`·Configuration 6개(users·places·bookmarks·reviews+review_images·likes·groups+group_members), `Place` EF 전용 생성자, `Init` 마이그레이션 SQL 3개, `AddInfrastructure` DI 등록, 라운드트립 실험 설계·실행, ADR-008, `progress.md` 갱신 — 사용자 요청(작성 위임), 결정은 사용자: 마이그레이션 위치(Infrastructure)·시작 프로젝트(Api), 버전 맞춤(명시적 참조), `From`은 빈 값만 검사, 이름 명시, 마이그레이션 A안(users 먼저 → Init으로 합침), Place 생성자 A안, DEFERRABLE은 EF 모델 밖, `ImmutableArray` 확인 닫기, 그룹 최소 1명은 DB 미보장
+- 내일 확인할 것:
+
+---

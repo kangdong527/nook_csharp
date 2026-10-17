@@ -1,12 +1,19 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D3 진행 중** (2026-10-17, D3-3) — erd.md §3 미결 6개 결정, §4 원본 비교·ADR-002 채택. 브랜치 `feat/d3-schema`. 달력 기준 약 4일 지연
+- 현재: **D3 완료** (2026-10-17, D3-3) → 다음 세션 D4. 브랜치 `feat/d3-schema`(main 미병합). 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  1. Mermaid 다이어그램(ERD §1)
-  2. EF Core 매핑·마이그레이션 (DEFERRABLE UNIQUE는 `migrationBuilder.Sql` — erd.md review_images "확인 항목"). 매핑 때 확인: `ImmutableArray` 네비게이션 매핑 가능 여부, `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교, `(review_id, sort_order)` DEFERRABLE 인덱스가 `WHERE review_id = ?`를 받는지 `EXPLAIN`
-  3. 로컬 PostgreSQL(compose) + 시드 스크립트 위치 결정 → erd.md "예상" 표기 항목을 `EXPLAIN`으로 실측
+  1. `feat/d3-schema` → main PR·병합, D4 브랜치 생성
+  2. Testcontainers 통합 테스트 기반 — 스키마는 **마이그레이션으로** 만든다(`EnsureCreated` 금지: SQL 제약 3개가 빠짐, ADR-008). 연결 문자열은 compose·user-secrets에 의존하지 않게
+  3. D3에서 넘어온 통합 테스트 목록
+     - 그룹 생성 커밋 후 멤버 1명(erd.md §1 보장 주체 표 "앱 절차" 행 — DB가 막지 않음)
+     - 리뷰 이미지 순서 맞바꾸기(0↔1) → `SaveChanges` 한 번 → 다른 `DbContext`로 다시 읽어 `Images[i].SortOrder == i`(D3-3에서는 SQL로만 확인)
+     - 라운드트립은 저장·검증 `DbContext`를 분리(식별 맵)
+     - 엔티티마다 `Create(..., default)` 예외(ADR-007)
+  4. erd.md 갱신(사용자): review_images "확인 항목" 결과(EF 모델에 알리지 않음, 맞바꾸기·위반·`EXPLAIN` 실측), "예상" 표기 중 실측한 2건(users `lower()`, review_images Q1·Q3) 표기 변경
+  - 이월: `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교(미실행), 나머지 "예상" `EXPLAIN`은 데이터가 있어야 의미 있음 → D8 시드와 함께, 시드 스크립트 위치도 D8
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
+  - 미답: Configuration 주석 — 지금은 파일 머리에서 erd.md를 가리킴. 인덱스마다 받는 쿼리(Q 번호)를 달지(D3 게이트 문구 "인덱스마다 쓰는 쿼리를 주석으로")
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
   - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4
 
@@ -158,12 +165,27 @@ Claude가 작성: `erd.md` 골격(형식만), places `ck_places_kakao_place_id` 
 커밋: (이 세션 마무리 커밋)
 Claude가 작성: erd.md §3.1 정리(사용자 내용 이전 + 🔴·🟡 반영), review_images 컬럼·UNIQUE·Q4·메모 갱신, §3 고아 이미지 행 선택/이유 분리와 N·범위 반영, C 도입 조건 문구, §3 별 상태 행 선택·이유(사용자 요청), `ReviewImage.cs`·`Review.cs` 주석 정리(`Images` 주석 포함). Claude가 결정(사용자 위임): 길이 검사 단위 `Length`. `progress.md` 갱신
 
+### 2026-10-17 (D3-3)
+1. erd.md §4 원본 `schema.sql` 비교 → ADR-002 채택. 일정 변경안(포트폴리오 우선)은 보류, D5 종료 후 재산정(`docs/schedule-option-portfolio-first.md`)
+2. ERD §1 Mermaid: 기호 두 축 — `||`/`|o`는 존재 의존(FK NULL 여부), `--`/`..`는 식별 의존(PK에 FK 포함 여부) → reviews·review_images 관계 3개를 점선으로. **라벨에는 DB가 보장하는 범위만**(리뷰당 0~3장), 앱·잠금이 보장하는 범위(그룹 1~4명, 회원당 3개)는 보장 주체 표로 분리
+3. FK는 자식→부모 방향만 검사 → "자식 최소 1개"(그룹 멤버 ≥1)는 선언적 제약으로 표현 불가. `CONSTRAINT TRIGGER` 기각(규칙 중복, 숨은 로직·늦은 실패), 다이어그램은 `o{`, 앱 절차(ADR-004) + D4 테스트로 보장(erd.md §3)
+4. 로컬 PostgreSQL 17.10 compose(`127.0.0.1` 바인딩, `${POSTGRES_PASSWORD:?}`로 비밀번호 필수). PG16+는 `lc_ctype`이 설정 변수가 아니라 DB 속성(`pg_database.datctype` = `en_US.utf8`, libc). `lower('ÄÖ')` = C#과 일치, 로케일 의존 문자는 미확인
+5. EF Core 배치: 마이그레이션·Configuration은 Infrastructure(`--project`), 실행 환경은 Api(`--startup-project`). 마이그레이션이 Api에 있으면 DB 테스트가 HTTP 계층을 참조하게 됨. 대안 중 `EnsureCreated`는 SQL 제약이 빠져 이 프로젝트에서 치명적. 버전: Npgsql 공급자만으로는 EF Core 10.0.4 → `Relational` 10.0.13 명시로 Design과 맞춤(CPM은 나중에)
+6. 생성(`Create`→Result)과 복원(`From`→예외, 빈 값만 검사, 값 그대로)을 분리 — 저장된 값은 CHECK를 믿어 규칙이 바뀌어도 읽힌다. 식 트리 제약 2개: `out` 변수, 정적 추상 멤버(CS8927 → 일반 정적 메서드로 감쌈). 실행되지 않는 가드(`ThrowIfNull` — NOT NULL·EF null 처리로 EF 경로에서 도달 불가)는 안전 착각만 준다
+7. UNIQUE 제약 vs UNIQUE 인덱스: 제약은 DEFERRABLE O·식 X, 인덱스는 식 O·DEFERRABLE X → 둘 다 `migrationBuilder.Sql`(모델 스냅샷에 없음). FK 자동 인덱스 규칙을 꺼 erd.md 인덱스만 생성. 복합 프로퍼티는 생성자 바인딩 불가 → `Place` EF 전용 생성자(ADR-008)
+8. 라운드트립은 다른 `DbContext`로(같은 컨텍스트는 식별 맵이 같은 인스턴스 반환 — 실측). 확인: 강타입 ID·값 객체·`Coordinate`·`Images` 순서·`Members` 복원, `RemoveMember` 후 행 DELETE, RESTRICT가 멤버십 남은 회원 삭제 거부, DEFERRABLE 맞바꾸기 COMMIT 성공·잔존 중복 COMMIT 위반, `EXPLAIN`: `lower()` 쿼리만 표현식 인덱스 사용, `WHERE review_id = ?`는 DEFERRABLE 제약 인덱스 사용(예상 일치)
+
+결정: Configuration 하나씩 등록, 이름 명시(`EFCore.NamingConventions` 기각), 마이그레이션 A안(users 먼저 → `Init` 하나로 합침), DEFERRABLE은 EF 모델 밖, `ImmutableArray` 확인 항목 닫음(D3-2에서 `List` backing field로 정함), `From` 호출 제한은 D5(미결 결정)
+
+커밋: `e7c1dab`(ERD 다이어그램) · `56b2e39`(compose) · `7655ce4`(EF 패키지) · `76ca3be`(erd 메모) · `7c4d261`·`14d919a`(`From`) · `a2a849b`(user-secrets) · `aa18e6a`·`97d77ab`·`cc62add`(매핑·마이그레이션) · 이 세션 마무리 커밋(ADR-008·progress)
+Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, 패키지·로컬 도구·user-secrets, `From` 6개(Nickname·Email 구현은 사용자, 테스트·주석은 Claude)와 테스트, `EntityIdConverter`·`NookDbContext`·Configuration 6개·`Place` EF 생성자·`Init` SQL·`AddInfrastructure`, 라운드트립 실험 설계·실행, ADR-008, `progress.md` 갱신 — 모두 사용자 요청(작성 위임), 결정은 사용자
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
 - [x] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — Error·Result, 값 객체 8개, 강타입 ID 5개, 분류표, 다이어그램, 엔티티 8개, Group 단위 테스트 21개, ADR-004~007
-- [ ] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002
+- [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
 - [ ] D4 테스트 설계(단위 + Testcontainers 통합)
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
 - [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001
@@ -180,6 +202,7 @@ Claude가 작성: erd.md §3.1 정리(사용자 내용 이전 + 🔴·🟡 반�
 
 ## 미결 결정
 - **일정 변경안(포트폴리오 우선: D6 뒤 D12 배포 앞당김 + 프론트 연결) 보류 중** — 기존 순서로 진행하다가 결정. 근거·대화 내용은 `docs/schedule-option-portfolio-first.md`. 재산정 시점 D5 종료 후
+- 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
 - 북마크 API: 토글 vs PUT/DELETE — D5. R-BM-02 A안(커밋 순서, 클릭 순서는 클라이언트 책임) → 멱등한 PUT/DELETE 쪽으로 기움. likes(LK-01)도 같은 구조
