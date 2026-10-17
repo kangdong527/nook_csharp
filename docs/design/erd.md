@@ -131,9 +131,9 @@ erDiagram
 메모
 - R-GR-04 잠금은 PK(Q2)로 행 하나만 잠그므로 추가 인덱스가 필요 없다. 잠금 강도(`FOR UPDATE` vs `FOR NO KEY UPDATE`)와 잠금 순서(사용자 → 그룹)는 D6
 - 중복 판단을 앱에서 미리 할 때 쿼리를 반드시 `lower(nickname) = lower(?)` 모양으로 써야 인덱스를 탄다. `nickname = ?`는 이 인덱스를 못 쓴다
-  => 예상: PostgreSQL 16 EXPLAIN: 전자는 `Index Cond`, 후자는 `Seq Scan` + `Filter`
+  => 예상: PostgreSQL 17 EXPLAIN: 전자는 `Index Cond`, 후자는 `Seq Scan` + `Filter`
 - `btrim(x)`은 기본적으로 ASCII 공백(`' '`)만 지운다. 탭·전각 공백 등 Unicode 공백만으로 된 값은 places CHECK를 통과한다 — 앱 우회 쓰기에서 빈 값만 막는 최소 이중화로 두고, Unicode 공백 처리는 Domain(`string.Trim()`)이 맡는다
-- `lower()`는 DB의 `LC_CTYPE`·collation을 따르고 C# `ToLowerInvariant()`는 Unicode 전체를 바꾼다. 닉네임은 화이트리스트(한글·ASCII)라 결과가 같지만, 이메일은 비ASCII 문자에서 다를 수 있다 → DB를 띄운 뒤 `SELECT lower('ÄÖ')`와 C# 결과를 비교해 확인(미측정)
+- `lower()`는 DB의 `LC_CTYPE`·collation을 따르고 C# `ToLowerInvariant()`는 Unicode 전체를 바꾼다. 닉네임은 화이트리스트(한글·ASCII)라 결과가 같지만, 이메일은 비ASCII 문자에서 다를 수 있다 → DB를 띄운 뒤 `SELECT lower('ÄÖ')`와 C# 결과를 비교해 확인 -> **"ÄÖ는 일치, 로케일에 따라 달라지는 문자(İ 등)는 미확인"**
 
 
 ### places
