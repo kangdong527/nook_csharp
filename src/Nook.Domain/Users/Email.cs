@@ -28,6 +28,15 @@ public sealed record Email
         return new Email(normalized);
     }
 
+    // DB 값 복원(EF Core 값 변환기 입력). 사용자 입력에는 Create를 쓴다.
+    // 형식은 다시 검사하지 않고 값도 바꾸지 않는다(Nickname.From과 같은 기준, 저장된 값은 ck_users_email이 보장). 빈 값은 데이터 손상으로 보고 예외.
+    public static Email From(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        return new Email(value);
+    }
+
     private static bool HasSingleAtWithBothSides(string value)
     {
         var at = value.IndexOf('@');
