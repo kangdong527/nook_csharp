@@ -14,6 +14,15 @@ public sealed record KakaoPlaceId
 
     private KakaoPlaceId(string value) => Value = value;
 
+    // DB 값 복원(EF Core 값 변환기 입력). 사용자 입력에는 Create를 쓴다.
+    // 규칙은 다시 검사하지 않고 값도 바꾸지 않는다(Nickname.From과 같은 기준, 저장된 값은 ck_places_kakao_place_id가 보장). 빈 값은 데이터 손상으로 보고 예외.
+    public static KakaoPlaceId From(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        return new KakaoPlaceId(value);
+    }
+
     public static Result<KakaoPlaceId> Create(string? input)
     {
         // 1) 정규화
