@@ -27,6 +27,17 @@ public sealed class Place
         Coordinate = coordinate;
     }
 
+    // EF Core 복원 전용. EF는 복합 프로퍼티(Coordinate)를 생성자 매개변수로 넘기지 못하므로, 이 생성자로 만든 직후 Coordinate를 채운다.
+    // 앱 코드는 이 생성자를 쓰지 않는다 — Coordinate가 null인 Place는 정상 흐름에 없다.
+    private Place(PlaceId id, KakaoPlaceId kakaoPlaceId, string name, string address)
+    {
+        Id = id;
+        KakaoPlaceId = kakaoPlaceId;
+        Name = name;
+        Address = address;
+        Coordinate = null!;
+    }
+
     public static Result<Place> Create(
         KakaoPlaceId kakaoPlaceId,
         string? name,

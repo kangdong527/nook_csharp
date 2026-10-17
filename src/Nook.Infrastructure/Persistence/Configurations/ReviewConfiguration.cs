@@ -1,0 +1,88 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Nook.Domain.Places;
+using Nook.Domain.Reviews;
+using Nook.Domain.Users;
+
+namespace Nook.Infrastructure.Persistence.Configurations;
+
+// erd.md §2 reviews + review_images. ReviewImage는 애그리거트 내부 엔티티라 OwnsMany로 Review와 함께 로딩·저장된다.
+// ux_review_images_review_sort_order(DEFERRABLE)는 EF 모델로 표현할 수 없어 마이그레이션 SQL로 만든다(erd.md review_images 확인 항목).
+internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
+{
+    public void Configure(EntityTypeBuilder<Review> builder)
+    {
+        builder.ToTable("reviews", table =>
+            table.HasCheckConstraint("ck_reviews_content", $"char_length(btrim(content)) >= {ReviewContent.MinLength}"));
+
+        builder.HasKey(r => r.Id).HasName("pk_reviews");
+
+        builder.Property(r => r.Id)
+            .HasColumnName("id")
+            .ValueGeneratedNever();
+
+        builder.Property(r => r.UserId).HasColumnName("user_id");
+        builder.Property(r => r.PlaceId).HasColumnName("place_id");
+
+        builder.Property(r => r.Content)
+            .HasColumnName("content")
+            .HasMaxLength(ReviewContent.MaxLength)
+            .HasConversion(c => c.Value, value => ReviewContent.From(value));
+
+        builder.Property(r => r.CreatedAt).HasColumnName("created_at");
+        builder.Property(r => r.ReviewDate).HasColumnName("review_date");
+
+        builder.HasIndex(r => new { r.UserId, r.PlaceId, r.ReviewDate })
+            .IsUnique()
+            .HasDatabaseName("ux_reviews_user_place_date");
+
+        builder.HasIndex(r => new { r.PlaceId, r.CreatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_reviews_place_created");
+
+        builder.HasOne<User>().WithMany()
+            .HasForeignKey(r => r.UserId)
+            .HasConstraintName("fk_reviews_users")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<Place>().WithMany()
+            .HasForeignKey(r => r.PlaceId)
+            .HasConstraintName("fk_reviews_places")
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.OwnsMany(r => r.Images, images =>
+        {
+            images.ToTable("review_images", table =>
+            {
+                table.HasCheckConstraint("ck_review_images_sort_order", $"sort_order BETWEEN 0 AND {Review.MaxImages - 1}");
+                table.HasCheckConstraint("ck_review_images_storage_key", "btrim(storage_key) <> ''");
+            });
+
+            // 부모 ID는 Domain에 없다(내부 엔티티는 부모를 모름, D2) → 섀도 속성
+            images.WithOwner().HasForeignKey("ReviewId").HasConstraintName("fk_review_images_reviews");
+            images.Property<ReviewId>("ReviewId").HasColumnName("review_id");
+
+            images.HasKey(i => i.Id).HasName("pk_review_images");
+            images.Property(i => i.Id)
+                .HasColumnName("id")
+                .ValueGeneratedNever();
+
+            images.Property(i => i.StorageKey)
+                .HasColumnName("storage_key")
+                .HasMaxLength(ReviewImage.StorageKeyMaxLength);
+
+            images.HasIndex(i => i.StorageKey)
+                .IsUnique()
+                .HasDatabaseName("ux_review_images_storage_key");
+
+            images.Property(i => i.SortOrder)
+                .HasColumnName("sort_order")
+                .HasConversion<short>();   // Domain int ↔ smallint
+        });
+
+        // Images 게터는 매번 정렬한 복사본을 만든다 → EF는 게터가 아니라 _images 필드를 직접 읽고 쓴다
+        builder.Navigation(r => r.Images)
+            .HasField("_images")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
