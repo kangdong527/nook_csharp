@@ -145,3 +145,16 @@
 - 내일 확인할 것:
 
 ---
+
+### D5-1 (2026-10-18) — 인증 방식 결정, JWT 검증 골격, magic_link_tokens
+- 배운 것:
+  1. 
+  2. 
+  3. 
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정(JwtBearer·Fallback 정책·`IncludeErrorDetails`), JwtBearer 패키지 추가, 서명 키 생성·user-secrets 설정(`openssl` 실패 후 대체), 보안 조사(OWASP·RFC 8725), erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정, `MagicLinkToken`·`MagicLinkTokenConfiguration`·`AddMagicLinkTokens` 마이그레이션(식 인덱스 SQL)·로컬 DB 적용, `CheckConstraintTests` CHECK 3개, `progress.md` 갱신 — 모두 사용자 요청. 결정은 사용자: 매직 링크, API 자체 발급, Access만(60분), 지킬 것(`sub` = 사용자 ID, 발급 한 곳), Fallback·`IncludeErrorDetails` 적용, 별도 테이블(근거: 가입자는 users 행이 없다), AU-01 응답 통일, 정책값(15분·3회·1일), 개발 토큰 엔드포인트 기각. 사용자 작성: `BuildClaims`
+- 내일 확인할 것:
+  - AU-01·AU-02 Application 유스케이스 + `/auth/magic-link`·`/auth/magic-link/consume` (`TODO(human)`)
+  - 질문 미답: Q1을 `SELECT` 후 `UPDATE` 두 문장으로 나누면 무슨 일이 생기나? / `BuildClaims`의 `TryParse`가 실제로 막는 경우는?
+
+---

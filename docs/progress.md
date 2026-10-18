@@ -3,10 +3,11 @@
 - 시작일: 2026-10-08
 - 현재: **D5 진행 중** (2026-10-18, D5-1). 브랜치 `feat/d5-auth`. 인증 방식 결정·JWT 검증 골격·`magic_link_tokens` 설계 완료. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 4일 지연
 - 다음 할 일 (D5, 순서대로)
-  1. 인증 골격 커밋(`src/Nook.Api/Auth/`, `Program.cs`, `appsettings.json`, JwtBearer 패키지) + 문서(usecases·erd·progress)
-  2. `magic_link_tokens` 마이그레이션(erd.md 설계대로) — 작성자 미정
+  1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
+  2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
+     - 이월: Q2가 `ix_magic_link_tokens_email_lower_created`를 타는지 `EXPLAIN`(빈 테이블이라 지금은 의미 없음) — D8
   3. AU-01·AU-02 Application 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume` (협업, `TODO(human)`). 메일 발송 추상화(개발: 콘솔·파일), 백그라운드 발송
-  4. 개발 전용 토큰 발급 엔드포인트(`IsDevelopment()` 한정, 운영 미노출 테스트 포함) — 제안 상태, 사용자 결정 대기
+  4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. `WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함
   6. 나머지 D5 API(장소·북마크·리뷰·좋아요)
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — D12
@@ -201,8 +202,12 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 5. 서명 키: CSPRNG 48바이트 Base64 → user-secrets(`%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`, 평문, Development에서만 로드). `openssl`이 PowerShell에 없어 실패 → `RandomNumberGenerator`로 대체
 6. 매직 링크 저장 위치: 가입자는 링크 요청 시 닉네임이 없어 users 행을 만들 수 없다 → 별도 테이블(사용자 답). 사용자 초안 `| 이메일 | 인증 여부 | 토큰값 |` → 해시·만료·소모 시각·재요청·클릭과 닉네임 제출 사이 상태 5가지 검토 후 erd.md `magic_link_tokens`
 7. 질문: 상태 없는 JWT만으로 링크를 처리할 수 없나 → 가능하지만 1회 사용·무효화·속도 제한을 잃고, 메모리 캐시는 재시작·다중 서버에서 깨진다(상태를 옮길 뿐)
+8. `AddMagicLinkTokens` 마이그레이션: 모델(영속 클래스 + Configuration) → `migrations add` → 식 인덱스 SQL 보완 → `database update` → `\d`로 erd.md와 일치 확인. 실행 중인 Api가 DLL을 잠가 빌드 실패 → 서버 종료 후 진행
+9. 질문: `.cs`(변경분 `Up`/`Down`, 손으로 고침) vs `.Designer.cs`(마이그레이션 ID 속성 + 그 시점 모델 사진, 자동 생성) vs `ModelSnapshot.cs`(최신 사진, `migrations add`의 비교 대상 — DB가 아님). 손으로 넣은 SQL은 어느 사진에도 없다
 
-Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정, 서명 키 생성·설정, 보안 조사, erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정 — 모두 사용자 요청. 사용자 작성: `BuildClaims`(`sub`만, `jti` 보류)
+커밋: `b7909e1`(progress) · `a9ce0d9`(JWT 골격) · `c1f8539`(인증 결정·erd 설계) · 이 세션 마무리 커밋 2개(마이그레이션, progress·learning-log)
+Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정, 서명 키 생성·설정, 보안 조사, erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정, `MagicLinkToken`·Configuration·`AddMagicLinkTokens`·CHECK 테스트 3개 — 모두 사용자 요청. 사용자 작성: `BuildClaims`(`sub`만, `jti` 보류)
+미답 질문(다음 세션): Q1을 SELECT 후 UPDATE로 나누면? / `TryParse`가 실제로 막는 경우는?
 
 ## 체크리스트
 
