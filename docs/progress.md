@@ -17,7 +17,7 @@
   - 이월: `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교(미실행), 나머지 "예상" `EXPLAIN`은 데이터가 있어야 의미 있음 → D8 시드와 함께, 시드 스크립트 위치도 D8
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - ~~미답: Configuration 주석~~ ✅ A안 — PK·UNIQUE·인덱스마다 `// 받는 쿼리: erd.md <table> Q..` (Q 번호만, 근거는 erd.md). 마이그레이션 SQL 제약 2곳도 동일. 인덱스·쿼리를 바꾸면 erd.md 표와 함께 고친다
-  - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
+  - ~~미답: namespace 분석기~~ ✅ `IDE0161`은 namespace 모양(파일 범위/블록) 규칙이라 사고와 무관 → **IDE0130**(폴더 불일치)+**CA1050**(전역 namespace) `error` + `EnforceCodeStyleInBuild`. 참조 없는 탐침 파일로 각각 단독 빌드 실패 확인. 파일명≠타입명(D2-4 `Reviews/UserId.cs`)은 여전히 못 잡음
   - 정리: 템플릿 `UnitTest1.cs` — Integration은 삭제 ✅, Domain·Algorithms 남음(D4)
 
 ## 세션 기록
