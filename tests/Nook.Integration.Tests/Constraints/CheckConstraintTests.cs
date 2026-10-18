@@ -15,7 +15,7 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
 {
     // 테스트 목록
     //
-    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 11개, 제약마다 위반 방식 1~3개)
+    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 14개, 제약마다 위반 방식 1~3개)
 
     private static readonly DateTimeOffset CreatedAt = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
@@ -39,6 +39,9 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
         { "groups", "invite_code = 'abcdef'", "ck_groups_invite_code" },                 // 소문자
         { "groups", "name = 'a'", "ck_groups_name" },                                    // 2자 미만
         { "groups", "name = ' 산책 '", "ck_groups_name" },                               // trim 안 된 값
+        { "magic_link_tokens", "token_hash = decode('ab', 'hex')", "ck_magic_link_tokens_token_hash" },  // 1바이트(해시 아님)
+        { "magic_link_tokens", "expires_at = created_at", "ck_magic_link_tokens_expires" },               // 처음부터 만료
+        { "magic_link_tokens", "consumed_at = created_at - interval '1 second'", "ck_magic_link_tokens_consumed" }, // 발급 전 소모
     };
 
     [Theory]
@@ -70,5 +73,12 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
         await using var db = Db.CreateContext();
         db.AddRange(user, place, review, group);
         await db.SaveChangesAsync();
+
+        // MagicLinkToken은 Infrastructure internal이라 SQL로 넣는다. 32바이트 해시, 15분 유효, 미사용.
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO magic_link_tokens (token_hash, email, created_at, expires_at)
+            VALUES (decode(repeat('ab', 32), 'hex'), 'nook@example.com',
+                    '2026-10-18 09:00:00+00', '2026-10-18 09:15:00+00')
+            """);
     }
 }

@@ -233,6 +233,43 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Nook.Infrastructure.Persistence.Auth.MagicLinkToken", b =>
+                {
+                    b.Property<byte[]>("TokenHash")
+                        .HasColumnType("bytea")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.HasKey("TokenHash")
+                        .HasName("pk_magic_link_tokens");
+
+                    b.ToTable("magic_link_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_magic_link_tokens_consumed", "consumed_at IS NULL OR consumed_at >= created_at");
+
+                            t.HasCheckConstraint("ck_magic_link_tokens_expires", "expires_at > created_at");
+
+                            t.HasCheckConstraint("ck_magic_link_tokens_token_hash", "octet_length(token_hash) = 32");
+                        });
+                });
+
             modelBuilder.Entity("Nook.Domain.Bookmarks.Bookmark", b =>
                 {
                     b.HasOne("Nook.Domain.Places.Place", null)
