@@ -1,8 +1,16 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D4 완료** (2026-10-18, D4-1). PR #6 머지·브랜치 정리 완료 → 다음 세션은 `main`에서 D5 브랜치(`feat/d5-*`)를 만들고 시작. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 4일 지연
-- 다음 할 일 (순서대로)
+- 현재: **D5 진행 중** (2026-10-18, D5-1). 브랜치 `feat/d5-auth`. 인증 방식 결정·JWT 검증 골격·`magic_link_tokens` 설계 완료. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 4일 지연
+- 다음 할 일 (D5, 순서대로)
+  1. 인증 골격 커밋(`src/Nook.Api/Auth/`, `Program.cs`, `appsettings.json`, JwtBearer 패키지) + 문서(usecases·erd·progress)
+  2. `magic_link_tokens` 마이그레이션(erd.md 설계대로) — 작성자 미정
+  3. AU-01·AU-02 Application 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume` (협업, `TODO(human)`). 메일 발송 추상화(개발: 콘솔·파일), 백그라운드 발송
+  4. 개발 전용 토큰 발급 엔드포인트(`IsDevelopment()` 한정, 운영 미노출 테스트 포함) — 제안 상태, 사용자 결정 대기
+  5. `WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함
+  6. 나머지 D5 API(장소·북마크·리뷰·좋아요)
+  - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — D12
+- D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
      - 통합 테스트 실행 조건: Docker Desktop(엔진)만 켜져 있으면 됨. compose `db`는 불필요
      - ~~미답 질문: EF 맞바꾸기 UPDATE 순서~~ ✅ SQL 로그로 확인 — 기본 키 순, 같은 밀리초 UUIDv7은 대소 무작위라 실행마다 바뀜. 어느 순서든 중간에 중복 → DEFERRED 필요. 로그: `Db.CreateContext(output.WriteLine)` + `--logger "console;verbosity=detailed"`
@@ -185,6 +193,17 @@ Claude가 작성: erd.md §3.1 정리(사용자 내용 이전 + 🔴·🟡 반�
 커밋: `e7c1dab`(ERD 다이어그램) · `56b2e39`(compose) · `7655ce4`(EF 패키지) · `76ca3be`(erd 메모) · `7c4d261`·`14d919a`(`From`) · `a2a849b`(user-secrets) · `aa18e6a`·`97d77ab`·`cc62add`(매핑·마이그레이션) · 이 세션 마무리 커밋(ADR-008·progress)
 Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, 패키지·로컬 도구·user-secrets, `From` 6개(Nickname·Email 구현은 사용자, 테스트·주석은 Claude)와 테스트, `EntityIdConverter`·`NookDbContext`·Configuration 6개·`Place` EF 생성자·`Init` SQL·`AddInfrastructure`, 라운드트립 실험 설계·실행, ADR-008, `progress.md` 갱신 — 모두 사용자 요청(작성 위임), 결정은 사용자
 
+### 2026-10-18 (D5-1)
+1. `feat/d5-auth` 브랜치, 인증 골격부터 시작
+2. 인증 방식 결정(아래 "확정된 결정 (D5)") — 소셜 로그인 확장성 검토: 발급 주체·토큰 구성은 걸림돌이 아니고, 회원 식별자(`sub`)와 로그인 수단 분리가 관건
+3. JWT 검증 골격: `JwtOptions`(ValidateOnStart), `AccessTokenIssuer`(발급 한 곳), JwtBearer(알고리즘 고정·iss·aud·ClockSkew 30초·`MapInboundClaims = false`). Api는 Domain을 못 봐서(ADR-001 결정 3) 발급기는 `Guid`를 받는다 — 처음 `UserId`로 써서 빌드 실패로 확인
+4. 보안 조사(OWASP JWT·Authentication·Forgot Password, RFC 8725) → Fallback 정책(기본 잠금)·`IncludeErrorDetails` 개발 한정 추가. 실측: 토큰 없음·엉터리 토큰 200 → 401, 정상 토큰 200, 만료 토큰 401 + 개발에서 사유 표시, `/openapi` 200
+5. 서명 키: CSPRNG 48바이트 Base64 → user-secrets(`%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`, 평문, Development에서만 로드). `openssl`이 PowerShell에 없어 실패 → `RandomNumberGenerator`로 대체
+6. 매직 링크 저장 위치: 가입자는 링크 요청 시 닉네임이 없어 users 행을 만들 수 없다 → 별도 테이블(사용자 답). 사용자 초안 `| 이메일 | 인증 여부 | 토큰값 |` → 해시·만료·소모 시각·재요청·클릭과 닉네임 제출 사이 상태 5가지 검토 후 erd.md `magic_link_tokens`
+7. 질문: 상태 없는 JWT만으로 링크를 처리할 수 없나 → 가능하지만 1회 사용·무효화·속도 제한을 잃고, 메모리 캐시는 재시작·다중 서버에서 깨진다(상태를 옮길 뿐)
+
+Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정, 서명 키 생성·설정, 보안 조사, erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정 — 모두 사용자 요청. 사용자 작성: `BuildClaims`(`sub`만, `jti` 보류)
+
 ## 체크리스트
 
 ### 1주차 — 설계와 정합성
@@ -226,6 +245,15 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 - ADR 번호: 003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 범위 = 스키마 차이만(D3-2 사용자 결정, 근거 erd.md §4). 닉네임 UNIQUE는 포함. 도메인 규칙 차이(리뷰 길이 trim 후 계산, 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC)를 어디에 남길지 미정 — `domain.md`에 이미 있으면 정리 불필요
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
+
+## 확정된 결정 (D5)
+- 인증: 매직 링크(원본과 같은 패스워드리스) + **API 자체 발급** Access 토큰(HS256), **Refresh 없음**, 수명 60분. 로그아웃(AU-03)은 클라이언트가 토큰을 버린다
+- 탈취된 토큰은 만료(최대 1시간)까지 유효 — 수용. 필요해지면 refresh 또는 `jti` 차단 목록. 탈퇴 회원 토큰은 "DB에 없는 회원이면 거절"(GR-01 3a)로 막힌다
+- 지킬 것: `sub` = 사용자 ID(이메일·닉네임 아님), 토큰 발급은 "본인 확인 완료" 뒤 `AccessTokenIssuer` 한 곳. 개인정보는 클레임에 넣지 않는다
+- 인가 기본 잠금: Fallback 정책 `RequireAuthenticatedUser`, 공개 엔드포인트만 `[AllowAnonymous]`
+- 가입 여부 노출 방지: 메일 요청은 항상 같은 응답(202), 속도 제한에 걸려도 같은 응답. AU-01의 "이미 가입된 이메일" 안내 삭제
+- 매직 링크: 별도 테이블 `magic_link_tokens`(erd.md). 해시 저장, 15분 유효, 이메일별 15분 3회, 만료 후 1일 보관, POST로 소모, 소모와 회원 생성은 한 트랜잭션
+- 로그인 수단 테이블(`provider, provider_subject`) 분리는 소셜 로그인 도입 때(지금은 이메일 하나)
 
 ## 확정된 결정 (D4)
 - 테스트 코드는 대부분 Claude 작성, 사용자는 결과 예측·빨간불 확인(시간 사정, D4-1 사용자 요청)

@@ -76,7 +76,17 @@ erDiagram
         uuid user_id PK, FK "IX (user_id)"
         timestamptz joined_at
     }
+
+    magic_link_tokens {
+        bytea token_hash PK "SHA-256, 32바이트"
+        varchar(254) email "IX (lower(email), created_at)"
+        timestamptz created_at
+        timestamptz expires_at
+        timestamptz consumed_at "NULL = 미사용"
+    }
 ```
+
+- `magic_link_tokens`는 어느 테이블과도 관계가 없다. 가입 전 이메일도 들어가기 때문이다
 
 **관계 범위와 보장 주체**
 
@@ -115,7 +125,7 @@ erDiagram
 | email | `varchar(254)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-03). `Email.MaxLength`와 같은 상한 |
 
 - 시각 컬럼(`created_at`)은 두지 않는다. 가입일을 쓰는 규칙·화면이 없다(ADR-007 "결과", `User` 주석)
-- 인증 관련 컬럼(비밀번호 해시 등)은 AU-01 인증 방식이 D5에서 정해진 뒤 추가한다
+- 인증 관련 컬럼은 두지 않는다. 인증 방식이 매직 링크로 정해졌고(D5) 링크는 `magic_link_tokens`가 맡는다. 가입자는 링크를 요청할 때 닉네임이 없어 users 행을 만들 수 없기 때문이다
 
 
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
@@ -386,6 +396,59 @@ erDiagram
 - users 쪽 FK 중 group_members만 RESTRICT다. bookmarks·reviews·likes는 지워도 깨지는 불변식이 없지만, 멤버십 삭제는 R-GR-09 판정을 거쳐야 하기 때문이다
 - groups 쪽 FK 중 group_members는 CASCADE다. 버그로 멤버가 남은 그룹을 지우면 멤버십이 조용히 지워진다. 애그리거트 경계 표현을 우선하고, 이 경로는 앱 테스트로 막는다
 - 인덱스는 동시 합류로 정원을 넘는 것(메모리 COUNT의 스냅샷 경합)을 막지 못한다. 막는 것은 groups Q2의 행 잠금이다(D6)
+
+
+### magic_link_tokens
+
+*(D5 Claude 작성, 사용자 요청 — 사용자 검토 후 학습)*
+
+관련 유스케이스: AU-01 · AU-02. 근거: OWASP Forgot Password·Authentication Cheat Sheet
+
+흐름 (가입·로그인 공통, 같은 링크)
+1. `POST /auth/magic-link {email}` → 항상 202(가입 여부와 무관). 행 INSERT, 메일 발송은 트랜잭션 밖(백그라운드)
+2. 메일 링크 → 프론트 화면. GET은 화면만 보여 주고 토큰을 소모하지 않는다(메일 보안 스캐너가 미리 열어도 안전)
+3. `POST /auth/magic-link/consume {token, nickname?}` — 한 트랜잭션: Q1 소모 → 그 email의 회원이 있으면 로그인, 없으면 nickname이 있을 때 users INSERT, 없으면 ROLLBACK 후 "닉네임 필요" 응답 → 성공 시 Q3 후 커밋 → Access 토큰 발급
+   - 링크 클릭과 닉네임 제출 사이에 서버가 기억할 상태가 없다. 닉네임과 함께 같은 토큰을 다시 보낸다
+   - 닉네임 중복(UNIQUE 위반)이면 전체 롤백 → 토큰도 살아 있어 다른 닉네임으로 다시 시도할 수 있다
+   - 기각: 링크 클릭 시 소모 + 가입 전용 단기 JWT 발급 — 토큰 종류가 둘이 되어 검증 규칙을 따로 둬야 하고(RFC 8725 §3.12), 클레임에 이메일이 노출된다
+   - 기각: 상태 없는 서명 링크(테이블 없음) — 1회 사용·남은 링크 무효화·이메일별 속도 제한을 지킬 수 없다. 메모리 캐시로 1회 사용을 지키면 재시작·다중 서버에서 깨진다
+
+[이 테이블을 읽는 쿼리]
+
+| # | 쿼리 | 쓰는 곳 |
+|---|---|---|
+| Q1 | `UPDATE ... SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ? RETURNING email` | 흐름 3 소모. 조건 검사와 갱신이 한 문장이라 같은 링크를 동시에 두 번 보내도 1건만 성공한다 |
+| Q2 | `SELECT count(*) WHERE lower(email) = lower(?) AND created_at > ?` (15분 전) | 흐름 1 이메일별 속도 제한 |
+| Q3 | `UPDATE ... SET consumed_at = ? WHERE lower(email) = lower(?) AND consumed_at IS NULL` | 흐름 3 성공 후 같은 이메일의 남은 링크 무효화 |
+| Q4 | `DELETE WHERE expires_at < ?` (1일 전) | 매일 정리 배치 |
+
+| 컬럼 | 타입 | NULL | 기본값 | 비고 |
+|---|---|---|---|---|
+| token_hash | `bytea` | NOT NULL | 없음 | 원문이 아니라 SHA-256(32바이트)을 저장한다 — DB가 유출돼도 아직 쓰지 않은 링크로 로그인할 수 없다. 원문은 CSPRNG 32바이트를 Base64url(43자)로 바꿔 메일에만 넣는다 |
+| email | `varchar(254)` | NOT NULL | 없음 | 요청 표기 그대로(trim 후), `Email.MaxLength`와 같은 상한. `user_id`가 아닌 이유: 가입자는 아직 users 행이 없고, 가입인지 로그인인지는 흐름 3에서 정해진다 |
+| created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 넣는다(ADR-007). Q2 속도 제한 기준 |
+| expires_at | `timestamptz` | NOT NULL | 없음 | 발급 시 `created_at + 15분`을 저장한다. 계산하지 않고 저장하는 이유: 정책을 바꿔도 이미 나간 링크의 만료가 바뀌지 않는다 |
+| consumed_at | `timestamptz` | NULL | NULL | NULL = 미사용. bool 대신 시각을 남겨 조사·로그에 쓴다. "이메일 주인 확인됨"은 별도 컬럼이 없다 — 흐름 3에서 users 행이 생기거나 토큰이 발급되는 것으로 끝난다 |
+
+| 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
+|---|---|---|---|
+| PK | `pk_magic_link_tokens (token_hash)` | Q1. 해시가 그 자체로 유일한 자연 키라 대리 키(uuid)를 두지 않는다 | 참조하는 테이블 없음(ADR-006 앱 발급 ID가 필요 없음) |
+| 인덱스 (식) | `ix_magic_link_tokens_email_lower_created ON magic_link_tokens (lower(email), created_at)` | Q2(등호 + 범위)·Q3(앞 열만) | |
+| CHECK | `ck_magic_link_tokens_token_hash`: `octet_length(token_hash) = 32` | 해시가 아닌 원문·잘린 값 저장 | |
+| CHECK | `ck_magic_link_tokens_expires`: `expires_at > created_at` | 처음부터 만료된 행 | |
+| CHECK | `ck_magic_link_tokens_consumed`: `consumed_at IS NULL OR consumed_at >= created_at` | 발급 전에 소모된 행 | |
+| FK | 없음 | users와 연결하지 않는다. 가입 전 이메일도 들어간다 | |
+
+정책값 (D5 확정): 유효 15분 · 이메일별 15분에 3회 · 만료 후 1일 보관
+
+메모
+- 같은 이메일로 다시 요청하면 새 행을 넣는다(INSERT만). 이전 링크를 바로 죽이지 않는 이유: 메일이 늦게 오면 회원은 먼저 온 메일을 누른다. 어느 하나가 소모되면 Q3로 나머지를 무효화한다
+- 속도 제한에 걸려도 흐름 1과 같은 202를 돌려준다. 다르게 응답하면 "이 이메일로 요청이 있었다"가 드러난다. IP별 제한은 테이블이 아니라 미들웨어(D11 Token Bucket)
+- 해시에 salt·느린 해시가 없는 이유: 비밀번호는 사람이 고른 낮은 엔트로피 값이라 salt + bcrypt 류가 필요하지만, 이 토큰은 256비트 난수라 해시 하나로 무차별 대입이 불가능하다. 판단 기준은 입력의 엔트로피다
+- 동시성: Q1은 `consumed_at IS NULL` 행을 갱신하므로 동시에 두 요청이 오면 하나는 행 잠금을 기다렸다가 조건을 다시 검사해 0행이 된다(READ COMMITTED). D6 재현 후보
+- 응답 시간 균일화: 메일 발송을 요청 안에서 하면 응답 시간 차이로 가입 여부가 드러날 수 있다 → 백그라운드 발송(트랜잭션 밖 외부 I/O 금지 규칙과도 일치)
+- Domain 엔티티 없이 Infrastructure 테이블로 둔다(지킬 업무 규칙 없음). ADR-001 "Domain 엔티티 겸용"의 첫 예외 → ADR 후보
+- 링크의 기준 URL은 설정값으로 만든다(`Request.Host` 금지, Host 헤더 주입). 착지 페이지는 `Referrer-Policy: no-referrer`(프론트 연결 시)
 
 
 ## 3. D3에서 정할 미결 결정
