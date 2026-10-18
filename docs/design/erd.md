@@ -131,7 +131,7 @@ erDiagram
 메모
 - R-GR-04 잠금은 PK(Q2)로 행 하나만 잠그므로 추가 인덱스가 필요 없다. 잠금 강도(`FOR UPDATE` vs `FOR NO KEY UPDATE`)와 잠금 순서(사용자 → 그룹)는 D6
 - 중복 판단을 앱에서 미리 할 때 쿼리를 반드시 `lower(nickname) = lower(?)` 모양으로 써야 인덱스를 탄다. `nickname = ?`는 이 인덱스를 못 쓴다
-  => 예상: PostgreSQL 17 EXPLAIN: 전자는 `Index Cond`, 후자는 `Seq Scan` + `Filter`
+  => **실측(D3-3, PostgreSQL 17.10)**: `lower(nickname) = lower(?)`만 `ux_users_nickname_lower`를 쓰고, `nickname = ?`는 이 인덱스를 쓰지 못한다. 소량 데이터에서 본 사용 여부이며, 비용 비교는 D8 시드 뒤
 - `btrim(x)`은 기본적으로 ASCII 공백(`' '`)만 지운다. 탭·전각 공백 등 Unicode 공백만으로 된 값은 places CHECK를 통과한다 — 앱 우회 쓰기에서 빈 값만 막는 최소 이중화로 두고, Unicode 공백 처리는 Domain(`string.Trim()`)이 맡는다
 - `lower()`는 DB의 `LC_CTYPE`·collation을 따르고 C# `ToLowerInvariant()`는 Unicode 전체를 바꾼다. 닉네임은 화이트리스트(한글·ASCII)라 결과가 같지만, 이메일은 비ASCII 문자에서 다를 수 있다 → DB를 띄운 뒤 `SELECT lower('ÄÖ')`와 C# 결과를 비교해 확인 -> **"ÄÖ는 일치, 로케일에 따라 달라지는 문자(İ 등)는 미확인"**
 
@@ -160,7 +160,7 @@ erDiagram
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
 |---|---|---|---|
 | PK | `pk_places (id)` | Q2. 자식 테이블 FK가 가리키는 대상 | PL-02, ADR-006 |
-| UNIQUE | `ux_places_kakao_place_id ON places (kakao_place_id)` | Q1. 카카오 장소 ID는 장소마다 유일하다 | R-PL-01 |
+| UNIQUE | `ux_places_kakao_place_id ON places (kakao_place_id)` | Q1·Q3. 카카오 장소 ID는 장소마다 유일하다. Q3의 `ON CONFLICT (kakao_place_id)`는 충돌 판정에 이 UNIQUE 인덱스가 반드시 있어야 한다(없으면 오류) | R-PL-01 |
 | CHECK | `ck_places_kakao_place_id`: `btrim(kakao_place_id) <> ''` | 빈 값·공백뿐인 카카오 장소 ID. `KakaoPlaceId` 주석의 "DB 제약과 같은 조건"을 실제로 만든다 | R-PL-01, `KakaoPlaceId.Create` |
 | CHECK (식) | `ck_places_name`: `btrim(name) <> ''` | ''는 0자라서 그대로 통과하기 때문에 name의 "필수"(하한 1자)인지 검증 | `Place.Create`(`PlaceErrors.NameLength`) |
 | CHECK | `ck_places_latitude`: `latitude >= -90 AND latitude <= 90` | 물리적 위도 범위(지구) 안인지 검증 | R-PL-02 | 
@@ -269,20 +269,21 @@ erDiagram
 |---|---|---|---|
 | PK | `pk_review_images (id)` | Q2의 순서 변경·삭제 대상 식별 | ADR-006, D2 "ReviewImage는 순서·교체 때문에 식별자 유지" |
 | UNIQUE | `ux_review_images_storage_key (storage_key)` | Q4. 같은 키를 가진 두 행(같은 리뷰든 다른 리뷰든). 다른 리뷰끼리 키를 공유하면 한 리뷰의 즉시 삭제(§3 A안)가 남의 이미지를 지운다. 키는 서버가 v4로 만들므로 위반은 서버 버그일 때만 생긴다 | `Review.Create` 주석, §3.1 |
-| UNIQUE | `ux_review_images_review_sort_order (review_id, sort_order) DEFERRABLE INITIALLY DEFERRED` | 앞 컬럼 `review_id`로 Q1·Q3도 받는다고 **예상**(미확인 — 확인 항목). 한 리뷰 안에서 같은 순서 번호 중복. 아래 CHECK와 합쳐 **한 리뷰의 이미지는 최대 3행**이 DB에서도 보장된다. 순서 맞바꾸기(0↔1)는 행 단위 UPDATE 중간에 잠깐 중복이 생기므로 커밋 시점에 검사한다 | R-RV-02 |
+| UNIQUE | `ux_review_images_review_sort_order (review_id, sort_order) DEFERRABLE INITIALLY DEFERRED` | 앞 컬럼 `review_id`로 Q1·Q3도 받는다(**D3-3 실측** — 확인 항목). 한 리뷰 안에서 같은 순서 번호 중복. 아래 CHECK와 합쳐 **한 리뷰의 이미지는 최대 3행**이 DB에서도 보장된다. 순서 맞바꾸기(0↔1)는 행 단위 UPDATE 중간에 잠깐 중복이 생기므로 커밋 시점에 검사한다 | R-RV-02 |
 | CHECK | `ck_review_images_sort_order`: `sort_order BETWEEN 0 AND 2` | 음수 순서, 4번째 이상 이미지. 2는 `Review.MaxImages - 1` | R-RV-02, `ReviewImage.Create` |
 | CHECK | `ck_review_images_storage_key`: `btrim(storage_key) <> ''` | 빈 키. `ReviewImage.Create`의 `ThrowIfNullOrWhiteSpace`와 같은 조건. 형식 검사 CHECK는 두지 않는다 — 키는 서버만 만들고 Domain이 검증한다(§3.1) | `ReviewImage.Create` |
 | FK | `fk_review_images_reviews`: `review_id → reviews(id) ON DELETE CASCADE` | 애그리거트 내부 엔티티라 루트와 생애가 같다. 리뷰 삭제(RV-03)·회원 탈퇴의 리뷰 CASCADE가 이미지 행까지 한 번에 지운다 | RV-03, PF-02 |
 
 메모
 - 스토리지 객체 삭제는 외부 I/O라 트랜잭션 안에서 하지 않는다(CLAUDE.md). 삭제 전에 키를 읽어 두고 DB 삭제 커밋 뒤 지우거나, 정리 배치가 Q4로 미참조 키를 찾아 지운다
-- UNIQUE를 `(review_id, storage_key)`에서 `(storage_key)`로 바꿨다(D3-2). 앞의 것은 같은 리뷰 안 중복만 막아 리뷰끼리 키 공유를 허용한다. 바꾸면서 Q1·Q3(`review_id`)은 `ux_review_images_review_sort_order`의 앞 컬럼이 받는다고 예상한다
+- UNIQUE를 `(review_id, storage_key)`에서 `(storage_key)`로 바꿨다(D3-2). 앞의 것은 같은 리뷰 안 중복만 막아 리뷰끼리 키 공유를 허용한다. 바꾸면서 Q1·Q3(`review_id`)은 `ux_review_images_review_sort_order`의 앞 컬럼이 받는다(D3-3 `EXPLAIN`으로 확인)
 - `DEFERRABLE` 제약은 `ON CONFLICT`의 대상이 될 수 없다. 이 테이블은 ON CONFLICT를 쓰지 않으므로 문제없다
-- **확인 항목 (D3 마이그레이션 · D4 통합 테스트)** — `ux_review_images_review_sort_order`
-  - EF Core 마이그레이션 API는 `DEFERRABLE`을 표현하지 못한다 → `migrationBuilder.Sql("ALTER TABLE ... ADD CONSTRAINT ... UNIQUE (...) DEFERRABLE INITIALLY DEFERRED")`로 작성. `CREATE UNIQUE INDEX`로는 DEFERRABLE을 줄 수 없다
-  - EF 모델에 이 인덱스를 `IsUnique()`로 알릴지: 알리면 EF가 순서 맞바꾸기(0↔1)의 UPDATE 순서를 정할 때 순환으로 보고 실패할 수 있다(미확인)
-  - 통합 테스트: 이미지 2장 리뷰의 순서를 맞바꿔 `SaveChanges` 한 번으로 저장 → 성공하는지, 커밋 시점에 중복이면 위반이 나는지 확인
-  - `EXPLAIN`: 이 제약이 만든 인덱스가 `WHERE review_id = ?`(Q1·Q3)를 `Index Cond`로 받는지
+- **확인 항목 (D3 마이그레이션 · D4 통합 테스트)** — `ux_review_images_review_sort_order` → **모두 확인 완료**
+  - ✅ EF Core 마이그레이션 API는 `DEFERRABLE`을 표현하지 못한다 → `migrationBuilder.Sql("ALTER TABLE ... ADD CONSTRAINT ... UNIQUE (...) DEFERRABLE INITIALLY DEFERRED")`로 작성. `CREATE UNIQUE INDEX`로는 DEFERRABLE을 줄 수 없다
+  - ✅ EF 모델에 알리지 않는다(D3-3 결정, ADR-008). 제약은 마이그레이션 SQL에만 있고 모델 스냅샷에는 없다. 그래서 EF는 이 제약을 모른 채 UPDATE를 보낸다 — 순환 판정 우려 자체가 생기지 않는다
+  - ✅ 통합 테스트 `ReviewPersistenceTests.SaveChanges_WhenSortOrdersSwapped_ReloadsInNewOrder`(D4-1): 2장 리뷰의 순서를 맞바꿔 `SaveChanges` 한 번으로 저장 → 커밋 성공, 다시 읽으면 순서가 바뀌고 `SortOrder == 인덱스`. 같은 트랜잭션에서 `SET CONSTRAINTS ... IMMEDIATE`로 바꾸면 `23505`(빨간불 확인). 커밋 시점에 중복이 남으면 위반(D3-3 SQL 실험)
+  - ✅ EF가 보내는 UPDATE 순서(D4-1 SQL 로그): 배치 한 번에 UPDATE 두 문장, **기본 키 순**으로 나간다(코드에서 바꾼 순서와 무관). 같은 밀리초에 만든 UUIDv7은 대소가 무작위라 실행마다 순서가 바뀐다. 어느 순서든 첫 UPDATE 직후 같은 `sort_order`가 두 행이 되므로 순서로는 해결할 수 없고 DEFERRABLE이 필요하다
+  - ✅ `EXPLAIN`(D3-3): `WHERE review_id = ?`(Q1·Q3)가 이 제약이 만든 인덱스를 쓴다(예상 일치). 소량 데이터에서 본 사용 여부이며, 비용은 D8 시드 뒤
 
 
 ### likes
@@ -493,7 +494,7 @@ erDiagram
 |---|---|---|---|
 | 중복 인덱스 | `idx_bookmarks_user`, `idx_group_members_group`, `idx_groups_invite` — 각각 `unique (user_id, place_id)`·`unique (group_id, user_id)`의 앞 컬럼, `invite_code unique`가 이미 받는다 | 없음 | 같은 쿼리를 받는 인덱스가 둘이면 쓰기마다 갱신할 인덱스만 는다. 인덱스마다 "받는 쿼리"를 적어 중복을 막는다(§2 형식) |
 | `reviews` 인덱스 | `(user_id)`, `(place_id)`, `(created_at desc)` 단독 3개 | `ux_reviews_user_place_date`(앞 컬럼 `user_id`), `ix_reviews_place_created (place_id, created_at DESC)` | 장소 상세 최신순(Q2)은 필터와 정렬을 한 인덱스로 받는다(예상, D8 측정). `created_at` 단독을 쓰는 쿼리는 읽는 쿼리 표에 없다 |
-| `review_images` 인덱스 | `(review_id)` | 별도 없음 — `(review_id, sort_order)` 제약 인덱스의 앞 컬럼 | Q1·Q3을 받는다고 예상(미확인, review_images 확인 항목) |
+| `review_images` 인덱스 | `(review_id)` | 별도 없음 — `(review_id, sort_order)` 제약 인덱스의 앞 컬럼 | Q1·Q3을 받는다(D3-3 `EXPLAIN` 실측, review_images 확인 항목) |
 | `likes` 컬럼 순서 | `unique (user_id, review_id)` + `idx_likes_review (review_id)` | PK `(review_id, user_id)` + `ix_likes_user_id (user_id)` | 둘 다 양쪽 단독 조회를 받는다. 자주 도는 리뷰별 좋아요 수(Q3)를 PK 앞 컬럼으로, 탈퇴 때만 도는 회원 조회를 보조 인덱스로 |
 
 **6. 보안·운영**

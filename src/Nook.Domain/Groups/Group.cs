@@ -49,6 +49,11 @@ public sealed class Group
     {
         ArgumentNullException.ThrowIfNull(userId);
 
+        // 시각 검사를 Result 실패보다 먼저: 호출 코드의 실수는 정원·중복 여부와 상관없이 드러나야 한다(Review.Create와 같은 순서).
+        // 그룹이 생기기 전 합류는 시각을 두 번 정한 호출 코드의 실수다(D4 결정). 같은 시각은 허용 — 만든 회원도 CreatedAt에 합류한다.
+        var utcJoinedAt = TimeGuard.Utc(joinedAt);
+        ArgumentOutOfRangeException.ThrowIfLessThan(utcJoinedAt, CreatedAt, nameof(joinedAt));
+
         // R-GR-09: 멤버 0명인 그룹은 존재하지 않는다. GroupEmptied 뒤 Application이 삭제해야 할 그룹이므로
         // 여기에 합류시키는 것은 회원 입력이 아니라 호출 코드의 실수다.
         if (_members.Count == 0)
@@ -60,7 +65,7 @@ public sealed class Group
         if (_members.Count >= MaxGroupMembers)
             return GroupErrors.GroupFull;          // R-GR-01
 
-        _members.Add(GroupMember.Create(userId, joinedAt));
+        _members.Add(GroupMember.Create(userId, utcJoinedAt));
         return Result.Success();
     }
 

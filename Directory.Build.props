@@ -3,5 +3,7 @@
        예) Api → Application → Domain 이어도 Api에서 Domain 타입을 쓰면 컴파일 에러. -->
   <PropertyGroup>
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <!-- .editorconfig의 IDE 규칙(IDE0130 등)을 에디터만이 아니라 dotnet build에서도 검사한다. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
 </Project>

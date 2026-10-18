@@ -1,8 +1,11 @@
+using System.Buffers;
+using System.Globalization;
+using System.Text;
 using Nook.Domain.Common;
 
 namespace Nook.Domain.Reviews;
 
-// 리뷰 본문 값 객체. 정규화(trim) → 검증 → 정규화된 값 보관. 길이 단위는 코드 포인트(DB char_length와 일치).
+// 리뷰 본문 값 객체. 정규화(NFC → 앞뒤 공백·서식 문자 제거) → 검증 → 정규화된 값 보관. 길이 단위는 코드 포인트(DB char_length와 일치).
 public sealed record ReviewContent
 {
     public const int MinLength = 10;
@@ -26,7 +29,8 @@ public sealed record ReviewContent
 
     public static Result<ReviewContent> Create(string? raw)
     {
-        var trimmed = raw?.Trim() ?? string.Empty;
+        // NFC 먼저: NFD 한글은 음절당 코드 포인트 2개라 그대로 세면 보이는 5자가 10자가 된다(D4 결정).
+        var trimmed = TrimInvisible((raw ?? string.Empty).Normalize(NormalizationForm.FormC));
         var length = trimmed.EnumerateRunes().Count();
         if (length < MinLength || length > MaxLength)
         {
@@ -35,4 +39,20 @@ public sealed record ReviewContent
 
         return new ReviewContent(trimmed);
     }
+
+    // string.Trim(공백) + 서식 문자(Cf: U+200B, U+FEFF 등)를 앞뒤에서만 지운다(D4 결정).
+    // 안쪽은 건드리지 않는다 — ZWJ(U+200D)로 이은 이모지가 깨진다.
+    private static string TrimInvisible(string s)
+    {
+        var span = s.AsSpan();
+        while (Rune.DecodeFromUtf16(span, out var first, out var n) == OperationStatus.Done && IsInvisible(first))
+            span = span[n..];
+        while (Rune.DecodeLastFromUtf16(span, out var last, out var n) == OperationStatus.Done && IsInvisible(last))
+            span = span[..^n];
+
+        return span.ToString();
+    }
+
+    private static bool IsInvisible(Rune r) =>
+        Rune.IsWhiteSpace(r) || Rune.GetUnicodeCategory(r) == UnicodeCategory.Format;
 }

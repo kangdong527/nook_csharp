@@ -131,3 +131,17 @@
 - 내일 확인할 것:
 
 ---
+
+### D4-1 (2026-10-18) — Testcontainers 통합 테스트 기반
+- 배운 것:
+  1. 테스트 간 공유 컨테이너 작성 및 용도 학습: 같은 컬렉션 `[Collection(컬렉션명 ex: postgres)]`으로 설정한 IntegrationTestBase 클래스를 상속받은 테스트(`GroupPersist, ReviewPersist`)는 같은 컨테이너를 공유하고 순차로 실행되기 때문에, 한 테스트의 데이터 Reset이 다른 테스트가 실행되는 도중에 끼어들지 않는다는 의미이다
+  2. DB 컨텍스트 코드 작성 시: 저장(그룹 추가) -> 조회(추가된 그룹) 순서면 저장 시 사용한 컨텍스트가 아닌 검증용 컨텍스트를 새로 만들어서 식별 맵이 DB를 거치도록 한다
+  3. 실험 및 SQL 로그를 통한 EF가 UPDATE 순서를 정하는 기준 실험: id(Guid) 가 작은 행부터 수행, Guid 는 **"같은 밀리초에 만든 UUIDv7은 대소가 무작위로 생성"**되기 때문에 실행 시 마다 순서가 바뀜 
+  4. sortOrder 맞바꾸기에서 순서를 바꿔도 DEFERRED가 필요한 이유 => **3** 의 Guid 무작위 생성으로 인한 순서가 고정되지 않기 때문에, sortOrder 맞바꾸기 시 트랜잭션 내 중복값을 잠시 허용을 위해 사용
+- 막혔던 것 / 어떻게 풀었나:
+- TDD 기록: `Create_WhenSaved_ReloadsCreatorAsOnlyMember` — 첫 실행 초록 → `db.Users.Add(creator)` 제거로 빨간불 확인(`23503 fk_group_members_users`) → 원복 후 초록
+  - `SaveChanges_WhenSortOrdersSwapped_ReloadsInNewOrder` — 첫 실행 초록 → 같은 트랜잭션에서 `SET CONSTRAINTS ... IMMEDIATE`로 빨간불(`23505 ux_review_images_review_sort_order`) → 원복 후 초록
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `PostgresFixture`·`IntegrationTestBase`(보일러플레이트), Testcontainers.PostgreSql 4.16.0·Infrastructure/Domain 참조 추가, Integration `UnitTest1.cs` 삭제, `GroupPersistenceTests` 첫 테스트(사용자 요청 — 나머지 통합 테스트의 예시), `ReviewPersistenceTests` 맞바꾸기 테스트·`TestResult.Unwrap`(사용자 요청), `progress.md` 갱신, `PostgresFixture.CreateContext(sqlLog)` SQL 로깅 옵션(사용자 요청)·맞바꾸기 테스트 주석을 실측에 맞게 수정, `BookmarkTests` 시각 가드 테스트(사용자 요청 — ADR-007 나머지 4개 엔티티의 예시), `GroupTests`의 `Create`·`AddMember` 시각 가드 테스트(사용자 요청, 빨간불 확인은 사용자), `LikeTests`·`ReviewTests` 시각 가드 3개(사용자 요청 — D4부터 테스트 코드는 대부분 Claude가 작성, 사용자는 예측·결과 확인), `erd.md` 확인 항목·실측 표기 갱신, Configuration·마이그레이션 인덱스 Q 번호 주석(사용자 요청, A안은 사용자 결정), `Init.cs` DEFERRABLE 주석을 실측으로, namespace 분석기 설정(IDE0130·CA1050 error 결정은 사용자), D4 게이트 누락분 테스트(`ReviewContentTests` Create 경계, `ReviewTests` 3장, `CheckConstraintTests` — 범위 A안은 사용자 결정), D4 미결 결정 프로브·테스트·구현(`ReviewContent` NFC·앞뒤 서식 문자 제거, `Group.AddMember` `joinedAt < CreatedAt` 예외 — 결정은 사용자가 추천안 채택)
+- 내일 확인할 것:
+
+---

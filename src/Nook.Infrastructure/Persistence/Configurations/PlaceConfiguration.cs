@@ -19,6 +19,7 @@ internal sealed class PlaceConfiguration : IEntityTypeConfiguration<Place>
                 $"longitude >= {Coordinate.MinLongitude} AND longitude <= {Coordinate.MaxLongitude}");
         });
 
+        // 받는 쿼리: erd.md places Q2
         builder.HasKey(p => p.Id).HasName("pk_places");
 
         builder.Property(p => p.Id)
@@ -30,6 +31,7 @@ internal sealed class PlaceConfiguration : IEntityTypeConfiguration<Place>
             .HasMaxLength(KakaoPlaceId.MaxLength)
             .HasConversion(k => k.Value, value => KakaoPlaceId.From(value));
 
+        // 받는 쿼리: erd.md places Q1·Q3 (R-PL-01 중복 방지, Q3 ON CONFLICT의 충돌 판정 대상)
         builder.HasIndex(p => p.KakaoPlaceId)
             .IsUnique()
             .HasDatabaseName("ux_places_kakao_place_id");

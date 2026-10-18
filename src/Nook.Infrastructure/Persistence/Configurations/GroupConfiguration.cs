@@ -17,6 +17,7 @@ internal sealed class GroupConfiguration : IEntityTypeConfiguration<Group>
                 "char_length(name) >= 2 AND name = btrim(name) AND name ~ '^[가-힣A-Za-z0-9 ]+$' AND name IS NFC NORMALIZED");
         });
 
+        // 받는 쿼리: erd.md groups Q2·Q3·Q5
         builder.HasKey(g => g.Id).HasName("pk_groups");
 
         builder.Property(g => g.Id)
@@ -33,6 +34,7 @@ internal sealed class GroupConfiguration : IEntityTypeConfiguration<Group>
             .HasMaxLength(InviteCode.Length)
             .HasConversion(c => c.Value, value => InviteCode.From(value));
 
+        // 받는 쿼리: erd.md groups Q1·Q4 (R-GR-06 중복 방지)
         builder.HasIndex(g => g.InviteCode)
             .IsUnique()
             .HasDatabaseName("ux_groups_invite_code");
@@ -47,11 +49,13 @@ internal sealed class GroupConfiguration : IEntityTypeConfiguration<Group>
             members.WithOwner().HasForeignKey("GroupId").HasConstraintName("fk_group_members_groups");
             members.Property<GroupId>("GroupId").HasColumnName("group_id");
 
+            // 받는 쿼리: erd.md group_members Q1·Q3 (R-GR-07 중복 방지)
             members.HasKey("GroupId", nameof(GroupMember.UserId)).HasName("pk_group_members");
 
             members.Property(m => m.UserId).HasColumnName("user_id");
             members.Property(m => m.JoinedAt).HasColumnName("joined_at");
 
+            // 받는 쿼리: erd.md group_members Q2·Q4
             members.HasIndex(m => m.UserId).HasDatabaseName("ix_group_members_user_id");
 
             // 탈퇴(PF-02)는 Group.RemoveMember를 먼저 거쳐야 한다 → RESTRICT(R-GR-09, ADR-004)

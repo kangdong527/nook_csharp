@@ -4,3 +4,10 @@ root = true
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
+
+# namespace 사고 방지(D2-1·D2-2·D2-4: 빌드는 통과하고 diff에서야 발견됨).
+# 빌드에서 검사하려면 Directory.Build.props의 EnforceCodeStyleInBuild가 함께 켜져 있어야 한다.
+[*.cs]
+dotnet_style_namespace_match_folder = true
+dotnet_diagnostic.IDE0130.severity = error   # namespace가 폴더 구조와 다름
+dotnet_diagnostic.CA1050.severity = error    # 타입이 전역 namespace에 있음(namespace 줄 누락)

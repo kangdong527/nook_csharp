@@ -14,6 +14,7 @@ public class GroupTests
     // - Create_WithCreator_CreatorJoinedAtIsCreatedAt
     // - Create_WhenNameIsNull_Throws
     // - Create_WhenInviteCodeIsNull_Throws
+    // - Create_WhenCreatedAtIsInvalid_ThrowsWithParamName      (ADR-007: default, 비UTC — Group.cs의 가드)
     //
     // AddMember (R-GR-01, R-GR-07)
     // - AddMember_WhenNewUser_AddsMember
@@ -25,6 +26,9 @@ public class GroupTests
     // - AddMember_WhenGroupIsFull_DoesNotChangeMembers
     // - AddMember_WhenSeatFreedByRemoval_Succeeds            (가득 찬 그룹에서 1명 탈퇴 후 합류)
     // - AddMember_WhenGroupEmptied_Throws
+    // - AddMember_WhenJoinedAtIsInvalid_ThrowsWithParamName    (ADR-007: default, 비UTC — GroupMember.cs의 가드)
+    // - AddMember_WhenJoinedAtIsBeforeCreatedAt_Throws       (D4 결정: 그룹이 생기기 전에 합류할 수 없다)
+    // - AddMember_WhenJoinedAtEqualsCreatedAt_Succeeds       (경계: 같은 시각은 허용 — 만든 회원도 CreatedAt에 합류)
     //
     // RemoveMember (R-GR-09, 멱등, MemberRemoval 3상태)
     // - RemoveMember_WhenMember_ReturnsRemoved
@@ -279,6 +283,58 @@ public class GroupTests
     {
         Assert.Throws<ArgumentNullException>(
             () => Group.Create(ValidName(), UserId.New(), null!, Now));
+    }
+
+    // DateTimeOffset은 attribute 인자(InlineData)가 될 수 없어 TheoryData로 넘긴다.
+    public static TheoryData<DateTimeOffset> InvalidTimes =>
+    [
+        default,                                                          // 호출부가 시각을 빠뜨림
+        new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.FromHours(9)),   // DateTimeOffset.Now 직접 호출
+    ];
+
+    [Theory]
+    [MemberData(nameof(InvalidTimes))]
+    public void Create_WhenCreatedAtIsInvalid_ThrowsWithParamName(DateTimeOffset createdAt)
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => Group.Create(ValidName(), UserId.New(), InviteCode.Generate(_ => 0), createdAt));
+
+        Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    // GroupMember.Create는 internal → 공개 경로 AddMember로 검증한다.
+    // Group.Create 경로는 Group의 가드가 먼저 던져 GroupMember의 가드까지 가지 않는다.
+    // 중복·정원 실패에 걸리지 않도록 만든 회원과 다른 새 회원으로 합류시킨다.
+    [Theory]
+    [MemberData(nameof(InvalidTimes))]
+    public void AddMember_WhenJoinedAtIsInvalid_ThrowsWithParamName(DateTimeOffset joinedAt)
+    {
+        var group = NewGroup();
+
+        var ex = Assert.Throws<ArgumentException>(() => group.AddMember(UserId.New(), joinedAt));
+
+        // ParamName은 GroupMember.Create 안의 인자 식 — 테스트 쪽 변수명과 무관하다.
+        Assert.Equal("joinedAt", ex.ParamName);
+    }
+
+    [Fact]
+    public void AddMember_WhenJoinedAtIsBeforeCreatedAt_Throws()
+    {
+        var group = NewGroup();   // CreatedAt = Now
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => group.AddMember(UserId.New(), Now.AddTicks(-1)));
+
+        Assert.Equal("joinedAt", ex.ParamName);
+        Assert.Single(group.Members);   // 던지기 전에 아무것도 바꾸지 않았다
+    }
+
+    [Fact]
+    public void AddMember_WhenJoinedAtEqualsCreatedAt_Succeeds()
+    {
+        var group = NewGroup();
+
+        Assert.True(group.AddMember(UserId.New(), Now).IsSuccess);
     }
 
     private static Group NewGroup() =>
