@@ -3,9 +3,9 @@
 - 시작일: 2026-10-08
 - 현재: **D4 진행 중** (2026-10-18, D4-1). 브랜치 `feat/d4-tests`. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  0. **재개 시 먼저**: 사용자가 learning-log D4-1 "배운 것" 채움 → 변경분 확인 → `feat/d4-tests`에 커밋(미커밋 상태로 세션 종료). 메시지 안: `test(integration): add Testcontainers fixture and group/review persistence tests`
+  0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
      - 통합 테스트 실행 조건: Docker Desktop(엔진)만 켜져 있으면 됨. compose `db`는 불필요
-     - 미답 질문(사용자): EF가 맞바꾸기 UPDATE 두 개를 어떤 순서로 보내는가, 순서가 바뀌면 DEFERRED 없을 때 결과가 달라지는가
+     - ~~미답 질문: EF 맞바꾸기 UPDATE 순서~~ ✅ SQL 로그로 확인 — 기본 키 순, 같은 밀리초 UUIDv7은 대소 무작위라 실행마다 바뀜. 어느 순서든 중간에 중복 → DEFERRED 필요. 로그: `Db.CreateContext(output.WriteLine)` + `--logger "console;verbosity=detailed"`
   1. ~~PR #5 병합, D4 브랜치~~ ✅ / ~~Testcontainers 기반~~ ✅ `PostgresFixture`(postgres:17, `MigrateAsync`, `ResetAsync`=TRUNCATE CASCADE) + `IntegrationTestBase`
   2. 예시 테스트 `GroupPersistenceTests.Create_WhenSaved_ReloadsCreatorAsOnlyMember` ✅(Claude 작성 — 사용자가 이 형식을 따라 나머지 작성)
   3. D3에서 넘어온 통합 테스트 목록

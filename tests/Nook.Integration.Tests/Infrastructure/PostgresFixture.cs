@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nook.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
@@ -29,7 +30,20 @@ public sealed class PostgresFixture : IAsyncLifetime
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
     // 호출마다 새 DbContext — 저장용과 검증용을 분리해야 식별 맵 캐시가 아닌 DB 값을 읽는다.
-    public NookDbContext CreateContext() => new(_options);
+    // sqlLog를 넘기면 실행된 SQL(파라미터 값 포함)만 그쪽으로 보낸다. 테스트에서는 ITestOutputHelper.WriteLine.
+    public NookDbContext CreateContext(Action<string>? sqlLog = null)
+    {
+        if (sqlLog is null)
+        {
+            return new(_options);
+        }
+
+        var options = new DbContextOptionsBuilder<NookDbContext>(_options)
+            .LogTo(sqlLog, [DbLoggerCategory.Database.Command.Name], LogLevel.Information)
+            .EnableSensitiveDataLogging()
+            .Options;
+        return new(options);
+    }
 
     // 마이그레이션 이력 테이블만 남기고 public 스키마의 모든 테이블을 비운다.
     // 테이블 목록을 하드코딩하지 않으므로 마이그레이션이 늘어도 고칠 필요가 없다.
