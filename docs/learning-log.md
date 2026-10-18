@@ -131,3 +131,15 @@
 - 내일 확인할 것:
 
 ---
+
+### D4-1 (2026-10-18) — Testcontainers 통합 테스트 기반
+- 배운 것:
+  1. 테스트 간 공유 컨테이너 작성 및 용도 학습: 같은 컬렉션 `[Collection(컬렉션명 ex: postgres)]`으로 설정한 IntegrationTestBase 클래스를 상속받은 테스트(`GroupPersist, ReviewPersist`)는 같은 컨테이너를 공유하고 순차로 실행되기 때문에, 한 테스트의 데이터 Reset이 다른 테스트가 실행되는 도중에 끼어들지 않는다는 의미이다
+  2. DB 컨텍스트 코드 작성 시: 저장(그룹 추가) -> 조회(추가된 그룹) 순서면 저장 시 사용한 컨텍스트가 아닌 검증용 컨텍스트를 새로 만들어서 식별 맵이 DB를 거치도록 한다
+- 막혔던 것 / 어떻게 풀었나:
+- TDD 기록: `Create_WhenSaved_ReloadsCreatorAsOnlyMember` — 첫 실행 초록 → `db.Users.Add(creator)` 제거로 빨간불 확인(`23503 fk_group_members_users`) → 원복 후 초록
+  - `SaveChanges_WhenSortOrdersSwapped_ReloadsInNewOrder` — 첫 실행 초록 → 같은 트랜잭션에서 `SET CONSTRAINTS ... IMMEDIATE`로 빨간불(`23505 ux_review_images_review_sort_order`) → 원복 후 초록
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `PostgresFixture`·`IntegrationTestBase`(보일러플레이트), Testcontainers.PostgreSql 4.16.0·Infrastructure/Domain 참조 추가, Integration `UnitTest1.cs` 삭제, `GroupPersistenceTests` 첫 테스트(사용자 요청 — 나머지 통합 테스트의 예시), `ReviewPersistenceTests` 맞바꾸기 테스트·`TestResult.Unwrap`(사용자 요청), `progress.md` 갱신
+- 내일 확인할 것:
+
+---

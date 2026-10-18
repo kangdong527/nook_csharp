@@ -1,21 +1,24 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D3 완료** (2026-10-17, D3-3) → 다음 세션 D4. 브랜치 `feat/d3-schema`(main 미병합). 달력 기준 약 4일 지연
+- 현재: **D4 진행 중** (2026-10-18, D4-1). 브랜치 `feat/d4-tests`. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
-  1. `feat/d3-schema` → main PR·병합, D4 브랜치 생성
-  2. Testcontainers 통합 테스트 기반 — 스키마는 **마이그레이션으로** 만든다(`EnsureCreated` 금지: SQL 제약 3개가 빠짐, ADR-008). 연결 문자열은 compose·user-secrets에 의존하지 않게
+  0. **재개 시 먼저**: 사용자가 learning-log D4-1 "배운 것" 채움 → 변경분 확인 → `feat/d4-tests`에 커밋(미커밋 상태로 세션 종료). 메시지 안: `test(integration): add Testcontainers fixture and group/review persistence tests`
+     - 통합 테스트 실행 조건: Docker Desktop(엔진)만 켜져 있으면 됨. compose `db`는 불필요
+     - 미답 질문(사용자): EF가 맞바꾸기 UPDATE 두 개를 어떤 순서로 보내는가, 순서가 바뀌면 DEFERRED 없을 때 결과가 달라지는가
+  1. ~~PR #5 병합, D4 브랜치~~ ✅ / ~~Testcontainers 기반~~ ✅ `PostgresFixture`(postgres:17, `MigrateAsync`, `ResetAsync`=TRUNCATE CASCADE) + `IntegrationTestBase`
+  2. 예시 테스트 `GroupPersistenceTests.Create_WhenSaved_ReloadsCreatorAsOnlyMember` ✅(Claude 작성 — 사용자가 이 형식을 따라 나머지 작성)
   3. D3에서 넘어온 통합 테스트 목록
-     - 그룹 생성 커밋 후 멤버 1명(erd.md §1 보장 주체 표 "앱 절차" 행 — DB가 막지 않음)
-     - 리뷰 이미지 순서 맞바꾸기(0↔1) → `SaveChanges` 한 번 → 다른 `DbContext`로 다시 읽어 `Images[i].SortOrder == i`(D3-3에서는 SQL로만 확인)
+     - ~~그룹 생성 커밋 후 멤버 1명~~ ✅
+     - ~~리뷰 이미지 순서 맞바꾸기(0↔1)~~ ✅ `ReviewPersistenceTests`(Claude 작성). 도메인 공개 메서드 없음 → 변경 추적기로 `SortOrder` 변경, RV-02 메서드 생기면(D5) 도메인 경로로 바꾸기
      - 라운드트립은 저장·검증 `DbContext`를 분리(식별 맵)
-     - 엔티티마다 `Create(..., default)` 예외(ADR-007)
+     - 엔티티마다 `Create(..., default)` 예외(ADR-007) — **다음 작성 대상, 사용자 직접**(DB 불필요 → Domain.Tests)
   4. erd.md 갱신(사용자): review_images "확인 항목" 결과(EF 모델에 알리지 않음, 맞바꾸기·위반·`EXPLAIN` 실측), "예상" 표기 중 실측한 2건(users `lower()`, review_images Q1·Q3) 표기 변경
   - 이월: `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교(미실행), 나머지 "예상" `EXPLAIN`은 데이터가 있어야 의미 있음 → D8 시드와 함께, 시드 스크립트 위치도 D8
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - 미답: Configuration 주석 — 지금은 파일 머리에서 erd.md를 가리킴. 인덱스마다 받는 쿼리(Q 번호)를 달지(D3 게이트 문구 "인덱스마다 쓰는 쿼리를 주석으로")
   - 미답: `.editorconfig`에 namespace 분석기(`IDE0161`) 추가 여부 — namespace 사고 3회(D2-1·D2-2·D2-4)
-  - 정리: 템플릿 `UnitTest1.cs`(Domain·Algorithms·Integration 테스트 프로젝트) 삭제 시점 — D4
+  - 정리: 템플릿 `UnitTest1.cs` — Integration은 삭제 ✅, Domain·Algorithms 남음(D4)
 
 ## 세션 기록
 
