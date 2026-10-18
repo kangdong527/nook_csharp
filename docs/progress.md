@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D4 진행 중** (2026-10-18, D4-1). 브랜치 `feat/d4-tests`. 달력 기준 약 4일 지연
+- 현재: **D4 완료** (2026-10-18, D4-1). 브랜치 `feat/d4-tests` → PR 후 D5 시작. 달력 기준 약 4일 지연
 - 다음 할 일 (순서대로)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
      - 통합 테스트 실행 조건: Docker Desktop(엔진)만 켜져 있으면 됨. compose `db`는 불필요
@@ -16,6 +16,7 @@
   4. ~~erd.md 갱신~~ ✅ (Claude 작성, 사용자 요청): review_images "확인 항목" 결과(EF 모델에 알리지 않음, 맞바꾸기·위반·`EXPLAIN` 실측), "예상" 표기 중 실측한 2건(users `lower()`, review_images Q1·Q3) 표기 변경
   - 이월: `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교(미실행), 나머지 "예상" `EXPLAIN`은 데이터가 있어야 의미 있음 → D8 시드와 함께, 시드 스크립트 위치도 D8
   5. ~~D4 게이트 누락분~~ ✅ `ReviewContent.Create` 경계 9·10·50·51자(+trim·안쪽 공백·이모지), `Review` 이미지 3장, DB CHECK 11개 통합 테스트 `CheckConstraintTests`(raw SQL UPDATE → 23514 + `ConstraintName`, 16케이스). 변이: 상한 상수·char 수·trim 제거·마이그레이션 CHECK 완화 모두 빨간불
+  6. ~~D4 미결 결정~~ ✅ 프로브로 재현 후 결정(추천안 채택, 아래 "확정된 결정 (D4)") — 실패 테스트 먼저(6개 빨간불) → 구현 → 전체 103개 초록
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - ~~미답: Configuration 주석~~ ✅ A안 — PK·UNIQUE·인덱스마다 `// 받는 쿼리: erd.md <table> Q..` (Q 번호만, 근거는 erd.md). 마이그레이션 SQL 제약 2곳도 동일. 인덱스·쿼리를 바꾸면 erd.md 표와 함께 고친다
   - ~~미답: namespace 분석기~~ ✅ `IDE0161`은 namespace 모양(파일 범위/블록) 규칙이라 사고와 무관 → **IDE0130**(폴더 불일치)+**CA1050**(전역 namespace) `error` + `EnforceCodeStyleInBuild`. 참조 없는 탐침 파일로 각각 단독 빌드 실패 확인. 파일명≠타입명(D2-4 `Reviews/UserId.cs`)은 여전히 못 잡음
@@ -190,7 +191,7 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
 - [x] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — Error·Result, 값 객체 8개, 강타입 ID 5개, 분류표, 다이어그램, 엔티티 8개, Group 단위 테스트 21개, ADR-004~007
 - [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
-- [ ] D4 테스트 설계(단위 + Testcontainers 통합)
+- [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
 - [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01
@@ -213,11 +214,10 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 - 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
-- 리뷰 본문 trim 범위: `string.Trim()`은 전각 공백(U+3000)은 지우지만 폭 없는 공백(U+200B)은 남김 — 허용할지 D4 테스트에서 결정 (닉네임은 화이트리스트로 해결됨)
-- `ReviewContent`에도 NFC 정규화를 적용할지 — NFD 입력은 코드 포인트가 부풀어 50자 제한에 먼저 걸림. D4에서 재현 후 결정
 - 이메일 소문자 변환 일치: PostgreSQL `lower()`(DB `LC_CTYPE` 따름) vs C# `ToLowerInvariant()` — 비ASCII에서 다를 수 있음. DB를 띄운 뒤 `SELECT lower('ÄÖ')`로 확인
 - 회원 탈퇴 중 같은 회원의 다른 요청이 새 그룹에 합류하면 users DELETE가 RESTRICT 오류 → 탈퇴 트랜잭션도 처음에 users 행을 잠가야 하는가(R-GR-04와 연결) — D6
-- D4 테스트 항목: 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가), review_images 순서 맞바꾸기 저장(DEFERRABLE UNIQUE + EF 명령 순서), 순서 맞바꾼 리뷰를 다시 불러와 `Images[i].SortOrder == i`
+- D5 테스트 항목(D4에서 이월, Application 계층 필요): 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가)
+- `ReviewContent.Create`의 `string.Normalize`는 짝 없는 서로게이트에서 `ArgumentException`(문서상 동작, 미실측) → 회원 입력이 Result가 아니라 예외가 됨. API 역직렬화(System.Text.Json)에서 이미 걸러지는지 확인 후 결정 — D5
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
 - 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
@@ -226,7 +226,13 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 - ADR 번호: 003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 범위 = 스키마 차이만(D3-2 사용자 결정, 근거 erd.md §4). 닉네임 UNIQUE는 포함. 도메인 규칙 차이(리뷰 길이 trim 후 계산, 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC)를 어디에 남길지 미정 — `domain.md`에 이미 있으면 정리 불필요
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
-- `AddMember`의 `joinedAt`이 그룹 `CreatedAt`보다 이른 값이어도 통과 — Domain이 검사할지, Application 시각 경로(`GetUtcNow` 한 번)로 충분한지 — D4
+
+## 확정된 결정 (D4)
+- 테스트 코드는 대부분 Claude 작성, 사용자는 결과 예측·빨간불 확인(시간 사정, D4-1 사용자 요청)
+- 경계값 테스트는 상수가 아닌 숫자 리터럴로(SSoT를 지키는 테스트는 SSoT를 참조하지 않는다)
+- DB CHECK는 raw SQL UPDATE로 앱을 우회해 검증(23514 + `ConstraintName`까지)
+- 리뷰 본문: NFC 정규화 → 앞뒤 공백·서식 문자(Cf: U+200B·U+FEFF 등) 제거 → 코드 포인트로 길이 검사. 안쪽 서식 문자는 유지(ZWJ 이모지). DB CHECK에 `IS NFC NORMALIZED` 추가는 하지 않음(마이그레이션 회피, 도메인이 정규화한 값만 저장)
+- `AddMember`: `joinedAt < CreatedAt`이면 `ArgumentOutOfRangeException`(호출 코드 실수), 같은 시각 허용. 시각 검사는 Result 실패(중복·정원)보다 먼저
 
 ## 확정된 결정 (D3)
 - 테이블·컬럼·제약 이름은 snake_case (`pk_`·`ux_`·`ix_`·`ck_`·`fk_` 접두사)
