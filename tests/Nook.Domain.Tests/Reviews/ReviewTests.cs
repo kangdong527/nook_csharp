@@ -17,6 +17,11 @@ public class ReviewTests
     // - Create_WhenStorageKeyIs55Chars_Succeeds      (확장자 3자: jpg·png)
     // - Create_WhenStorageKeyIs56Chars_Succeeds      (확장자 4자: webp, 상한 경계)
     // - Create_WhenStorageKeyIs57Chars_Throws        (상한 + 1, 생성 코드 버그 흉내)
+    //
+    // Create — 시각 가드 (ADR-007)
+    // - Create_WhenCreatedAtIsInvalid_ThrowsWithParamName   (default, 비UTC +09:00)
+    // - Create_WhenTooManyImages_ReturnsTooManyImages       (아래 테스트의 기준선: 시각이 정상이면 Result 실패)
+    // - Create_WhenCreatedAtIsDefaultAndTooManyImages_Throws (예외 먼저 — 버그가 검증 실패로 위장되지 않는다)
 
     private static readonly DateTimeOffset Now = new(2026, 10, 16, 0, 0, 0, TimeSpan.Zero);
 
@@ -57,6 +62,47 @@ public class ReviewTests
 
         Assert.Equal("storageKey", ex.ParamName);   // sortOrder 검사가 아니라 길이 검사가 던졌는가
     }
+
+    // DateTimeOffset은 attribute 인자(InlineData)가 될 수 없어 TheoryData로 넘긴다.
+    public static TheoryData<DateTimeOffset> InvalidCreatedAt =>
+    [
+        default,                                                        // 호출부가 시각을 빠뜨림
+        new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.FromHours(9)),   // DateTimeOffset.Now 직접 호출
+    ];
+
+    [Theory]
+    [MemberData(nameof(InvalidCreatedAt))]
+    public void Create_WhenCreatedAtIsInvalid_ThrowsWithParamName(DateTimeOffset createdAt)
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => Review.Create(UserId.New(), PlaceId.New(), ValidContent(), [ValidKey(0)], createdAt));
+
+        // 결과를 utcCreatedAt 변수에 담아도 ParamName은 가드에 넘긴 인자 식(createdAt)이다.
+        Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    [Fact]
+    public void Create_WhenTooManyImages_ReturnsTooManyImages()
+    {
+        var result = Review.Create(UserId.New(), PlaceId.New(), ValidContent(), FourKeys(), Now);
+
+        Assert.False(result.TryGetValue(out _, out var error));
+        Assert.Equal(ReviewErrors.TooManyImages.Code, error?.Code);
+    }
+
+    [Fact]
+    public void Create_WhenCreatedAtIsDefaultAndTooManyImages_Throws()
+    {
+        // 위 기준선과 시각만 다르다. TooManyImages가 돌아오면 호출 코드의 버그가 회원 실패로 위장된 것.
+        var ex = Assert.Throws<ArgumentException>(
+            () => Review.Create(UserId.New(), PlaceId.New(), ValidContent(), FourKeys(), default));
+
+        Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    private static string ValidKey(int n) => $"{KeyPrefix}{KeyId[..^1]}{n}.jpg";
+
+    private static string[] FourKeys() => [ValidKey(0), ValidKey(1), ValidKey(2), ValidKey(3)];
 
     private static Result<Review> CreateWithKey(string storageKey) =>
         Review.Create(UserId.New(), PlaceId.New(), ValidContent(), [storageKey], Now);
