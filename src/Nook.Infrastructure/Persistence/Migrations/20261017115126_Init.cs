@@ -236,7 +236,8 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             // 순서 맞바꾸기(0↔1)의 중간 중복을 허용하고 커밋 시점에 검사. 인덱스는 DEFERRABLE을 받지 못해 제약으로 만든다.
             // 받는 쿼리: erd.md review_images Q1·Q3 (앞 컬럼 review_id, R-RV-02 순서 중복 방지)
-            // EF 모델에는 알리지 않는다: EF가 UPDATE 순서를 정하려다 순환으로 볼 수 있고, 커밋 시 검사는 DB가 맡는다.
+            // EF 모델에는 알리지 않는다(ADR-008). EF는 이 제약을 모른 채 맞바꾸기 UPDATE를 기본 키 순으로 보내고(D4-1 SQL 로그),
+            // 어느 순서든 첫 UPDATE 직후 같은 sort_order가 두 행이 되므로 순서가 아니라 커밋 시점 검사(DB)가 정합성을 맡는다.
             migrationBuilder.Sql(
                 "ALTER TABLE review_images ADD CONSTRAINT ux_review_images_review_sort_order " +
                 "UNIQUE (review_id, sort_order) DEFERRABLE INITIALLY DEFERRED;");
