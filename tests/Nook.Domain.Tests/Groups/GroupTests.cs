@@ -27,6 +27,8 @@ public class GroupTests
     // - AddMember_WhenSeatFreedByRemoval_Succeeds            (가득 찬 그룹에서 1명 탈퇴 후 합류)
     // - AddMember_WhenGroupEmptied_Throws
     // - AddMember_WhenJoinedAtIsInvalid_ThrowsWithParamName    (ADR-007: default, 비UTC — GroupMember.cs의 가드)
+    // - AddMember_WhenJoinedAtIsBeforeCreatedAt_Throws       (D4 결정: 그룹이 생기기 전에 합류할 수 없다)
+    // - AddMember_WhenJoinedAtEqualsCreatedAt_Succeeds       (경계: 같은 시각은 허용 — 만든 회원도 CreatedAt에 합류)
     //
     // RemoveMember (R-GR-09, 멱등, MemberRemoval 3상태)
     // - RemoveMember_WhenMember_ReturnsRemoved
@@ -313,6 +315,26 @@ public class GroupTests
 
         // ParamName은 GroupMember.Create 안의 인자 식 — 테스트 쪽 변수명과 무관하다.
         Assert.Equal("joinedAt", ex.ParamName);
+    }
+
+    [Fact]
+    public void AddMember_WhenJoinedAtIsBeforeCreatedAt_Throws()
+    {
+        var group = NewGroup();   // CreatedAt = Now
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => group.AddMember(UserId.New(), Now.AddTicks(-1)));
+
+        Assert.Equal("joinedAt", ex.ParamName);
+        Assert.Single(group.Members);   // 던지기 전에 아무것도 바꾸지 않았다
+    }
+
+    [Fact]
+    public void AddMember_WhenJoinedAtEqualsCreatedAt_Succeeds()
+    {
+        var group = NewGroup();
+
+        Assert.True(group.AddMember(UserId.New(), Now).IsSuccess);
     }
 
     private static Group NewGroup() =>

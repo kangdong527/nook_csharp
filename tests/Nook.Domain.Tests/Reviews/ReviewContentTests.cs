@@ -1,3 +1,4 @@
+using System.Text;
 using Nook.Domain.Common;
 using Nook.Domain.Reviews;
 
@@ -17,6 +18,12 @@ public class ReviewContentTests
     // - Create_CountsInnerSpaces                            (안쪽 공백은 글자 수에 포함)
     // - Create_TrimsBeforeCounting                          (9자 + 앞뒤 공백 → 실패, 저장값은 trim된 값)
     // - Create_CountsEmojiAsOneCharacter                    (이모지 50개 = 50자, string.Length는 100)
+    //
+    // Create — 보이지 않는 문자·정규화 (D4 결정: 앞뒤 서식 문자 제거, NFC 정규화 후 세기)
+    // - Create_WhenInvisibleCharsAtEdgesMakeLength_ReturnsContentLength (U+200B·U+FEFF가 앞뒤에서 길이를 채움)
+    // - Create_KeepsInnerFormatCharacters                    (ZWJ 이모지 안의 U+200D는 지우지 않는다)
+    // - Create_WhenNfdTooShortAfterNfc_ReturnsContentLength  (NFD 가×5 = 코드 포인트 10 → NFC 5자)
+    // - Create_WhenNfdWithinBoundsAfterNfc_StoresNfc         (NFD 가×26 = 코드 포인트 52 → NFC 26자)
     //
     // From — 복원
     // - From_WhenValueIsEmptyOrWhiteSpace_Throws     ("", " ", "\t")
@@ -79,6 +86,46 @@ public class ReviewContentTests
         Assert.Equal(100, raw.Length);
 
         Assert.True(ReviewContent.Create(raw).TryGetValue(out _, out var error), error?.Code);
+    }
+
+    // string.Trim은 U+200B(폭 없는 공백)·U+FEFF(BOM)를 공백으로 보지 않는다 — 보이는 글자 9자 이하가 통과하던 입력.
+    [Theory]
+    [InlineData("​가가가가가가가가가")]
+    [InlineData("가가가가가가가가가﻿")]
+    [InlineData("​​​​​​​​​​")]   // 보이는 글자 0
+    public void Create_WhenInvisibleCharsAtEdgesMakeLength_ReturnsContentLength(string raw)
+    {
+        AssertContentLength(ReviewContent.Create(raw));
+    }
+
+    [Fact]
+    public void Create_KeepsInnerFormatCharacters()
+    {
+        // 👨‍👩‍👧 = 사람 이모지 3개 + U+200D(ZWJ, 서식 문자) 2개 = 코드 포인트 5. 안쪽 서식 문자까지 지우면 이모지가 깨진다.
+        var raw = "가가가가가👨‍👩‍👧";
+
+        Assert.True(ReviewContent.Create(raw).TryGetValue(out var content, out var error), error?.Code);
+        Assert.Equal(raw, content.Value);
+    }
+
+    [Fact]
+    public void Create_WhenNfdTooShortAfterNfc_ReturnsContentLength()
+    {
+        // NFD 한글은 음절 하나가 코드 포인트 2개(초성+중성) — 그대로 세면 보이는 5자가 10자로 하한을 통과한다.
+        var raw = new string('가', 5).Normalize(NormalizationForm.FormD);
+        Assert.Equal(10, raw.EnumerateRunes().Count());
+
+        AssertContentLength(ReviewContent.Create(raw));
+    }
+
+    [Fact]
+    public void Create_WhenNfdWithinBoundsAfterNfc_StoresNfc()
+    {
+        var raw = new string('가', 26).Normalize(NormalizationForm.FormD);
+        Assert.Equal(52, raw.EnumerateRunes().Count());
+
+        Assert.True(ReviewContent.Create(raw).TryGetValue(out var content, out var error), error?.Code);
+        Assert.Equal(new string('가', 26), content.Value);   // 저장되는 값은 NFC
     }
 
     [Theory]
