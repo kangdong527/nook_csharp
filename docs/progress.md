@@ -15,6 +15,7 @@
      - ~~엔티티마다 `Create(..., default)` 예외(ADR-007)~~ ✅ Bookmark·Group(Create·AddMember)·Like·Review, default+비UTC, `ParamName`까지. 변이(가드 제거·순서 이동)로 빨간불 확인. **D4부터 테스트 코드는 대부분 Claude 작성**(사용자 요청, 사용자는 예측·결과 확인)
   4. ~~erd.md 갱신~~ ✅ (Claude 작성, 사용자 요청): review_images "확인 항목" 결과(EF 모델에 알리지 않음, 맞바꾸기·위반·`EXPLAIN` 실측), "예상" 표기 중 실측한 2건(users `lower()`, review_images Q1·Q3) 표기 변경
   - 이월: `varchar(56)`→`varchar(60)` 확장 시 `pg_relation_filenode` 전후 비교(미실행), 나머지 "예상" `EXPLAIN`은 데이터가 있어야 의미 있음 → D8 시드와 함께, 시드 스크립트 위치도 D8
+  5. ~~D4 게이트 누락분~~ ✅ `ReviewContent.Create` 경계 9·10·50·51자(+trim·안쪽 공백·이모지), `Review` 이미지 3장, DB CHECK 11개 통합 테스트 `CheckConstraintTests`(raw SQL UPDATE → 23514 + `ConstraintName`, 16케이스). 변이: 상한 상수·char 수·trim 제거·마이그레이션 CHECK 완화 모두 빨간불
   - 선택: `Review` 수정(RV-02, 기존 `ReviewImageId`와 새 키가 섞인 목록) — D5로
   - ~~미답: Configuration 주석~~ ✅ A안 — PK·UNIQUE·인덱스마다 `// 받는 쿼리: erd.md <table> Q..` (Q 번호만, 근거는 erd.md). 마이그레이션 SQL 제약 2곳도 동일. 인덱스·쿼리를 바꾸면 erd.md 표와 함께 고친다
   - ~~미답: namespace 분석기~~ ✅ `IDE0161`은 namespace 모양(파일 범위/블록) 규칙이라 사고와 무관 → **IDE0130**(폴더 불일치)+**CA1050**(전역 namespace) `error` + `EnforceCodeStyleInBuild`. 참조 없는 탐침 파일로 각각 단독 빌드 실패 확인. 파일명≠타입명(D2-4 `Reviews/UserId.cs`)은 여전히 못 잡음

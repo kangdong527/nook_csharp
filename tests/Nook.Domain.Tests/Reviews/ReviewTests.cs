@@ -20,7 +20,8 @@ public class ReviewTests
     //
     // Create — 시각 가드 (ADR-007)
     // - Create_WhenCreatedAtIsInvalid_ThrowsWithParamName   (default, 비UTC +09:00)
-    // - Create_WhenTooManyImages_ReturnsTooManyImages       (아래 테스트의 기준선: 시각이 정상이면 Result 실패)
+    // - Create_WhenThreeImages_KeepsOrder                   (이미지 상한: 3장 성공, SortOrder 0·1·2)
+    // - Create_WhenTooManyImages_ReturnsTooManyImages       (상한 + 1: 4장. 아래 테스트의 기준선이기도 하다)
     // - Create_WhenCreatedAtIsDefaultAndTooManyImages_Throws (예외 먼저 — 버그가 검증 실패로 위장되지 않는다)
 
     private static readonly DateTimeOffset Now = new(2026, 10, 16, 0, 0, 0, TimeSpan.Zero);
@@ -79,6 +80,18 @@ public class ReviewTests
 
         // 결과를 utcCreatedAt 변수에 담아도 ParamName은 가드에 넘긴 인자 식(createdAt)이다.
         Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    [Fact]
+    public void Create_WhenThreeImages_KeepsOrder()
+    {
+        string[] keys = [ValidKey(0), ValidKey(1), ValidKey(2)];
+
+        var result = Review.Create(UserId.New(), PlaceId.New(), ValidContent(), keys, Now);
+
+        Assert.True(result.TryGetValue(out var review, out var error), error?.Code);
+        Assert.Equal(keys, review.Images.Select(i => i.StorageKey));
+        Assert.Equal([0, 1, 2], review.Images.Select(i => i.SortOrder));
     }
 
     [Fact]
