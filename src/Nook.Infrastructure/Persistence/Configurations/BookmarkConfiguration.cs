@@ -13,6 +13,7 @@ internal sealed class BookmarkConfiguration : IEntityTypeConfiguration<Bookmark>
     {
         builder.ToTable("bookmarks");
 
+        // 받는 쿼리: erd.md bookmarks Q1·Q2·Q3 (R-BM-01 중복 방지)
         builder.HasKey(b => new { b.UserId, b.PlaceId }).HasName("pk_bookmarks");
 
         builder.Property(b => b.UserId).HasColumnName("user_id");

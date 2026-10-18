@@ -13,12 +13,14 @@ internal sealed class LikeConfiguration : IEntityTypeConfiguration<Like>
     {
         builder.ToTable("likes");
 
+        // 받는 쿼리: erd.md likes Q1·Q2·Q3·Q4 (R-LK-01 중복 방지)
         builder.HasKey(l => new { l.ReviewId, l.UserId }).HasName("pk_likes");
 
         builder.Property(l => l.ReviewId).HasColumnName("review_id");
         builder.Property(l => l.UserId).HasColumnName("user_id");
         builder.Property(l => l.CreatedAt).HasColumnName("created_at");
 
+        // 받는 쿼리: erd.md likes Q5 (탈퇴 CASCADE·FK 검사)
         builder.HasIndex(l => l.UserId).HasDatabaseName("ix_likes_user_id");
 
         builder.HasOne<User>().WithMany()

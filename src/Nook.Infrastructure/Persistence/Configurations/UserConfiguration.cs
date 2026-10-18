@@ -18,6 +18,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                 "email ~ '^[^@[:space:]]+@[^@[:space:]]+$'");
         });
 
+        // 받는 쿼리: erd.md users Q1·Q2·Q5
         builder.HasKey(u => u.Id).HasName("pk_users");
 
         // 앱이 UserId.New()(v7)로 발급한다(ADR-006). EF가 값을 만들지 않게 한다.

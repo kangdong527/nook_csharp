@@ -230,10 +230,12 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             // EF 모델로 표현할 수 없는 제약 — 모델 스냅샷에 남지 않으므로 바꾸거나 지울 때도 SQL로 한다(erd.md).
             // lower() 표현식 UNIQUE: UNIQUE 제약은 식을 받지 못해 인덱스로 만든다.
+            // 받는 쿼리: erd.md users Q3 (R-US-02) / Q4 (R-US-03)
             migrationBuilder.Sql("CREATE UNIQUE INDEX ux_users_nickname_lower ON users (lower(nickname));");
             migrationBuilder.Sql("CREATE UNIQUE INDEX ux_users_email_lower ON users (lower(email));");
 
             // 순서 맞바꾸기(0↔1)의 중간 중복을 허용하고 커밋 시점에 검사. 인덱스는 DEFERRABLE을 받지 못해 제약으로 만든다.
+            // 받는 쿼리: erd.md review_images Q1·Q3 (앞 컬럼 review_id, R-RV-02 순서 중복 방지)
             // EF 모델에는 알리지 않는다: EF가 UPDATE 순서를 정하려다 순환으로 볼 수 있고, 커밋 시 검사는 DB가 맡는다.
             migrationBuilder.Sql(
                 "ALTER TABLE review_images ADD CONSTRAINT ux_review_images_review_sort_order " +
