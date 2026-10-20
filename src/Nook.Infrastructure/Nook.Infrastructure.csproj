@@ -5,6 +5,11 @@
     <ProjectReference Include="..\Nook.Domain\Nook.Domain.csproj" />
   </ItemGroup>
 
+  <!-- BackgroundService·Options 바인딩·ILogger. 런타임과 같은 버전이 따라와 패키지 버전을 따로 관리하지 않는다 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

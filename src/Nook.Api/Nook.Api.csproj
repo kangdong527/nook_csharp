@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Nook.Application\Nook.Application.csproj" />
     <ProjectReference Include="..\Nook.Infrastructure\Nook.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nook.SharedKernel\Nook.SharedKernel.csproj" />
   </ItemGroup>
 
 </Project>

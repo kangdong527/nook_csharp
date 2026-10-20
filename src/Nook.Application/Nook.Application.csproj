@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Nook.Domain\Nook.Domain.csproj" />
     <ProjectReference Include="..\Nook.Algorithms\Nook.Algorithms.csproj" />
+    <ProjectReference Include="..\Nook.SharedKernel\Nook.SharedKernel.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

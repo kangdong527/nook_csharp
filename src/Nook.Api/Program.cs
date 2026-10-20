@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nook.Api.Auth;
+using Nook.Application.Auth;
 using Nook.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,8 +15,13 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Nook")
     ?? throw new InvalidOperationException("연결 문자열 'Nook'이 설정되지 않았습니다.");
 builder.Services.AddInfrastructure(connectionString);
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddConsoleEmailTransport();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
+// 유스케이스(Application). 저장소가 Scoped라 같은 수명으로 둔다.
+builder.Services.AddScoped<RequestMagicLinkHandler>();
 
 // 인증: API가 직접 서명한 Access 토큰(HS256)만 받는다(D5 결정)
 builder.Services.AddOptions<JwtOptions>()

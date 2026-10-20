@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Nook.Application.Auth;
+using Nook.Infrastructure.Auth;
 using Nook.Infrastructure.Persistence;
 
 namespace Nook.Infrastructure;
@@ -13,6 +15,25 @@ public static class DependencyInjection
 
         services.AddDbContext<NookDbContext>(options => options.UseNpgsql(connectionString));
 
+        // 저장소는 DbContext와 같은 수명(요청당 하나)
+        services.AddScoped<IMagicLinkTokenStore, MagicLinkTokenStore>();
+
+        services.AddOptions<MagicLinkOptions>()
+            .BindConfiguration(MagicLinkOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // 큐는 인스턴스 하나를 두 이름으로 꺼낸다: 핸들러는 IMagicLinkMailQueue(쓰기), 워커는 구현 클래스(Reader).
+        // AddSingleton<IMagicLinkMailQueue, ChannelMagicLinkMailQueue>()를 따로 부르면 인스턴스가 둘이 되어 워커가 아무것도 못 받는다.
+        services.AddSingleton<ChannelMagicLinkMailQueue>();
+        services.AddSingleton<IMagicLinkMailQueue>(sp => sp.GetRequiredService<ChannelMagicLinkMailQueue>());
+        // 워커는 IEmailTransport가 필요하다. 발송기를 등록하지 않은 환경(운영, D12 전)은 앱 시작에서 실패한다.
+        services.AddHostedService<MagicLinkMailWorker>();
+
         return services;
     }
+
+    // 개발 전용. 메일 본문(로그인 링크)을 로그로 찍는다.
+    public static IServiceCollection AddConsoleEmailTransport(this IServiceCollection services) =>
+        services.AddSingleton<IEmailTransport, ConsoleEmailTransport>();
 }

@@ -4,3 +4,17 @@ GET {{Nook.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### AU-01 매직 링크 요청 — 정상: 202, 콘솔 로그에 링크
+POST {{Nook.Api_HostAddress}}/auth/magic-link
+Content-Type: application/json
+
+{ "email": "demo@nook.test" }
+
+### AU-01 매직 링크 요청 — 형식 오류: 400 ProblemDetails (title = User.EmailFormat)
+POST {{Nook.Api_HostAddress}}/auth/magic-link
+Content-Type: application/json
+
+{ "email": "abc" }
+
+###

@@ -37,7 +37,7 @@ public sealed class AccessTokenIssuer(IOptions<JwtOptions> options, TimeProvider
     // sub 하나만 넣는다. iat·nbf·exp는 SecurityTokenDescriptor가 이미 채운다.
     // iat·exp를 직접 넣지 않는 이유: descriptor의 IssuedAt·Expires와 같은 클레임을 Subject에도 넣으면 같은 이름이 두 번 들어가거나 어느 쪽이 이기는지 헷갈리게 돼서 출처를 한 곳으로.
     // jti는 폐기 목록(AU-03 로그아웃 결정)이 생길 때 추가한다. 지금은 읽는 곳이 없다.
-    // 검증 시 주의사항: Guid.TryParse로 받고 실패하면 401로 처리해야 함, Guid.Parse를 쓰면 위조된 sub가 들어왔을 때 500 발생
+    // 검증 시 주의사항: 401을 잡는건 미들웨어에서 검증, Guid.TryParse 는 내부 문제로 발생하는 상황만 잡으므로 500에러 + 로그(토큰 원문 포함 X) 처리.
     private static IEnumerable<Claim> BuildClaims(Guid userId)
     {
         yield return new Claim(JwtRegisteredClaimNames.Sub, userId.ToString());
