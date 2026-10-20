@@ -1,4 +1,4 @@
-namespace Nook.Domain.Common;
+namespace Nook.SharedKernel;
 
 // 도메인의 "예상 가능한 실패"를 표현한다. HTTP 상태 코드는 모른다 — Api 층이 Type을 보고 번역한다.
 

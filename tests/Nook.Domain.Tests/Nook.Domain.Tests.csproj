@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nook.Domain\Nook.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Nook.SharedKernel\Nook.SharedKernel.csproj" />
   </ItemGroup>
 
 </Project>

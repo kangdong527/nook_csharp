@@ -5,6 +5,7 @@
     <Project Path="src/Nook.Application/Nook.Application.csproj" />
     <Project Path="src/Nook.Domain/Nook.Domain.csproj" />
     <Project Path="src/Nook.Infrastructure/Nook.Infrastructure.csproj" />
+    <Project Path="src/Nook.SharedKernel/Nook.SharedKernel.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nook.Algorithms.Tests/Nook.Algorithms.Tests.csproj" />

@@ -1,5 +1,5 @@
 using System.Text;
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 
 namespace Nook.Domain.Groups;
 

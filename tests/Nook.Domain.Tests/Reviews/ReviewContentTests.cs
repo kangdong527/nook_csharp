@@ -1,5 +1,5 @@
 using System.Text;
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 using Nook.Domain.Reviews;
 
 namespace Nook.Domain.Tests.Reviews;
