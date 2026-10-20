@@ -158,3 +158,29 @@
   - 질문 미답: Q1을 `SELECT` 후 `UPDATE` 두 문장으로 나누면 무슨 일이 생기나? / `BuildClaims`의 `TryParse`가 실제로 막는 경우는?
 
 ---
+
+### D5-2 (2026-10-20) — 동시 소모·TryParse 정리, AU-01 계층 설계와 SharedKernel
+- 배운 것:
+  1. 
+  2. 
+  3. 
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `Nook.SharedKernel` 분리(Result·Error 이동, using·참조 수정 — 기계적 리팩터링), AU-01 뼈대 전체(Application 계약 2개·`MagicLinkPolicy`·`MagicLinkSecret`·핸들러 껍데기, Infrastructure 저장소·Channel 큐·워커·콘솔 발송기·DI, Api `AuthController`·등록·설정) — 협업 영역의 뼈대, 핸들러 본문은 `TODO(human)`. 결정은 사용자: 백그라운드 B안, 형식 오류 400, SharedKernel A안, sub 형식 위반 = 500
+- 내일 확인할 것:
+  - `RequestMagicLink.HandleAsync` `TODO(human)` 구현 → 테스트 → 손 테스트 → 커밋
+  - 질문 미답: `mail.Enqueue`를 INSERT 앞에 두면? / Q2(세기)와 INSERT 사이 동시 요청은?
+
+---
+
+### D5-3 (2026-10-20) — AU-01 핸들러, 매직 링크 TOCTOU와 메일 폭탄 방어, 일정 변경
+- 배운 것:
+  1. 
+  2. 
+  3. 
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `HandleAsync`의 Q2 속도 제한·리팩터링(사용자 요청 — 본문 초안·INSERT→Enqueue 순서는 사용자), `Nook.Application.Tests`·핸들러 테스트 7개(D4부터 테스트는 Claude 작성, 사용자는 예측), 일정 변경 문서 반영. 결정은 사용자: 일정 변경(D6 → FE → DEP 1주, EC2·GitHub Actions), TOCTOU 방어 ② A3 + Q2 + A1
+- 내일 확인할 것:
+  - AU-02 consume
+  - 예측이 빗나간 것: "Fake 시계와 실제 시각이 어긋난다" — 왜 안 어긋났는지 한 줄로
+
+---

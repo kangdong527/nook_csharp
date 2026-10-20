@@ -566,7 +566,7 @@ erDiagram
 |---|---|---|---|
 | RLS | 8개 테이블 모두 `anon`·`authenticated`에 전체 허용(`using (true) with check (true)`) — 클라이언트가 DB에 직접 쓴다 | RLS 없음. DB는 API 서버만 접속하고 인가는 API 계층에서 한다(D5) | 원본 정책은 RLS를 켜 두고 실제로는 아무것도 막지 않는다 |
 | Storage 정책 | 버킷 `images` 공개 읽기, `anon` 업로드·**삭제** 허용 | 미정(D5 이미지 업로드) | 원본은 누구나 남의 이미지를 지울 수 있다 |
-| 스키마 적용 | SQL Editor에 붙여넣어 1회 실행, `create ... if not exists`. 그룹은 별도 `groups.sql` | EF Core 마이그레이션(D3 매핑, 배포는 ADR-003·D12) | `if not exists`는 이미 있는 테이블의 컬럼·제약 변경을 조용히 건너뛴다. 이력·되돌리기가 없다 |
+| 스키마 적용 | SQL Editor에 붙여넣어 1회 실행, `create ... if not exists`. 그룹은 별도 `groups.sql` | EF Core 마이그레이션(D3 매핑, 배포는 ADR-003·DEP) | `if not exists`는 이미 있는 테이블의 컬럼·제약 변경을 조용히 건너뛴다. 이력·되돌리기가 없다 |
 
 **같은 점**: FK 나머지 6개(`user_id` → bookmarks·reviews·likes, `review_images.review_id`, `likes.review_id`, `group_members.group_id`)는 둘 다 `CASCADE` · `places.kakao_place_id`·`groups.invite_code` UNIQUE · `group_members (user_id)` 보조 인덱스(원본 `idx_group_members_user`, 우리 `ix_group_members_user_id` — 같은 leftmost prefix 이유) · 시각은 `timestamptz` · 좌표는 `double precision`
 

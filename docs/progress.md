@@ -1,16 +1,25 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-18, D5-1). 브랜치 `feat/d5-auth`. 인증 방식 결정·JWT 검증 골격·`magic_link_tokens` 설계 완료. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 4일 지연
+- 현재: **D5 진행 중** (2026-10-20, D5-3). 브랜치 `feat/d5-auth`, **D5-2·D5-3 변경분 미커밋**(작업 트리에 있음). 인증 방식·JWT 골격·`magic_link_tokens`·AU-01 핸들러 완료. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 5일 지연
+- **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
+- **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
+  1. ~~AU-01 `HandleAsync` 구현~~ ✅ 사용자 작성(형식 검사·INSERT→Enqueue 순서·주석) + Claude 작성(Q2 속도 제한, 사용자 요청 리팩터링: `TryGetValue` 반환값 분기, `IsRateLimitedAsync` 분리). 빌드 경고 0
+  2. ~~TOCTOU 결정~~ ✅ ② A3 + Q2 + A1(확정된 결정 D5). 구현은 DEP 5일째. ADR 권장(작성은 사용자): 메일 폭탄 방어 겹과 단일 소비자 전제
+  3. ~~`dotnet test` 전체~~ ✅ 113개 통과(Algorithms 1·Domain 84·Application 7·Integration 21)
+  4. ~~핸들러 단위 테스트·손 테스트~~ ✅ `tests/Nook.Application.Tests`(Claude 작성). 손 테스트: 같은 이메일 5회 → 링크 3번·행 3개(사용자 예측 일치)
+  5. ~~커밋~~ ✅ `b55f030` SharedKernel · `c11794a` AU-01 · docs 커밋
+  6. **다음: AU-02 consume** (`POST /auth/magic-link/consume`) — 조건부 UPDATE 한 문장으로 소모(D5-2 질문 1 결론, 0행 = 무효 링크), 소모와 회원 생성은 한 트랜잭션, 성공 시 `AccessTokenIssuer`로 발급. 확인할 것: Q2를 통과했지만 메일이 안 나간 토큰 행이 consume에서 문제가 되는가
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
      - 이월: Q2가 `ix_magic_link_tokens_email_lower_created`를 타는지 `EXPLAIN`(빈 테이블이라 지금은 의미 없음) — D8
   3. AU-01·AU-02 Application 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume` (협업, `TODO(human)`). 메일 발송 추상화(개발: 콘솔·파일), 백그라운드 발송
+     - D5-2: AU-01 뼈대 ✅(핸들러 본문 `TODO(human)` 남음, 위 "재개 지점"), AU-02 consume 미착수
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. `WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함
   6. 나머지 D5 API(장소·북마크·리뷰·좋아요)
-  - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — D12
+  - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
      - 통합 테스트 실행 조건: Docker Desktop(엔진)만 켜져 있으면 됨. compose `db`는 불필요
@@ -207,9 +216,39 @@ Claude가 작성: erd.md §3 그룹 최소 1명 행, compose·`.env.example`, �
 
 커밋: `b7909e1`(progress) · `a9ce0d9`(JWT 골격) · `c1f8539`(인증 결정·erd 설계) · 이 세션 마무리 커밋 2개(마이그레이션, progress·learning-log)
 Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정, 서명 키 생성·설정, 보안 조사, erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정, `MagicLinkToken`·Configuration·`AddMagicLinkTokens`·CHECK 테스트 3개 — 모두 사용자 요청. 사용자 작성: `BuildClaims`(`sub`만, `jti` 보류)
-미답 질문(다음 세션): Q1을 SELECT 후 UPDATE로 나누면? / `TryParse`가 실제로 막는 경우는?
+미답 질문(다음 세션): ~~Q1을 SELECT 후 UPDATE로 나누면?~~ ✅ D5-2: 동시 2요청 모두 미커밋 NULL을 읽어 토큰 2개(TOCTOU). 한 문장 Q1은 행 잠금 대기 후 최신 버전으로 WHERE 재검사 → 0행 → 앱이 0행을 "무효 링크"로 처리해야 함. 꼭 나누면 `SELECT ... FOR UPDATE`(같은 트랜잭션, 잠금 동안 외부 I/O 금지) / ~~`TryParse`가 실제로 막는 경우는?~~ ✅ D5-2: 위조 sub는 서명 검증에서 401(엔드포인트 미도달 — 인증 미들웨어는 익명 표시, 인가 Fallback이 Challenge). 서명 통과 + 비Guid sub는 발급기 버그·키 공유 설정 실수뿐이고, 키 유출이면 공격자는 올바른 Guid를 넣어 TryParse가 못 막음. 읽는 쪽 실수(`ClaimTypes.NameIdentifier` + `MapInboundClaims = false` → null)는 TryParse→401이면 정상 회원 전원 401로 버그를 숨김
+
+### 2026-10-20 (D5-2)
+1. 미답 질문 1(Q1 분리): 동시 2요청 모두 미커밋 NULL을 읽어 토큰 2개(TOCTOU). 한 문장 조건부 UPDATE는 행 잠금 대기 후 최신 버전으로 WHERE 재검사(EvalPlanQual) → 0행. 앱은 0행을 "무효 링크"로 처리해야 함. 꼭 나누면 `SELECT ... FOR UPDATE`. 사용자가 질문 1~5 중 3·4·5를 스스로 답함
+2. 미답 질문 2(`TryParse`): 위조 sub는 서명 검증에서 끝남(인증 미들웨어는 익명 표시만, 인가 Fallback이 Challenge → 401). 서명 통과 + 비Guid sub = 서버 버그 → 예외·500(사용자 결정, "확정된 결정 (D5)"). `BuildClaims` 주석 사용자 수정. 2a(서명 주체 = `AccessTokenIssuer`, JwtBearer는 검증만)·2b(`ClaimTypes.NameIdentifier` → null) 힌트 3단계까지
+3. AU-01 계층 설계: 계약은 쓰는 쪽(Application)에 — 처음 답 `List<IMagicLinkToken>`(데이터)·`IEmailSender`→Api는 오답, 힌트 3단계(시그니처) 후 "핸들러가 구현 클래스를 받으면 DIP가 깨진다"를 사용자가 설명. CS F1 약점과 같은 패턴 → 퀴즈로 재확인 필요
+4. 결정: 백그라운드 발송 B안(`Channel` + `BackgroundService`), 이메일 형식 오류는 400(DB를 안 봐 가입 여부 비노출 — 사용자 답)
+5. 빌드 실패 `CS0012`(Api가 Domain `Result`를 못 봄) = ADR-001 결정 3이 예상한 누출 → A안 `Nook.SharedKernel`(Result·Error·ErrorType) 분리. Domain은 더 이상 leaf가 아님(→ SharedKernel)
+6. 질문: SharedKernel = AOP? → 아님(AOP는 동작을 끼워 넣기·실행 시점, Shared Kernel은 타입 위치·참조 구조). Infrastructure가 별도 프로세스? → 아님(프로젝트 = DLL, Api 프로세스에 로드, 워커는 `IHostedService` 싱글턴, 같은 메모리라 Channel이 작동·재시작 시 유실). 큐에 넣는 건 Application(`IMagicLinkMailQueue` 계약만 앎), 방법은 Infrastructure
+7. 검증: `dotnet build` 오류 0(경고 3 = `TODO(human)` 미사용 매개변수), `dotnet test` Domain 84·Algorithms 1 통과, Integration 21 Docker 꺼짐으로 미실행
+
+커밋: 없음(작업 트리에 남김 — 다음 세션 TODO 구현 후 커밋)
+Claude가 작성: `Nook.SharedKernel` 프로젝트·`Result`/`Error` 이동·using 일괄 수정·참조 추가, Application `IMagicLinkTokenStore`·`IMagicLinkMailQueue`·`MagicLinkPolicy`·`MagicLinkSecret`·`RequestMagicLink`(뼈대), Infrastructure `MagicLinkTokenStore`(Q2 SQL·INSERT)·`MagicLinkOptions`·`ChannelMagicLinkMailQueue`·`MagicLinkMailWorker`·`IEmailTransport`·`ConsoleEmailTransport`·DI 등록·`FrameworkReference`, Api `AuthController`·`Program.cs` 등록·`appsettings.Development.json` `MagicLink`. 결정은 사용자: B안, 형식 오류 400, SharedKernel A안, sub 형식 위반 = 500
+ADR 권장(작성은 사용자): ADR-001 결정 3 보완 — "Result·Error는 SharedKernel로, 엔티티 차단은 유지"
+미답 질문(다음 세션): `mail.Enqueue`를 INSERT 앞에 두면 무슨 일이? / Q2-INSERT 사이 동시 요청(TOCTOU) 허용할지
+
+### 2026-10-20 (D5-3)
+1. AU-01 `HandleAsync` 구현(사용자). 리뷰에서 나온 것: `_ = TryGetValue` 결과 버림 → 형식 오류가 통과, `AddAsync` 미`await`(fire-and-forget이면 INSERT→Enqueue 순서가 보장 안 됨), 끝의 `throw` 잔존, 형식 오류를 `throw`로 처리(→ Result 실패여야 400), `Result.Failure(error)` 앞 `return` 누락(경고 없이 컴파일됨)
+2. CS8604가 남은 이유: `[NotNullWhen]`은 메서드 **반환값**에 묶임 — `error != null` 검사로는 `email`을 추론 못 함 → `if (!TryGetValue(...)) return error;`
+3. TOCTOU 타임라인: 2개 발급 상태에서 A·B 동시 COUNT=2 → 둘 다 통과 → 4개. READ COMMITTED 트랜잭션만으로는 못 막음(미커밋 INSERT가 안 보임). 한도는 여러 행 조건이라 CHECK로 이중화 불가 — `MagicLinkPolicy`가 Application에 있는 이유
+4. 사용자 지적: A안의 진짜 위험은 DB가 아니라 메일 발송(동시 100요청 → 100통). 보완 후보 A1~A4, 이메일을 바꿔 가는 공격은 IP 기준 제한이 별도로 필요
+5. 사용자 조사: 실무 = IP 기준 입구 제한 + 계정 한도는 DB/Redis. "단일 인스턴스라 노드별 집계 무관"은 A1·A2 모두에 해당해 둘을 가르는 근거가 아님 → 가르는 기준은 막는 위치(피해 지점 vs 입구)·생산자 추가 시·본문 필요 여부. 발송 지점 집계가 드문 이유 = 실무 발송은 다중 소비자라 무경합 전제가 없음. A3만으로 단일 IP 폭주는 막히고 남는 건 분산 공격 → ② A3 + Q2 + A1 결정
+6. 일정 변경 채택 → `개발_프로세스.md`·`progress.md`·`schedule-option-portfolio-first.md` 반영
+7. 핸들러 단위 테스트 7개. 사용자 예측: 전체 결과 ✗(시계 어긋남으로 `UsesSingleNow` 실패 예상 — 핸들러는 주입된 시계만 쓰므로 고정 시계에선 안 어긋남), `>=`→`>` 변이 ✓(3개 상태 테스트만 빨간불). 구멍 발견: 고정 시계는 "시각 두 번 읽기"를 못 잡음 → 부를 때마다 1초 가는 `TickingTimeProvider`, 변이(INSERT 전 `GetUtcNow()` 재호출)로 빨간불 확인
+8. 손 테스트(Postman, 로컬 compose DB): 같은 이메일 5회 → 링크 3번·행 3개, 예측 일치
+9. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 113개 통과. 커밋 1은 별도 worktree에서 단독 빌드·테스트 106개 통과 확인
+
+커밋: `b55f030` SharedKernel 리팩터링 · `c11794a` AU-01 · docs(일정 변경·D5-3 기록)
+Claude가 작성: `RequestMagicLink.cs` Q2 속도 제한(사용자 요청)·`HandleAsync` 리팩터링(사용자 요청), `Nook.Application.Tests` 프로젝트·핸들러 테스트, `Nook.Api.http` 요청 2개, 일정 변경 문서 반영(FE·DEP 절, 운영 반영 게이트, 배포 이후 규칙)
 
 ## 체크리스트
+
+진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
 
 ### 1주차 — 설계와 정합성
 - [x] D1 도메인 분석·유스케이스·솔루션 골격·ADR-001
@@ -218,24 +257,32 @@ Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Prog
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
 - [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001
-- [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01
+- [ ] FE 프론트 연결(원본 Next.js 재사용, 로컬 3흐름 동작)
+- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
+- [ ] README 최소판(D14 일부)
+- [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
 
 ### 2주차 — 대용량·성능·배포
-- [ ] D8 대용량 시드·인덱스·Keyset — incident 002, 003
-- [ ] D9 쿼리 튜닝·N+1·카운터 전략
-- [ ] D10 k6 부하 테스트·커넥션 풀 — incident 004
-- [ ] D11 LRU 캐시·Token Bucket — dsa/02, 03
-- [ ] D12 Docker·CI/CD·HTTPS 배포·ADR-003
+- [ ] D8 대용량 시드·인덱스·Keyset — incident 002, 003 · 🚀 운영 DB에 `CONCURRENTLY`
+- [ ] D9 쿼리 튜닝·N+1·카운터 전략 · 🚀 운영 반영
+- [ ] D10 k6 부하 테스트·커넥션 풀 — incident 004 · 🚀 풀 설정 반영
+- [ ] D11 LRU 캐시·Token Bucket — dsa/02, 03 · 🚀 compose에 redis 추가
+- ~~D12 Docker·CI/CD·HTTPS 배포·ADR-003~~ → DEP로 이동
 - [ ] D13 운영 검증·장애 시나리오
 - [ ] D14 README·회고
 
 ## 미결 결정
-- **일정 변경안(포트폴리오 우선: D6 뒤 D12 배포 앞당김 + 프론트 연결) 보류 중** — 기존 순서로 진행하다가 결정. 근거·대화 내용은 `docs/schedule-option-portfolio-first.md`. 재산정 시점 D5 종료 후
+- ~~일정 변경안 보류~~ → 채택(2026-10-20, "확정된 결정 (D5)")
+- ~~매직 링크 TOCTOU 보완 조합~~ → "확정된 결정 (D5)" ② A3 + Q2 + A1
+- 프론트 호스팅 위치: 같은 EC2(Caddy가 Next.js도 프록시) vs Vercel 등 별도 — FE 끝날 때. 별도면 CORS·쿠키 도메인 영향
+- 프론트 연결 범위: 데모 3흐름 + 로그인만 vs 원본 화면 전체 — FE 시작 전
+- 운영 메일 발송기 선택(예: AWS SES — 샌드박스는 검증된 수신자만 발송 가능, 데모 계정 운영과 연결) — DEP 5일째
+- 운영 DB: EC2 안 postgres 컨테이너(compose) vs RDS — DEP 2일째. 컨테이너면 백업·디스크 책임이 본인
 - 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
 - 북마크 API: 토글 vs PUT/DELETE — D5. R-BM-02 A안(커밋 순서, 클릭 순서는 클라이언트 책임) → 멱등한 PUT/DELETE 쪽으로 기움. likes(LK-01)도 같은 구조
-- 배포 대상(단일 VM vs Azure vs Fly.io) — D12 전까지
+- ~~배포 대상(단일 VM vs Azure vs Fly.io)~~ → AWS EC2 단일 인스턴스(2026-10-20 사용자 결정)
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
 - 이메일 소문자 변환 일치: PostgreSQL `lower()`(DB `LC_CTYPE` 따름) vs C# `ToLowerInvariant()` — 비ASCII에서 다를 수 있음. DB를 띄운 뒤 `SELECT lower('ÄÖ')`로 확인
@@ -247,11 +294,20 @@ Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Prog
 - 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
-- ADR 번호: 003(마이그레이션·배포, D12)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
+- ADR 번호: 003(마이그레이션·배포, DEP 3일째)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 범위 = 스키마 차이만(D3-2 사용자 결정, 근거 erd.md §4). 닉네임 UNIQUE는 포함. 도메인 규칙 차이(리뷰 길이 trim 후 계산, 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC)를 어디에 남길지 미정 — `domain.md`에 이미 있으면 정리 불필요
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
 
 ## 확정된 결정 (D5)
+- **일정 변경(포트폴리오 우선) 채택** (2026-10-20 사용자 결정): D5 → D6 → FE → DEP(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 원래 할 일은 빠짐없이 배포 후 진행하고, 각 Day 게이트에 "🚀 운영 반영"을 붙인다. 근거 `docs/schedule-option-portfolio-first.md`
+- 매직 링크 TOCTOU(Q2 COUNT ↔ INSERT 사이 동시 요청): Q2 경합은 허용하고 **② A3 + Q2 + A1**으로 막는다(2026-10-20 사용자 결정). 막을 대상 = 피해자 받은편지함 + 발송 도메인 평판
+  - A3 IP 기준 입구 제한(`RateLimiter`, 본문 불필요) — 표준 방어, 단일 IP 폭주를 막음
+  - Q2 이메일 기준 한도(DB) — 순차 요청을 막음
+  - A1 워커에서 수신자별 발송 상한 — 분산(여러 IP) 동시 공격으로 Q2를 통과한 몫을 발송 지점에서 막음. 상한값은 `MagicLinkPolicy`에서 가져온다, 버린 건수는 로그(이메일 원문 금지)
+  - 전제: **단일 인스턴스·단일 소비자**(`SingleReader`). 소비자가 여러 개가 되면 A1의 무경합 성질이 사라짐 → 공유 저장소(Redis) 또는 B(advisory lock)로 이전 — D11 운영 반영에서 재검토
+  - 남는 것: Q2를 통과했지만 메일이 안 나간 토큰 행(원문은 어디에도 없음) — 만료 후 정리 배치가 지움
+  - 구현: DEP 5일째(A3·A1), 측정: 같은 이메일 동시 100요청 → 실제 발송 수 ≤ 상한
+- 매직 링크 요청 순서: 형식 검사 → Q2 → 토큰 생성 → INSERT → Enqueue. INSERT를 먼저 하는 이유 = 저장 전에 메일이 도착하면 링크를 눌러도 인증 실패(사용자 답)
 - 인증: 매직 링크(원본과 같은 패스워드리스) + **API 자체 발급** Access 토큰(HS256), **Refresh 없음**, 수명 60분. 로그아웃(AU-03)은 클라이언트가 토큰을 버린다
 - 탈취된 토큰은 만료(최대 1시간)까지 유효 — 수용. 필요해지면 refresh 또는 `jti` 차단 목록. 탈퇴 회원 토큰은 "DB에 없는 회원이면 거절"(GR-01 3a)로 막힌다
 - 지킬 것: `sub` = 사용자 ID(이메일·닉네임 아님), 토큰 발급은 "본인 확인 완료" 뒤 `AccessTokenIssuer` 한 곳. 개인정보는 클레임에 넣지 않는다
@@ -259,6 +315,11 @@ Claude가 작성: `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Prog
 - 가입 여부 노출 방지: 메일 요청은 항상 같은 응답(202), 속도 제한에 걸려도 같은 응답. AU-01의 "이미 가입된 이메일" 안내 삭제
 - 매직 링크: 별도 테이블 `magic_link_tokens`(erd.md). 해시 저장, 15분 유효, 이메일별 15분 3회, 만료 후 1일 보관, POST로 소모, 소모와 회원 생성은 한 트랜잭션
 - 로그인 수단 테이블(`provider, provider_subject`) 분리는 소셜 로그인 도입 때(지금은 이메일 하나)
+- 메일 백그라운드 발송: B안 `Channel` + `BackgroundService`(같은 프로세스). 재시작 시 유실 수용(15분 일회용, 회원 재요청). outbox(C안)는 필요해질 때. 운영 발송기 미등록 시 앱 시작 실패(콘솔 발송기는 Development만) — DEP 5일째에 실제 발송기
+- 매직 링크 요청: 이메일 형식 오류만 400(DB를 보지 않아 가입 여부 비노출), 그 밖에는 속도 제한 포함 항상 202
+- `Result`·`Error`·`ErrorType`은 `Nook.SharedKernel`(Domain·Application·Api·테스트가 명시 참조). 전이 참조 차단(엔티티 차단)은 유지. Application 공개 메서드는 Domain 엔티티를 노출하지 않는다
+- 링크는 설정값 `MagicLink:LinkBaseUrl` + `#token=`(프래그먼트 — 서버·프록시 로그에 안 남음)
+- sub 읽기는 한 곳(`User.GetUserId()` 류)에 모은다. sub 없음·비Guid는 401이 아니라 **예외 → 500 + 에러 로그**(서명된 클레임의 형식 위반 = 서버 버그, D2 Result/예외 기준). 로그에 토큰 원문 금지(사유·경로만). D5-2 사용자 결정
 
 ## 확정된 결정 (D4)
 - 테스트 코드는 대부분 Claude 작성, 사용자는 결과 예측·빨간불 확인(시간 사정, D4-1 사용자 요청)
