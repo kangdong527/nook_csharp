@@ -147,11 +147,11 @@
 ---
 
 ### D5-1 (2026-10-18) — 인증 방식 결정, JWT 검증 골격, magic_link_tokens
-- 배운 것:
-  1. 
-  2. 
-  3. 
-- 막혔던 것 / 어떻게 풀었나:
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 매직 링크 + API가 직접 발급하는 Access 토큰(HS256, 60분, Refresh 없음). 매직 링크는 users가 아닌 **별도 테이블** — 가입자는 링크를 요청할 때 닉네임이 없어 users 행을 만들 수 없기 때문. 메일 요청은 가입 여부·속도 제한과 무관하게 항상 202, 개발 전용 토큰 발급 엔드포인트는 운영 노출 사고 패턴이라 기각
+  2. 질문으로 얻은 것: "상태 없는 JWT만으로 링크를 처리하면?" → 가능하지만 1회 사용·무효화·속도 제한을 잃고, 메모리 캐시로 대신하면 재시작·다중 서버에서 깨진다(상태를 없앤 게 아니라 옮긴 것). 마이그레이션 파일 3개의 역할: `.cs`(변경분, 손으로 고침) / `.Designer.cs`(그 시점 모델 사진) / `ModelSnapshot.cs`(최신 사진 — `migrations add`가 비교하는 대상은 DB가 아니라 이것). 손으로 넣은 SQL(식 인덱스)은 어느 사진에도 없다
+  3. 핵심 개념: 인가는 **기본 잠금**(Fallback 정책 `RequireAuthenticatedUser`, 공개만 `[AllowAnonymous]`) — 새 엔드포인트가 실수로 열리지 않는다. 토큰은 DB에 **해시만** 저장(256비트 난수라 salt·느린 해시 불필요 — 판단 기준은 입력의 엔트로피). `sub`는 이메일·닉네임이 아닌 사용자 ID — 바뀌는 값을 식별자로 쓰지 않는다
+- 막혔던 것 / 어떻게 풀었나: Api는 Domain을 못 봐서(ADR-001 결정 3) 발급기에 `UserId`를 썼다가 빌드 실패 → `Guid`로. `openssl`이 PowerShell에 없어 서명 키 생성 실패 → `RandomNumberGenerator`로 대체. 실행 중인 Api가 DLL을 잠가 마이그레이션 빌드 실패 → 서버 종료 후 진행
 - Claude가 대신 작성한 부분 (있다면, 이유와 함께): `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정(JwtBearer·Fallback 정책·`IncludeErrorDetails`), JwtBearer 패키지 추가, 서명 키 생성·user-secrets 설정(`openssl` 실패 후 대체), 보안 조사(OWASP·RFC 8725), erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정, `MagicLinkToken`·`MagicLinkTokenConfiguration`·`AddMagicLinkTokens` 마이그레이션(식 인덱스 SQL)·로컬 DB 적용, `CheckConstraintTests` CHECK 3개, `progress.md` 갱신 — 모두 사용자 요청. 결정은 사용자: 매직 링크, API 자체 발급, Access만(60분), 지킬 것(`sub` = 사용자 ID, 발급 한 곳), Fallback·`IncludeErrorDetails` 적용, 별도 테이블(근거: 가입자는 users 행이 없다), AU-01 응답 통일, 정책값(15분·3회·1일), 개발 토큰 엔드포인트 기각. 사용자 작성: `BuildClaims`
 - 내일 확인할 것:
   - AU-01·AU-02 Application 유스케이스 + `/auth/magic-link`·`/auth/magic-link/consume` (`TODO(human)`)
@@ -160,11 +160,11 @@
 ---
 
 ### D5-2 (2026-10-20) — 동시 소모·TryParse 정리, AU-01 계층 설계와 SharedKernel
-- 배운 것:
-  1. 
-  2. 
-  3. 
-- 막혔던 것 / 어떻게 풀었나:
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 메일은 백그라운드 발송 B안(`Channel` + `BackgroundService`, 재시작 시 유실 수용). 이메일 형식 오류만 400 — DB를 보지 않고 판단하니 가입 여부가 드러나지 않는다. `Result`·`Error`는 `Nook.SharedKernel`로 분리(A안). 서명은 통과했는데 `sub`가 Guid가 아니면 401이 아니라 **500 + 에러 로그** — 서명된 클레임의 형식 위반은 사용자 잘못이 아니라 서버 버그
+  2. 질문으로 얻은 것: 소모(Q1)를 `SELECT` 후 `UPDATE` 두 문장으로 나누면 동시 2요청이 둘 다 미소모를 읽어 토큰이 2번 쓰인다(TOCTOU). 한 문장 조건부 UPDATE는 행 잠금을 기다린 뒤 **최신 버전으로 WHERE를 다시 검사**해 0행 → 앱은 0행을 "무효 링크"로 처리. 위조 `sub`는 엔드포인트까지 오지 못한다(서명 검증 실패 → 인가 Fallback이 401). SharedKernel ≠ AOP(AOP는 실행 시점에 동작을 끼워 넣기, SharedKernel은 타입의 위치·참조 구조). Infrastructure는 별도 프로세스가 아니라 Api 프로세스에 로드되는 DLL — 그래서 같은 메모리의 Channel이 동작하고, 재시작하면 유실된다
+  3. 핵심 개념: **계약은 쓰는 쪽(Application)에 둔다**(DIP) — 핸들러는 `IMagicLinkTokenStore`·`IMagicLinkMailQueue`만 알고, 구현은 Infrastructure. 핸들러가 구현 클래스를 받으면 의존 방향이 뒤집힌다. 같은 싱글턴을 두 이름(인터페이스·구현)으로 꺼내야 핸들러와 워커가 같은 큐를 본다
+- 막혔던 것 / 어떻게 풀었나: AU-01 계약 위치를 처음에 `List<IMagicLinkToken>`(데이터)·`IEmailSender`를 Api에 두는 것으로 답함 → 힌트 3단계(시그니처) 후 "핸들러가 구현 클래스를 받으면 DIP가 깨진다"를 스스로 설명(CS F1 약점과 같은 패턴). 빌드 실패 `CS0012`(Api가 Domain의 `Result`를 못 봄) → ADR-001이 예상한 누출 → SharedKernel 분리
 - Claude가 대신 작성한 부분 (있다면, 이유와 함께): `Nook.SharedKernel` 분리(Result·Error 이동, using·참조 수정 — 기계적 리팩터링), AU-01 뼈대 전체(Application 계약 2개·`MagicLinkPolicy`·`MagicLinkSecret`·핸들러 껍데기, Infrastructure 저장소·Channel 큐·워커·콘솔 발송기·DI, Api `AuthController`·등록·설정) — 협업 영역의 뼈대, 핸들러 본문은 `TODO(human)`. 결정은 사용자: 백그라운드 B안, 형식 오류 400, SharedKernel A안, sub 형식 위반 = 500
 - 내일 확인할 것:
   - `RequestMagicLink.HandleAsync` `TODO(human)` 구현 → 테스트 → 손 테스트 → 커밋
@@ -173,14 +173,14 @@
 ---
 
 ### D5-3 (2026-10-20) — AU-01 핸들러, 매직 링크 TOCTOU와 메일 폭탄 방어, 일정 변경
-- 배운 것:
-  1. 
-  2. 
-  3. 
-- 막혔던 것 / 어떻게 풀었나:
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 요청 순서 = 형식 검사 → Q2 → 토큰 생성 → **INSERT → Enqueue**(반대면 저장 전에 메일이 도착해 링크가 실패할 수 있다). TOCTOU는 허용하되 방어는 **② A3(IP 입구 제한) + Q2(이메일 DB 한도) + A1(워커 수신자별 상한)** — 막을 대상은 피해자 받은편지함과 발송 도메인 평판 둘 다. A1은 단일 소비자 전제라 소비자가 늘면 Redis·advisory lock으로 옮긴다. 일정 변경 채택: D6 → 프론트 연결 → 배포 1주(EC2·GitHub Actions)
+  2. 질문으로 얻은 것: 동시 요청 2개가 COUNT=2를 함께 보고 둘 다 INSERT → 4개(타임라인). READ COMMITTED 트랜잭션으로 감싸도 상대의 미커밋 INSERT가 안 보여서 못 막는다. "한 이메일 15분 3개"는 여러 행 조건이라 CHECK로 이중화할 수 없다 — 그래서 `MagicLinkPolicy`가 Domain이 아닌 Application에 있다. "단일 인스턴스라 괜찮다"는 A1·A2 둘 다에 해당해 둘을 가르는 근거가 아니다. 발송 지점에서 세는 방식이 실무에서 드문 이유 = 실무 발송은 소비자가 여러 개라 무경합 전제가 없다. A3만으로 단일 IP 폭주는 막히고, 남는 건 여러 IP의 분산 공격
+  3. 핵심 개념: `[NotNullWhen]`은 메서드 **반환값**에 묶인 약속 — `error != null`을 따로 검사해도 컴파일러는 `email`을 추론하지 못하니 `if (!TryGetValue(...)) return error;`로 분기한다. 만들고 버린 반환값(`Result.Failure(error);`, `return` 없음)은 경고 없이 컴파일된다 → 테스트가 필요한 이유. 고정 시계는 "시각을 두 번 읽는 실수"를 못 잡는다 → 부를 때마다 움직이는 시계. 경계 테스트는 양쪽(2개·3개)을 다 둬야 한쪽 방향 변이를 모두 잡는다
+- 막혔던 것 / 어떻게 풀었나: 첫 구현에서 `_ =`로 형식 검사 결과를 버림·`AddAsync` 미`await`·형식 오류를 `throw`로 처리 → 리뷰 질문으로 수정. 예측 ✗: "Fake 시계와 실제 시각이 어긋나 테스트가 실패한다" — 핸들러는 주입받은 시계 말고는 시각을 얻을 방법이 없어 어긋날 수 없었다. 어긋날 수 있는 건 같은 시계를 여러 번 부를 때뿐
 - Claude가 대신 작성한 부분 (있다면, 이유와 함께): `HandleAsync`의 Q2 속도 제한·리팩터링(사용자 요청 — 본문 초안·INSERT→Enqueue 순서는 사용자), `Nook.Application.Tests`·핸들러 테스트 7개(D4부터 테스트는 Claude 작성, 사용자는 예측), 일정 변경 문서 반영. 결정은 사용자: 일정 변경(D6 → FE → DEP 1주, EC2·GitHub Actions), TOCTOU 방어 ② A3 + Q2 + A1
 - 내일 확인할 것:
   - AU-02 consume
-  - 예측이 빗나간 것: "Fake 시계와 실제 시각이 어긋난다" — 왜 안 어긋났는지 한 줄로
+  - A1·A3 미구현(DEP 5일째) — 지금은 Q2만 동작
 
 ---
