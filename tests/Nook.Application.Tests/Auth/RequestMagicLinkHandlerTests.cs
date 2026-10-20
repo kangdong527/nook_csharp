@@ -113,6 +113,13 @@ public class RequestMagicLinkHandlerTests
             Added.Add(new AddedToken(tokenHash, email, createdAt, expiresAt));
             return Task.CompletedTask;
         }
+
+        // AU-01은 소모·무효화를 부르지 않는다. 불리면 핸들러가 잘못된 것이다.
+        public Task<Email?> ConsumeAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task RevokeRemainingAsync(Email email, DateTimeOffset now, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeMailQueue : IMagicLinkMailQueue

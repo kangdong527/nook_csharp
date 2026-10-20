@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nook.Api\Nook.Api.csproj" />
+    <ProjectReference Include="..\..\src\Nook.Application\Nook.Application.csproj" />
     <ProjectReference Include="..\..\src\Nook.Infrastructure\Nook.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Nook.Domain\Nook.Domain.csproj" />
     <ProjectReference Include="..\..\src\Nook.SharedKernel\Nook.SharedKernel.csproj" />

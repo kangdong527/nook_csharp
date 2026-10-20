@@ -22,6 +22,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 // 유스케이스(Application). 저장소가 Scoped라 같은 수명으로 둔다.
 builder.Services.AddScoped<RequestMagicLinkHandler>();
+builder.Services.AddScoped<ConsumeMagicLinkHandler>();
 
 // 인증: API가 직접 서명한 Access 토큰(HS256)만 받는다(D5 결정)
 builder.Services.AddOptions<JwtOptions>()

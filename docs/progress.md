@@ -9,7 +9,8 @@
   3. ~~`dotnet test` 전체~~ ✅ 113개 통과(Algorithms 1·Domain 84·Application 7·Integration 21)
   4. ~~핸들러 단위 테스트·손 테스트~~ ✅ `tests/Nook.Application.Tests`(Claude 작성). 손 테스트: 같은 이메일 5회 → 링크 3번·행 3개(사용자 예측 일치)
   5. ~~커밋~~ ✅ `b55f030` SharedKernel · `c11794a` AU-01 · docs 커밋
-  6. **다음: AU-02 consume** (`POST /auth/magic-link/consume`) — 조건부 UPDATE 한 문장으로 소모(D5-2 질문 1 결론, 0행 = 무효 링크), 소모와 회원 생성은 한 트랜잭션, 성공 시 `AccessTokenIssuer`로 발급. 확인할 것: Q2를 통과했지만 메일이 안 나간 토큰 행이 consume에서 문제가 되는가
+  6. ~~AU-02 consume~~ ✅ 핸들러(사용자 초안 + Claude 수정·리팩터링, 사용자 요청), `IUnitOfWork`·`IUserRepository`·Q1·Q3·컨트롤러(Claude 뼈대), 통합 테스트 11개(Claude 작성, 사용자 예측 2/2 일치). 전체 124개 통과
+  7. **다음: `WebApplicationFactory` API 테스트 기반**(D5 게이트) — 401·Fallback 정책, AU-01·AU-02 HTTP 흐름(202·400·200 needsNickname·200 accessToken·409). 그다음 PL-01 → BM → LK → RV
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -307,6 +308,11 @@ Claude가 작성: `RequestMagicLink.cs` Q2 속도 제한(사용자 요청)·`Han
   - 전제: **단일 인스턴스·단일 소비자**(`SingleReader`). 소비자가 여러 개가 되면 A1의 무경합 성질이 사라짐 → 공유 저장소(Redis) 또는 B(advisory lock)로 이전 — D11 운영 반영에서 재검토
   - 남는 것: Q2를 통과했지만 메일이 안 나간 토큰 행(원문은 어디에도 없음) — 만료 후 정리 배치가 지움
   - 구현: DEP 5일째(A3·A1), 측정: 같은 이메일 동시 100요청 → 실제 발송 수 ≤ 상한
+- AU-02 소모(2026-10-20 사용자 결정)
+  - 트랜잭션 경계는 핸들러가 쥔다((가) — `IUnitOfWork.BeginAsync` → `ITransaction.CommitAsync`, 커밋 없이 Dispose = 롤백). 근거: "회원이 없으면 닉네임 필요"는 업무 규칙이라 Application. D6 그룹 합류도 같은 방식
+  - 응답: 성공 200 `{accessToken}` · 닉네임 필요 200 `{needsNickname: true}`(오류가 아니라 가입의 다음 단계) · 무효 링크 400 `Auth.InvalidLink`(없음·만료·사용됨 구분 안 함, 401은 프론트의 토큰 만료 공통 처리와 겹치고 ErrorType에 Unauthorized 없음) · 닉네임 형식 400 · 닉네임 중복 409
+  - 닉네임은 "회원 없음 + 닉네임 있음"일 때만 `Nickname.Create`로 검사(Q1 전에는 가입자인지 알 수 없다 — 이메일은 Q1 RETURNING에서 처음 나옴). 기존 회원의 nickname은 쓰지 않는다. 사용자 입력에 `From` 금지(빈 값만 검사)
+  - 같은 이메일의 서로 다른 링크 동시 소모 → 둘 다 "회원 없음" → 둘째는 실패 → **(a) 500 그대로 수용**(같은 사람, 한쪽은 로그인됨, 데이터 손상 없음). 예상(미측정): UNIQUE 위반이 아니라 Q3가 상대가 잠근 토큰 행을 기다려 교착(40P01) — **D6 재현 후보**
 - 매직 링크 요청 순서: 형식 검사 → Q2 → 토큰 생성 → INSERT → Enqueue. INSERT를 먼저 하는 이유 = 저장 전에 메일이 도착하면 링크를 눌러도 인증 실패(사용자 답)
 - 인증: 매직 링크(원본과 같은 패스워드리스) + **API 자체 발급** Access 토큰(HS256), **Refresh 없음**, 수명 60분. 로그아웃(AU-03)은 클라이언트가 토큰을 버린다
 - 탈취된 토큰은 만료(최대 1시간)까지 유효 — 수용. 필요해지면 refresh 또는 `jti` 차단 목록. 탈퇴 회원 토큰은 "DB에 없는 회원이면 거절"(GR-01 3a)로 막힌다
