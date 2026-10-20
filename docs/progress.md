@@ -1,22 +1,20 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-20, D5-3). 브랜치 `feat/d5-auth`, **D5-2·D5-3 변경분 미커밋**(작업 트리에 있음). 인증 방식·JWT 골격·`magic_link_tokens`·AU-01 핸들러 완료. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 5일 지연
+- 현재: **D5 진행 중** (2026-10-20, D5-4 종료). 브랜치 `feat/d5-auth`, 작업 트리 깨끗함(미푸시). 인증(AU-01 요청·AU-02 소모, JWT 발급·검증) 완료, D5 나머지 API(장소·북마크·좋아요·리뷰) 미착수. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 5일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
-  1. ~~AU-01 `HandleAsync` 구현~~ ✅ 사용자 작성(형식 검사·INSERT→Enqueue 순서·주석) + Claude 작성(Q2 속도 제한, 사용자 요청 리팩터링: `TryGetValue` 반환값 분기, `IsRateLimitedAsync` 분리). 빌드 경고 0
-  2. ~~TOCTOU 결정~~ ✅ ② A3 + Q2 + A1(확정된 결정 D5). 구현은 DEP 5일째. ADR 권장(작성은 사용자): 메일 폭탄 방어 겹과 단일 소비자 전제
-  3. ~~`dotnet test` 전체~~ ✅ 113개 통과(Algorithms 1·Domain 84·Application 7·Integration 21)
-  4. ~~핸들러 단위 테스트·손 테스트~~ ✅ `tests/Nook.Application.Tests`(Claude 작성). 손 테스트: 같은 이메일 5회 → 링크 3번·행 3개(사용자 예측 일치)
-  5. ~~커밋~~ ✅ `b55f030` SharedKernel · `c11794a` AU-01 · docs 커밋
-  6. ~~AU-02 consume~~ ✅ 핸들러(사용자 초안 + Claude 수정·리팩터링, 사용자 요청), `IUnitOfWork`·`IUserRepository`·Q1·Q3·컨트롤러(Claude 뼈대), 통합 테스트 11개(Claude 작성, 사용자 예측 2/2 일치). 전체 124개 통과
-  7. **다음: `WebApplicationFactory` API 테스트 기반**(D5 게이트) — 401·Fallback 정책, AU-01·AU-02 HTTP 흐름(202·400·200 needsNickname·200 accessToken·409). 그다음 PL-01 → BM → LK → RV
+  0. Docker Desktop을 먼저 켠다(D5-4에 꺼져 통합 테스트 전체가 `DockerUnavailableException`으로 실패했음 — 코드 문제 아님). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
+  1. (선택) 손 테스트: `dotnet run` → `POST /auth/magic-link` → 콘솔 링크의 토큰으로 `POST /auth/magic-link/consume`(닉네임 없이 → 200 needsNickname, 닉네임과 함께 → 200 accessToken) → `GET /weatherforecast` 헤더 없음 401 / `Authorization: Bearer <토큰>` 200 / 토큰 변조 401
+  2. **`WebApplicationFactory` API 테스트 기반**(D5 게이트) — 401·Fallback 정책, AU-01·AU-02 HTTP 흐름(202·400·200 needsNickname·200 accessToken·409). 테스트는 Claude 작성, 사용자 예측
+  3. 그다음 PL-01 → BM-01·02 → LK-01 → RV-01. API 응답 형태는 원본 `C:\Projects
+ook\src\lib\store.ts`가 기대하는 모양과 대조(FE가 D6 다음)
+  4. 사용자: `docs/learning-log.md` D5-4 "배운 것" 검토(Claude가 세션 기록으로 초안), ADR 권장 2건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
      - 이월: Q2가 `ix_magic_link_tokens_email_lower_created`를 타는지 `EXPLAIN`(빈 테이블이라 지금은 의미 없음) — D8
-  3. AU-01·AU-02 Application 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume` (협업, `TODO(human)`). 메일 발송 추상화(개발: 콘솔·파일), 백그라운드 발송
-     - D5-2: AU-01 뼈대 ✅(핸들러 본문 `TODO(human)` 남음, 위 "재개 지점"), AU-02 consume 미착수
+  3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. `WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함
   6. 나머지 D5 API(장소·북마크·리뷰·좋아요)
@@ -246,6 +244,20 @@ ADR 권장(작성은 사용자): ADR-001 결정 3 보완 — "Result·Error는 S
 
 커밋: `b55f030` SharedKernel 리팩터링 · `c11794a` AU-01 · docs(일정 변경·D5-3 기록)
 Claude가 작성: `RequestMagicLink.cs` Q2 속도 제한(사용자 요청)·`HandleAsync` 리팩터링(사용자 요청), `Nook.Application.Tests` 프로젝트·핸들러 테스트, `Nook.Api.http` 요청 2개, 일정 변경 문서 반영(FE·DEP 절, 운영 반영 게이트, 배포 이후 규칙)
+
+### 2026-10-20 (D5-4)
+1. learning-log D5-1~3 "배운 것" 채움(Claude가 세션 기록으로 정리, 사용자 요청 — 결정·질문으로 얻은 것·핵심 개념 3칸)
+2. 사용자 질문: A1 구현 위치 → 아직 없음(DEP 5일째 결정). 커밋 `3b7169c` 메시지가 구현된 것처럼 읽힘 — 사용자가 수정 보류
+3. AU-02 설계 결정(아래 "확정된 결정 (D5)" AU-02): 트랜잭션 경계 (가) 핸들러, 응답 코드(무효 링크 400 — 처음 답 401은 D2-1 `ErrorType`과 프론트 401 공통 처리와 충돌, 닉네임 필요 200 + needsNickname), 닉네임 검사 위치. 사용자 첫 답 "Q1 전 검사 + 기존 회원은 `From`으로" → 질문 2개(Q1 전에 가입자를 알 수 있나 / `From`은 무엇을 검사하나)로 스스로 정정
+4. 사고: VS 빠른 수정 "메서드 생성"이 `SharedKernel/Result.cs`에 Application 타입을 참조하는 `Success(ConsumeMagicLinkOutcome)`을 생성(CS0234) — 원인은 Claude Guidance의 `Result.Success(NicknameRequired)` 잘못된 표기. `git restore`로 복원. 교훈: 호출 쪽이 틀렸을 때 "메서드 생성"은 계층 맨 아래를 위에 맞춰 휘게 한다, 예상 밖 `M`은 먼저 의심
+5. 핸들러 리뷰: 기존 회원 경로 없음(CS0161 예정)·`SignedIn` 앞 `return` 누락(D5-3과 같은 실수)·`GetUtcNow()` 두 번·`error != null` 중복 → 사용자 요청으로 Claude가 가드 절 구조로 수정(로그인·가입 공통 꼬리 Q3 → 커밋 → 반환)
+6. 동시 가입(같은 이메일·다른 링크) (a) 500 수용. 피해: 사용자는 한 탭 오류(다른 탭 로그인됨), 데이터 손상 없음, 운영자는 500 로그. 예상(미측정) 교착 경로 기록 → D6
+7. 통합 테스트 11개(실제 PostgreSQL, 운영 DI `AddInfrastructure`에서 핸들러). 첫 실행 전부 실패 → 오늘 안 바꾼 `CheckConstraintTests`까지 실패 → 공통 기반 의심 → Docker 엔진 꺼짐. 재실행 124개 통과. 예측 2/2 일치(전부 통과, `>=` 변이 시 만료 테스트만 실패)
+8. 사용자 질문: 응답 accessToken을 이후 요청 `Authorization: Bearer`에 넣는가 → 맞음. 서버는 서명·iss·aud·exp만 검증(DB 안 봄), 60분, Refresh 없음, 로그아웃은 클라이언트가 버림. 프론트 보관 위치(메모리·localStorage·httpOnly 쿠키)는 FE 결정
+9. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 124개 통과
+
+커밋: `d1e3c87` learning-log · `720f388` AU-02
+Claude가 작성: learning-log D5-1~3 배운 것(사용자 요청), AU-02 뼈대(`IUnitOfWork`·`EfUnitOfWork`·`IUserRepository`·`UserRepository`·Q1·Q3·`AuthErrors`·`UserErrors.NicknameTaken`·결과 타입·컨트롤러·DI), 핸들러 수정·리팩터링(사용자 요청 — 초안은 사용자), 통합 테스트 11개·`PostgresFixture.ConnectionString`. 결정은 사용자: (가)·응답 코드·닉네임 검사 위치·동시 가입 (a)
 
 ## 체크리스트
 
