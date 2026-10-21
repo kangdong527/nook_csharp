@@ -1,0 +1,43 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc;
+using Nook.Application.Places;
+using Nook.SharedKernel;
+
+namespace Nook.Api.Controllers;
+
+// 인가 표시 없음 → Fallback 정책(로그인 필요, PL-01 1b).
+[ApiController]
+[Route("places")]
+public sealed class PlacesController : ControllerBase
+{
+    // PL-01. 새로 만들었든 기존 것이든 같은 응답(200) — 호출자는 "확정된 장소"만 필요하고, 몇 번 불러도 결과가 같다.
+    [HttpPost]
+    [ProducesResponseType<PlaceView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ConfirmPlace(
+        ConfirmPlaceRequest request,
+        [FromServices] ConfirmPlaceHandler handler,
+        CancellationToken ct)
+    {
+        // [Required] 덕분에 여기서 좌표는 null이 아니다([ApiController]가 먼저 400).
+        var command = new ConfirmPlaceCommand(
+            request.KakaoPlaceId, request.Name, request.Address, request.Latitude!.Value, request.Longitude!.Value);
+
+        var result = await handler.HandleAsync(command, ct);
+
+        if (!result.TryGetValue(out var place, out var error))
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: error.Code, detail: error.Description);
+
+        return Ok(place);
+    }
+}
+
+// 좌표가 double이면 JSON에서 빠졌을 때 0으로 바인딩된다 — (0, 0)은 유효한 좌표라 조용히 통과한다.
+// double? + [Required]로 "빠짐"을 400으로 만든다(PL-01 1a).
+// 대상 지정 없이 매개변수에 붙인다 — MVC는 위치 record의 검증 특성을 생성자 매개변수에서 읽고, [property:]로 붙이면 시작 시 예외.
+public sealed record ConfirmPlaceRequest(
+    string? KakaoPlaceId,
+    string? Name,
+    string? Address,
+    [Required] double? Latitude,
+    [Required] double? Longitude);

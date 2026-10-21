@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Application.Auth;
 using Nook.Application.Common;
+using Nook.Application.Places;
 using Nook.Application.Users;
 using Nook.Infrastructure.Auth;
 using Nook.Infrastructure.Persistence;
+using Nook.Infrastructure.Places;
 using Nook.Infrastructure.Users;
 
 namespace Nook.Infrastructure;
@@ -22,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IMagicLinkTokenStore, MagicLinkTokenStore>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IPlaceRepository, PlaceRepository>();
 
         services.AddOptions<MagicLinkOptions>()
             .BindConfiguration(MagicLinkOptions.SectionName)
