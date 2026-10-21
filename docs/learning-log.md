@@ -197,3 +197,14 @@
   - 같은 이메일 동시 가입이 실제로 교착(40P01)이 나는지 — D6에서 재현
 
 ---
+
+### D5-5 (2026-10-21) — WebApplicationFactory API 테스트, PL-01 장소 확정
+- 배운 것:
+  1. (세션 끝에 작성)
+  2. (세션 끝에 작성)
+  3. EF `FromSql`은 `ComplexProperty`(Coordinate)의 `HasColumnName`을 무시하고 `Coordinate_Latitude`를 찾는다(LINQ는 정상) — 탐침 P1 LINQ ✅ / P2 순수 SELECT ❌ / P3 별칭 ✅로 "RETURNING 탓"이 아니라 `FromSql` 자체임을 좁힘 → `TryAddAsync`는 id만 받고 넘긴 `place`를 돌려준다(B안). D7 근처 검색처럼 places를 SQL로 읽을 때 다시 만난다 (Claude가 기록 — 사용자 요청)
+- 막혔던 것 / 어떻게 풀었나:
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께):
+- 내일 확인할 것:
+
+---
