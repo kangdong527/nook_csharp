@@ -1,23 +1,23 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-20, D5-4 종료). 브랜치 `feat/d5-auth`, 작업 트리 깨끗함(미푸시). 인증(AU-01 요청·AU-02 소모, JWT 발급·검증) 완료, D5 나머지 API(장소·북마크·좋아요·리뷰) 미착수. D5 이월 항목은 "미결 결정"의 D5 태그. 달력 기준 약 5일 지연
+- 현재: **D5 진행 중** (2026-10-21, D5-5 중간 저장). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR 완료, **BM-01 핸들러 작성 중(커밋 안 됨 — 빌드 실패 상태, 아래 재개 지점 1)**, LK-01·RV-01 미착수. 달력 기준 약 5일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
-  0. Docker Desktop을 먼저 켠다(D5-4에 꺼져 통합 테스트 전체가 `DockerUnavailableException`으로 실패했음 — 코드 문제 아님). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. (선택) 손 테스트: `dotnet run` → `POST /auth/magic-link` → 콘솔 링크의 토큰으로 `POST /auth/magic-link/consume`(닉네임 없이 → 200 needsNickname, 닉네임과 함께 → 200 accessToken) → `GET /weatherforecast` 헤더 없음 401 / `Authorization: Bearer <토큰>` 200 / 토큰 변조 401
-  2. **`WebApplicationFactory` API 테스트 기반**(D5 게이트) — 401·Fallback 정책, AU-01·AU-02 HTTP 흐름(202·400·200 needsNickname·200 accessToken·409). 테스트는 Claude 작성, 사용자 예측
-  3. 그다음 PL-01 → BM-01·02 → LK-01 → RV-01. API 응답 형태는 원본 `C:\Projects
-ook\src\lib\store.ts`가 기대하는 모양과 대조(FE가 D6 다음)
-  4. 사용자: `docs/learning-log.md` D5-4 "배운 것" 검토(Claude가 세션 기록으로 초안), ADR 권장 2건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel)
+  0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
+  1. **BM-01 `SaveBookmarkHandler.HandleAsync` `TODO(human)` 작성 중** — 사용자가 `throw new NotImplementedException()`을 지운 상태라 지금은 빌드 실패(CS0161, 반환 없음)가 정상. 뼈대(저장소·컨트롤러·DI·`GetUserId`)는 작업 트리에만 있고 미커밋
+     - 남은 판단: 경로의 `Guid.Empty`(`{placeId:guid}` 통과, `PlaceId.From`은 예외) → 500 둘지 404 `PlaceNotFound`로 바꿀지
+     - 그다음: BM-02 `RemoveBookmarkHandler`(같은 모양) → 테스트(Claude 작성, 사용자 예측) → 커밋
+  2. 그다음 LK-01 → RV-01. API 응답 형태는 원본 `C:\Projects\nook\src\lib\store.ts`와 대조(FE가 D6 다음)
+  3. 사용자: learning-log D5-4 검토, D5-5 "배운 것" 1·2 작성. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
      - 이월: Q2가 `ix_magic_link_tokens_email_lower_created`를 타는지 `EXPLAIN`(빈 테이블이라 지금은 의미 없음) — D8
   3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
-  5. `WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함
-  6. 나머지 D5 API(장소·북마크·리뷰·좋아요)
+  5. ~~`WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함~~ ✅ `dc67487`
+  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · BM-01·02 작성 중 · LK-01 · RV-01
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
@@ -259,6 +259,20 @@ Claude가 작성: `RequestMagicLink.cs` Q2 속도 제한(사용자 요청)·`Han
 커밋: `d1e3c87` learning-log · `720f388` AU-02
 Claude가 작성: learning-log D5-1~3 배운 것(사용자 요청), AU-02 뼈대(`IUnitOfWork`·`EfUnitOfWork`·`IUserRepository`·`UserRepository`·Q1·Q3·`AuthErrors`·`UserErrors.NicknameTaken`·결과 타입·컨트롤러·DI), 핸들러 수정·리팩터링(사용자 요청 — 초안은 사용자), 통합 테스트 11개·`PostgresFixture.ConnectionString`. 결정은 사용자: (가)·응답 코드·닉네임 검사 위치·동시 가입 (a)
 
+### 2026-10-21 (D5-5)
+1. 세션 시작: progress·CS 진도 요약(퀴즈 건너뜀). Docker 꺼짐 확인 → 사용자가 켬
+2. `WebApplicationFactory` 기반: `NookApiFactory`(Testing 환경 — user-secrets·개발 분기 제외, `UseSetting`으로 연결 문자열·테스트 키, 기록용 메일 큐, 워커용 콘솔 발송기) + `AuthorizationTests` 5 · `AuthApiTests` 8. 예측 2/3: ✗ 없는 경로 404 예상 → 실제 401(라우팅은 엔드포인트 null만 남기고 인가 미들웨어가 Fallback으로 먼저 응답), ○ null 이메일은 핸들러까지(`string?`), 전부 통과. 변이 `[AllowAnonymous]` 제거 → Consume 4개 401 예측 일치(NicknameTaken은 준비 단계에서 실패 — 실패 위치 읽기)
+3. PL-01 결정(위 "확정된 결정 (D5)"). 사용자 질문: 0행 뒤 Find가 1행인 근거 → 세 조건 정리. 사용자 흐름 정리(대기는 미커밋일 때만, 3단계는 읽기) 확인
+4. PL-01 핸들러: 사용자 초안 CS1503(`Result<Coordinate>` 그대로)·`Place.Create` 결과 버림·**null place INSERT(CS8604가 잡은 실제 버그)**·`retry_place` → 사용자 요청으로 Claude가 수정·리팩터링(`is { } x`, `CreatePlace` 도우미, 마지막 Find null은 예외)
+5. 버그: PL-01 테스트 7개 `Coordinate_Latitude` 열 없음 → systematic-debugging. 사용자 가설 "RETURNING이 latitude만 돌려줘서" → 탐침 P1 LINQ ✅ / P2 순수 `FromSql` SELECT ❌ / P3 별칭 ✅ → 원인은 `FromSql` + `ComplexProperty`. B안(id만 받기) 사용자 선택, Claude 수정. incident는 수치가 없어 learning-log 한 줄로(사용자 결정, 001은 D6용)
+6. 변이 `ON CONFLICT` 삭제 ×3회: 커밋 대기 테스트·20요청 동시 테스트 3/3 실패(23505), 롤백 테스트는 통과(충돌 행이 없음). 예측 △(롤백 테스트까지 실패 예상), "매번 실패?"는 이 환경 3/3이지만 보장 아님
+7. BM 결정(위). StarRule: 사용자 작성(`StartRule` 오타 → 수정), TDD 빨간불 예측 일치(3실패, 18행) → 구현 → 초록
+8. BM-01·02 뼈대(Claude): `IBookmarkRepository`(ON CONFLICT·`ExecuteDeleteAsync`, 영향 행 수), `IReviewRepository.ExistsAsync`, `IPlaceRepository.ExistsAsync`, `BookmarkErrors`, `BookmarkView`(Star 문자열 — Api가 Domain을 못 봄), `GetUserId()`, `BookmarksController`, DI. 핸들러는 `TODO(human)` — 작성 중에 중단
+9. 검증(BM 뼈대 전 마지막): `dotnet build` 경고 0·오류 0, `dotnet test` 153개 통과(Domain 88·Algorithms 1·Application 7·Integration 57)
+
+커밋: `dc67487` API 테스트 · `485133c` PL-01 · `46ffb8e` learning-log · `df3da5b` R-STAR. BM 뼈대 미커밋
+Claude가 작성: `NookApiFactory`·API 테스트 13개, PL-01 뼈대(인터페이스·컨트롤러·`PlaceView`·DI)·핸들러 수정(사용자 요청)·`TryAddAsync` B안 수정(사용자 요청)·PL-01 테스트 12개, usecases 1a 문구(사용자 요청), StarRule 테스트, BM 뼈대. 사용자 작성: PL-01 핸들러 초안·`TryAddAsync` 초안·`StarState`·`StarRule`. 결정은 사용자: C′·흐름 위치·필드 미룸·검증 순서·B안·BM 1~4·폴더 `Stars`·enum 문자열
+
 ## 체크리스트
 
 진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
@@ -312,6 +326,18 @@ Claude가 작성: learning-log D5-1~3 배운 것(사용자 요청), AU-02 뼈대
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
 
 ## 확정된 결정 (D5)
+- PL-01 장소 확정(2026-10-21 사용자 결정)
+  - **C′**: Find → 없으면 `INSERT ... ON CONFLICT (kakao_place_id) DO NOTHING` → 0행이면 Find. 흐름은 핸들러에(저장소에 숨기지 않음). B(`DO UPDATE`) 기각 — 입력 불신(덮어쓰기 금지) + 다시 고를 때마다 dead tuple. 근거: "다시 고르는 경우가 많다"(추정, 미측정) → 많이 일어나는 경로 1왕복
+  - 0행 뒤 Find가 반드시 1행인 근거: ① ON CONFLICT는 미커밋 상대를 기다려 커밋된 경우에만 0행 ② Read Committed 문장마다 새 스냅샷 ③ 장소 삭제 없음. 깨지면 예외(500)
+  - 검증 순서: 빠짐·카카오 ID 형식은 항상, 좌표 범위·이름·주소는 **새 장소일 때만**(usecases 1a 반영). 좌표 빠짐은 Api `[Required] double?`
+  - `TryAddAsync`는 id만 받고 넘긴 place를 반환(B안) — `FromSql`이 `ComplexProperty`의 `HasColumnName`을 무시(탐침 P1~P3). places에 DEFAULT·트리거 열이 생기면 다시 읽는다
+  - 원본 필드(category·roadAddress·phone·placeUrl) 추가는 FE 주간 — DEP(운영 데이터) 전이라 기존 행 NULL 문제 없음. 리뷰 요약(usecases 4단계)은 PL-02로
+- BM-01·02 북마크(2026-10-21 사용자 결정)
+  - 토글 대신 `PUT`/`DELETE /places/{placeId}/bookmark`(멱등, R-BM-02와 일치). FE 주간에 `PlaceSheet.tsx`가 상태 보고 PUT/DELETE
+  - "이미 그 상태"는 200 + `changed: false`(409 아님)
+  - 장소 없음(2b)은 **먼저 SELECT** → 404 `Bookmark.PlaceNotFound`(FK 23503을 잡지 않음). FK는 최종 보장으로 남김
+  - 별 상태는 **서버가 계산**(A안) — `Nook.Domain/Stars/StarRule.Evaluate`(사용자 작성), 응답에 `star` 포함. 근거: 원본은 같은 규칙이 4곳(PlaceSheet·store.ts 지도·그룹 지도·프로필 개수)에 흩어짐 → 급한 수정·상태 추가 시 서버 1곳·배포 1회. JSON은 문자열(`"gray"`, 숫자 직렬화 철회), 확장 가능 값 — 클라이언트는 모르는 값을 empty로
+  - 장소 블라인드가 필요해지면 삭제가 아니라 soft 상태(`hidden_at`) — "삭제 없음" 전제 유지, 읽기·쓰기 정책만 추가
 - **일정 변경(포트폴리오 우선) 채택** (2026-10-20 사용자 결정): D5 → D6 → FE → DEP(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 원래 할 일은 빠짐없이 배포 후 진행하고, 각 Day 게이트에 "🚀 운영 반영"을 붙인다. 근거 `docs/schedule-option-portfolio-first.md`
 - 매직 링크 TOCTOU(Q2 COUNT ↔ INSERT 사이 동시 요청): Q2 경합은 허용하고 **② A3 + Q2 + A1**으로 막는다(2026-10-20 사용자 결정). 막을 대상 = 피해자 받은편지함 + 발송 도메인 평판
   - A3 IP 기준 입구 제한(`RateLimiter`, 본문 불필요) — 표준 방어, 단일 IP 폭주를 막음

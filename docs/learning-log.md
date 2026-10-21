@@ -203,8 +203,10 @@
   1. (세션 끝에 작성)
   2. (세션 끝에 작성)
   3. EF `FromSql`은 `ComplexProperty`(Coordinate)의 `HasColumnName`을 무시하고 `Coordinate_Latitude`를 찾는다(LINQ는 정상) — 탐침 P1 LINQ ✅ / P2 순수 SELECT ❌ / P3 별칭 ✅로 "RETURNING 탓"이 아니라 `FromSql` 자체임을 좁힘 → `TryAddAsync`는 id만 받고 넘긴 `place`를 돌려준다(B안). D7 근처 검색처럼 places를 SQL로 읽을 때 다시 만난다 (Claude가 기록 — 사용자 요청)
-- 막혔던 것 / 어떻게 풀었나:
-- Claude가 대신 작성한 부분 (있다면, 이유와 함께):
+- 막혔던 것 / 어떻게 풀었나: 예측 ✗ "없는 경로는 404" → 401(인가 미들웨어가 엔드포인트 null에도 Fallback 적용, 404는 파이프라인 끝의 기본값). PL-01 초안의 null place INSERT를 CS8604 경고가 잡음. `Coordinate_Latitude` 실패는 탐침으로 범위를 좁혀 해결(위 3)
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `NookApiFactory`·API 테스트, PL-01 뼈대·핸들러 수정·`TryAddAsync` B안 수정(사용자 요청), PL-01·StarRule 테스트(D4부터 테스트는 Claude), usecases 1a 문구(사용자 요청), BM 뼈대(협업 영역). 사용자 작성: PL-01 핸들러·`TryAddAsync` 초안, `StarState`·`StarRule`
 - 내일 확인할 것:
+  - BM-01 핸들러 마무리(`Guid.Empty` 경로 처리 결정) → BM-02 → 테스트
+  - ADR 후보: "장소는 삭제하지 않는다" 불변식
 
 ---
