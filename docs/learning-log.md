@@ -211,15 +211,17 @@
 
 ---
 
-### D5-6 (2026-10-22) — BM-01·02 북마크 저장·해제
+### D5-6 (2026-10-22) — BM-01·02 북마크, LK-01 좋아요
 - 배운 것:
   1. 멱등 API는 "이번 요청이 상태를 바꿨나(`changed`)"와 "지금 그 상태인가(`bookmarked`)"가 다른 질문이다. 저장이 성공으로 끝나면 changed와 무관하게 bookmarked=true, 해제면 false. 별 상태는 changed가 아니라 bookmarked로 계산한다 — BM-01 초안은 둘을 한 값으로 써서 재저장 시 star=empty가 나왔다 (Claude 정리 — 사용자 요청)
   2. `x is { } y`는 "null이 아니면"이라 nullable이 아닌 `bool`에는 항상 참이다. PL-01(`Place?`)에서 맞던 관용구가 반환 타입이 바뀌면 다른 뜻이 된다. 변이 실험에서 `Remove_WhenNotBookmarked`는 changed가 원래 false라 `bookmarked: changed` 변이를 못 잡았다 — 테스트 입력이 두 값을 갈라 놓아야 변이가 드러난다 (Claude 정리 — 사용자 요청)
   3. 경로의 `Guid.Empty`는 500으로 둔다(사용자 결정) — 라우트 제약 `{placeId:guid}`는 통과하지만 정상 클라이언트가 보낼 수 없는 값이라 `PlaceId.From`의 예외(개발자 실수·손상 취급)에 맡긴다. 404 `PlaceNotFound`로 바꾸면 "없는 장소"와 "있을 수 없는 ID"가 섞인다. TestServer는 예외 처리 미들웨어가 없으면 500이 아니라 예외를 던지므로 운영 응답 모양은 DEP에서 확인 (Claude 정리 — 사용자 요청, 결정은 사용자)
-- 막혔던 것 / 어떻게 풀었나: BM-01 초안 리뷰 🔴 3개 — `ExistsAsync` 조건 반전(`!` 누락), 괄호 오류, `bool`에 `is { } x` 패턴(항상 참 → changed 항상 true, 재저장 시 star=empty). 원인은 "이번에 바꿨나(changed)"와 "지금 그 상태인가(bookmarked)"를 한 값으로 씀. BM-02에서는 구분해 작성. 예측: 동시 저장 진 쪽 0행 ✅(보완: 미커밋 상대를 PK에서 기다림), 변이 `bookmarked: changed` → 2개 실패 ✅
-- Claude가 대신 작성한 부분 (있다면, 이유와 함께): BM-01 핸들러 리팩터링(사용자 요청 — 초안은 사용자), BM-02 `TODO(human)` 틀, `BookmarksApiTests` 9개(D4부터 테스트는 Claude, 사용자 예측 2/2)·변이 실험 실행, 커밋, `progress.md` 갱신. 사용자 작성: BM-01 초안, BM-02 핸들러. 결정은 사용자: 경로 `Guid.Empty` → 500
+  4. 같은 "사전 확인 → 쓰기" 모양도 **확인한 대상이 사라질 수 있는가**에 따라 안전성이 갈린다. 장소는 삭제가 없어(불변식) 틈이 무해하지만, 리뷰는 RV-03·탈퇴 CASCADE로 지워져 틈이 실제 경합이 된다. `ON CONFLICT`는 UNIQUE·PK 충돌만 받고 FK 위반(23503)은 그대로 올라와 500 → 사전 확인을 유지하고 `fk_likes_reviews` 위반만 404로 번역(A안). 사전 확인 없이 FK만 잡는 B안은 D9에서 트랜잭션에 묶이면 오류 뒤 25P02로 계속 못 하고, 회원 FK(탈퇴 후 남은 토큰)와 섞이며, DELETE에는 FK 신호가 없어서 바꿨다 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  5. 같은 틈이라도 **응답이 거짓이 되는가**로 번역 여부를 정한다. 좋아요 중 리뷰 삭제 → `liked:true`는 거짓이라 404로 번역, 취소 중 리뷰 삭제 → CASCADE가 먼저 지워 `liked:false`는 사실이라 200 허용. enum 결과를 묶을 때도 출력(changed=false)이 아니라 의미(성공/실패)로 묶는다 — AddLike 초안이 `ReviewGone`을 `AlreadyLiked`와 묶어 200을 냈다 (Claude 정리 — 사용자 요청, 결정은 사용자)
+- 막혔던 것 / 어떻게 풀었나: BM-01 초안 리뷰 🔴 3개 — `ExistsAsync` 조건 반전(`!` 누락), 괄호 오류, `bool`에 `is { } x` 패턴(항상 참 → changed 항상 true, 재저장 시 star=empty). 원인은 "이번에 바꿨나(changed)"와 "지금 그 상태인가(bookmarked)"를 한 값으로 씀. BM-02에서는 구분해 작성. 예측: 동시 저장 진 쪽 0행 ✅(보완: 미커밋 상대를 PK에서 기다림), 변이 `bookmarked: changed` → 2개 실패 ✅. LK: 처음엔 B안(FK 위반만 잡기)을 골랐다가 대가를 보고 A안으로. AddLike 초안 🔴 `ReviewGone` → 200(직접 수정)
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): BM-01·AddLike 리팩터링(사용자 요청 — 초안은 사용자), BM-02·LK `TODO(human)` 틀, LK 뼈대(`ILikeRepository`·`AddLikeOutcome`·`LikeRepository` 23503 번역·컨트롤러·DI), `BookmarksApiTests` 9개·`LikesApiTests` 10개(D4부터 테스트는 Claude, 사용자 예측 2/2 + LK Q1·Q2 ○)·변이 실험 실행, 커밋, `progress.md` 갱신, "배운 것" 정리(사용자 요청). 사용자 작성: BM-01 초안, BM-02, AddLike 초안·🔴 수정, RemoveLike. 결정은 사용자: 경로 `Guid.Empty` → 500, LK A안·취소 404·틈 사이 취소 200·BM 유지
 - 내일 확인할 것:
-  - LK-01 → RV-01
-  - ADR 후보: "장소는 삭제하지 않는다" 불변식
+  - LK 변이 실험 예측(catch 제거 시 어떻게 실패하나) → RV-01
+  - ADR 후보: "장소는 삭제하지 않는다" 불변식 — 결과 절에 "깨지면 BM도 LK처럼 23503 번역 필요"
 
 ---

@@ -1,12 +1,13 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-22, D5-6). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·**BM-01·02 완료** `bc95bd2`, LK-01·RV-01 미착수. 달력 기준 약 5일 지연
+- 현재: **D5 진행 중** (2026-10-22, D5-6 종료). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·**BM-01·02** `bc95bd2`·**LK-01** `52481f0` 완료, RV-01 미착수. 달력 기준 약 5일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **LK-01부터** → RV-01. API 응답 형태는 원본 `C:\Projects\nook\src\lib\store.ts`와 대조(FE가 D6 다음). BM과 같은 모양(장소 사전 확인 → 한 문장 쓰기 → 멱등 `changed`)이 맞는지 먼저 판단
-  2. 사용자: learning-log D5-4 검토, D5-5·D5-6 "배운 것" 작성. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
+  1. **LK-01 변이 실험부터** (구현·테스트 10개 커밋 `52481f0`, 전체 172개 통과). 사용자 예측 대기 중인 질문: "`LikeRepository`의 `catch` 절을 지우면 `Add_WhileReviewDeleteUncommitted_WaitsThenReturns404OnCommit`은 어떻게 실패하나? (예외 처리 미들웨어 없음)" → 예측 → 변이 실행 → 원복
+  2. 그다음 **RV-01** 리뷰 작성(이미지 업로드는 트랜잭션 밖 — CLAUDE.md "하지 말 것")
+  3. 사용자: learning-log D5-4 검토, D5-6 내용 확인(Claude 정리). ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -14,7 +15,7 @@
   3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. ~~`WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함~~ ✅ `dc67487`
-  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · LK-01 · RV-01
+  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · ~~LK-01~~ ✅ `52481f0` · RV-01
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
@@ -270,6 +271,17 @@ Claude가 작성: learning-log D5-1~3 배운 것(사용자 요청), AU-02 뼈대
 커밋: `dc67487` API 테스트 · `485133c` PL-01 · `46ffb8e` learning-log · `df3da5b` R-STAR. BM 뼈대 미커밋
 Claude가 작성: `NookApiFactory`·API 테스트 13개, PL-01 뼈대(인터페이스·컨트롤러·`PlaceView`·DI)·핸들러 수정(사용자 요청)·`TryAddAsync` B안 수정(사용자 요청)·PL-01 테스트 12개, usecases 1a 문구(사용자 요청), StarRule 테스트, BM 뼈대. 사용자 작성: PL-01 핸들러 초안·`TryAddAsync` 초안·`StarState`·`StarRule`. 결정은 사용자: C′·흐름 위치·필드 미룸·검증 순서·B안·BM 1~4·폴더 `Stars`·enum 문자열
 
+### 2026-10-22 (D5-6)
+1. BM-01: 사용자 초안 🔴 3(조건 반전·괄호·`bool`에 `is { }`) → Claude 리팩터링. `Guid.Empty` → 500 유지(사용자 결정). BM-02 사용자 작성(정확)
+2. `BookmarksApiTests` 9개. 예측: 동시 저장 진 쪽 0행 ○(보완: PK에서 미커밋 상대 대기), 변이 `bookmarked: changed` → 2개 실패 ○
+3. LK-01 설계: 사용자가 "리뷰는 삭제 유스케이스가 있다"를 짚음 → Q1 ON CONFLICT는 FK 위반을 안 받아 500 ○, Q2 404 ○ → A~D 비교 → B 선택 → B의 대가(25P02·회원 FK·DELETE 신호 없음·반환 타입) 듣고 **A로 변경**, 취소 404, BM 유지
+4. LK-01 뼈대(Claude) → AddLike 사용자 초안 🔴 `ReviewGone`을 `AlreadyLiked`와 묶어 200(사용자 수정) → Claude 리팩터링(switch 식·`UnreachableException`). RemoveLike 사용자 작성, 틈 사이 삭제 200 허용(사용자 결정)
+5. `LikesApiTests` 10개(미커밋 리뷰 DELETE로 틈 재현, commit/rollback). 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 172개 통과(Domain 88·Algorithms 1·Application 7·Integration 76)
+6. 변이 실험(catch 제거) 예측은 다음 세션으로
+
+커밋: `bc95bd2` BM · `9c329c6`·`85f6070` docs · `52481f0` LK-01
+Claude가 작성: BM-01·AddLike 리팩터링(사용자 요청), LK 뼈대(`ILikeRepository`·`AddLikeOutcome`·`LikeRepository` 23503 번역·`LikeErrors`·`LikeView`·`IReviewRepository.ExistsAsync(ReviewId)`·`LikesController`·DI), 테스트 19개, learning-log D5-5·D5-6 정리(사용자 요청). 사용자 작성: BM-01 초안·BM-02·AddLike 초안·RemoveLike. 결정은 사용자: `Guid.Empty` 500, LK A안·취소 404·틈 사이 취소 200·BM 유지
+
 ## 체크리스트
 
 진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
@@ -335,6 +347,15 @@ Claude가 작성: `NookApiFactory`·API 테스트 13개, PL-01 뼈대(인터페�
   - 장소 없음(2b)은 **먼저 SELECT** → 404 `Bookmark.PlaceNotFound`(FK 23503을 잡지 않음). FK는 최종 보장으로 남김
   - 별 상태는 **서버가 계산**(A안) — `Nook.Domain/Stars/StarRule.Evaluate`(사용자 작성), 응답에 `star` 포함. 근거: 원본은 같은 규칙이 4곳(PlaceSheet·store.ts 지도·그룹 지도·프로필 개수)에 흩어짐 → 급한 수정·상태 추가 시 서버 1곳·배포 1회. JSON은 문자열(`"gray"`, 숫자 직렬화 철회), 확장 가능 값 — 클라이언트는 모르는 값을 empty로
   - 장소 블라인드가 필요해지면 삭제가 아니라 soft 상태(`hidden_at`) — "삭제 없음" 전제 유지, 읽기·쓰기 정책만 추가
+- LK-01 좋아요(2026-10-22 사용자 결정)
+  - BM과 다른 점: 리뷰는 삭제 유스케이스가 있다(RV-03, 탈퇴 CASCADE) → 사전 확인과 INSERT 사이의 틈이 실제 경합. `ON CONFLICT`는 FK 위반(23503)을 받지 않아 그대로 두면 500
+  - **A안**: 사전 확인(reviews Q1) + `fk_likes_reviews` 23503만 번역 → 404 `Like.ReviewNotFound`(틈 사이 삭제도 같은 404). B안(사전 확인 없이 FK 위반만 잡기)에서 바꾼 이유: D9 카운터로 트랜잭션에 묶이면 오류 뒤 25P02로 계속 못 함(SAVEPOINT 필요), 정상 404를 에러 로그에 섞지 않음. D(`FOR KEY SHARE` 잠금)·C(`INSERT ... WHERE EXISTS`, 0행 의미가 둘이고 23503도 여전히 가능 — 미측정) 기각
+  - 저장소 반환은 `AddLikeOutcome { Added, AlreadyLiked, ReviewGone }` — bool로는 둘을 못 가름. Npgsql 예외는 Infrastructure에서 번역
+  - 취소(DELETE)도 없는 리뷰는 404 — DELETE는 FK 검사가 없어 0행만으로는 "없는 리뷰"와 "이미 취소"를 못 가름
+  - 취소 중 틈 사이 삭제(CASCADE가 like 행을 먼저 지움 → 0행)는 **200 `changed:false` 허용, 번역 안 함** — `liked:false`는 사실(Add의 ReviewGone은 거짓 `liked:true`라 번역 필요했음)
+  - API `PUT`/`DELETE /reviews/{reviewId}/like`, 응답 `{ liked, changed }`(좋아요 수는 D9)
+  - BM은 사전 확인만 유지("장소는 삭제하지 않는다"가 살아 있는 한 경합 없음). 두 방식이 섞인 이유는 그 불변식 ADR의 결과 절에
+  - 미결: `fk_likes_users`·BM의 회원 FK 위반(탈퇴 후 남은 60분 토큰) → 지금은 500. PF-02에서 정함
 - **일정 변경(포트폴리오 우선) 채택** (2026-10-20 사용자 결정): D5 → D6 → FE → DEP(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 원래 할 일은 빠짐없이 배포 후 진행하고, 각 Day 게이트에 "🚀 운영 반영"을 붙인다. 근거 `docs/schedule-option-portfolio-first.md`
 - 매직 링크 TOCTOU(Q2 COUNT ↔ INSERT 사이 동시 요청): Q2 경합은 허용하고 **② A3 + Q2 + A1**으로 막는다(2026-10-20 사용자 결정). 막을 대상 = 피해자 받은편지함 + 발송 도메인 평판
   - A3 IP 기준 입구 제한(`RateLimiter`, 본문 불필요) — 표준 방어, 단일 IP 폭주를 막음
