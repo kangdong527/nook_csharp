@@ -1,15 +1,12 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-21, D5-5 중간 저장). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR 완료, **BM-01 핸들러 작성 중(커밋 안 됨 — 빌드 실패 상태, 아래 재개 지점 1)**, LK-01·RV-01 미착수. 달력 기준 약 5일 지연
+- 현재: **D5 진행 중** (2026-10-22, D5-6). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·**BM-01·02 완료** `bc95bd2`, LK-01·RV-01 미착수. 달력 기준 약 5일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **BM-01 `SaveBookmarkHandler.HandleAsync` `TODO(human)` 작성 중** — 사용자가 `throw new NotImplementedException()`을 지운 상태라 지금은 빌드 실패(CS0161, 반환 없음)가 정상. 뼈대(저장소·컨트롤러·DI·`GetUserId`)는 작업 트리에만 있고 미커밋
-     - 남은 판단: 경로의 `Guid.Empty`(`{placeId:guid}` 통과, `PlaceId.From`은 예외) → 500 둘지 404 `PlaceNotFound`로 바꿀지
-     - 그다음: BM-02 `RemoveBookmarkHandler`(같은 모양) → 테스트(Claude 작성, 사용자 예측) → 커밋
-  2. 그다음 LK-01 → RV-01. API 응답 형태는 원본 `C:\Projects\nook\src\lib\store.ts`와 대조(FE가 D6 다음)
-  3. 사용자: learning-log D5-4 검토, D5-5 "배운 것" 1·2 작성. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
+  1. **LK-01부터** → RV-01. API 응답 형태는 원본 `C:\Projects\nook\src\lib\store.ts`와 대조(FE가 D6 다음). BM과 같은 모양(장소 사전 확인 → 한 문장 쓰기 → 멱등 `changed`)이 맞는지 먼저 판단
+  2. 사용자: learning-log D5-4 검토, D5-5·D5-6 "배운 것" 작성. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -17,7 +14,7 @@
   3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. ~~`WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함~~ ✅ `dc67487`
-  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · BM-01·02 작성 중 · LK-01 · RV-01
+  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · LK-01 · RV-01
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
