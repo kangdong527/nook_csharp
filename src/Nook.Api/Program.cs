@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Nook.Api.Auth;
 using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
+using Nook.Application.Likes;
 using Nook.Application.Places;
 using Nook.Infrastructure;
 
@@ -28,6 +29,8 @@ builder.Services.AddScoped<ConsumeMagicLinkHandler>();
 builder.Services.AddScoped<ConfirmPlaceHandler>();
 builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
+builder.Services.AddScoped<AddLikeHandler>();
+builder.Services.AddScoped<RemoveLikeHandler>();
 
 // 인증: API가 직접 서명한 Access 토큰(HS256)만 받는다(D5 결정)
 builder.Services.AddOptions<JwtOptions>()

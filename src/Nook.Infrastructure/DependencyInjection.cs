@@ -3,11 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
 using Nook.Application.Common;
+using Nook.Application.Likes;
 using Nook.Application.Places;
 using Nook.Application.Reviews;
 using Nook.Application.Users;
 using Nook.Infrastructure.Auth;
 using Nook.Infrastructure.Bookmarks;
+using Nook.Infrastructure.Likes;
 using Nook.Infrastructure.Persistence;
 using Nook.Infrastructure.Places;
 using Nook.Infrastructure.Reviews;
@@ -31,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IPlaceRepository, PlaceRepository>();
         services.AddScoped<IBookmarkRepository, BookmarkRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
+        services.AddScoped<ILikeRepository, LikeRepository>();
 
         services.AddOptions<MagicLinkOptions>()
             .BindConfiguration(MagicLinkOptions.SectionName)
