@@ -11,6 +11,10 @@ internal sealed class PlaceRepository(NookDbContext db) : IPlaceRepository
         // erd.md places Q1. 받는 인덱스: ux_places_kakao_place_id. 값 변환기로 문자열 그대로 비교(대소문자 구분 — 카카오 ID 원형).
         db.Places.AsNoTracking().SingleOrDefaultAsync(p => p.KakaoPlaceId == kakaoPlaceId, ct);
 
+    public Task<bool> ExistsAsync(PlaceId placeId, CancellationToken ct) =>
+        // erd.md places Q2. 받는 인덱스: pk_places.
+        db.Places.AnyAsync(p => p.Id == placeId, ct);
+
     public async Task<Place?> TryAddAsync(Place place, CancellationToken ct)
     {
         // erd.md places Q3. 충돌 판정: ux_places_kakao_place_id. 0행 = 같은 카카오 ID가 이미 커밋됨(진 쪽).
