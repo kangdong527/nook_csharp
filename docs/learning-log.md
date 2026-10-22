@@ -200,8 +200,8 @@
 
 ### D5-5 (2026-10-21) — WebApplicationFactory API 테스트, PL-01 장소 확정
 - 배운 것:
-  1. (세션 끝에 작성)
-  2. (세션 끝에 작성)
+  1. PL-01 동시 등록은 C′(Find → `INSERT ... ON CONFLICT DO NOTHING` → 0행이면 Find)로 결정, 흐름은 저장소에 숨기지 않고 핸들러에 둔다. `DO UPDATE`는 기각 — 클라이언트 입력으로 저장값을 덮어쓰면 안 되고(입력 불신), 같은 장소를 다시 고를 때마다 dead tuple이 쌓인다. 0행 뒤 Find가 반드시 1행인 근거 세 가지: ① ON CONFLICT는 미커밋 상대를 기다렸다가 커밋된 경우에만 0행 ② Read Committed는 문장마다 새 스냅샷 ③ 장소는 삭제하지 않는다. 변이(`ON CONFLICT` 삭제)로 23505가 나는 것까지 확인 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  2. 별 상태는 서버가 계산한다(A안, `StarRule.Evaluate` 직접 작성) — 원본은 같은 규칙이 4곳에 흩어져 있어 규칙이 바뀌면 4곳을 고쳐야 했다. 서버 한 곳이면 배포 한 번. JSON은 문자열(`"gray"`)이고 확장 가능 값이라 클라이언트는 모르는 값을 empty로 다룬다. 북마크 API는 토글 대신 PUT/DELETE(멱등 — 따닥 클릭이 상태를 뒤집지 않음), "이미 그 상태"는 409가 아니라 200 + `changed: false`, 장소 없음은 FK 위반(23503)을 잡지 않고 먼저 SELECT → 404 (Claude 정리 — 사용자 요청, 결정은 사용자)
   3. EF `FromSql`은 `ComplexProperty`(Coordinate)의 `HasColumnName`을 무시하고 `Coordinate_Latitude`를 찾는다(LINQ는 정상) — 탐침 P1 LINQ ✅ / P2 순수 SELECT ❌ / P3 별칭 ✅로 "RETURNING 탓"이 아니라 `FromSql` 자체임을 좁힘 → `TryAddAsync`는 id만 받고 넘긴 `place`를 돌려준다(B안). D7 근처 검색처럼 places를 SQL로 읽을 때 다시 만난다 (Claude가 기록 — 사용자 요청)
 - 막혔던 것 / 어떻게 풀었나: 예측 ✗ "없는 경로는 404" → 401(인가 미들웨어가 엔드포인트 null에도 Fallback 적용, 404는 파이프라인 끝의 기본값). PL-01 초안의 null place INSERT를 CS8604 경고가 잡음. `Coordinate_Latitude` 실패는 탐침으로 범위를 좁혀 해결(위 3)
 - Claude가 대신 작성한 부분 (있다면, 이유와 함께): `NookApiFactory`·API 테스트, PL-01 뼈대·핸들러 수정·`TryAddAsync` B안 수정(사용자 요청), PL-01·StarRule 테스트(D4부터 테스트는 Claude), usecases 1a 문구(사용자 요청), BM 뼈대(협업 영역). 사용자 작성: PL-01 핸들러·`TryAddAsync` 초안, `StarState`·`StarRule`
@@ -213,9 +213,9 @@
 
 ### D5-6 (2026-10-22) — BM-01·02 북마크 저장·해제
 - 배운 것:
-  1. (사용자 작성)
-  2. (사용자 작성)
-  3. (사용자 작성)
+  1. 멱등 API는 "이번 요청이 상태를 바꿨나(`changed`)"와 "지금 그 상태인가(`bookmarked`)"가 다른 질문이다. 저장이 성공으로 끝나면 changed와 무관하게 bookmarked=true, 해제면 false. 별 상태는 changed가 아니라 bookmarked로 계산한다 — BM-01 초안은 둘을 한 값으로 써서 재저장 시 star=empty가 나왔다 (Claude 정리 — 사용자 요청)
+  2. `x is { } y`는 "null이 아니면"이라 nullable이 아닌 `bool`에는 항상 참이다. PL-01(`Place?`)에서 맞던 관용구가 반환 타입이 바뀌면 다른 뜻이 된다. 변이 실험에서 `Remove_WhenNotBookmarked`는 changed가 원래 false라 `bookmarked: changed` 변이를 못 잡았다 — 테스트 입력이 두 값을 갈라 놓아야 변이가 드러난다 (Claude 정리 — 사용자 요청)
+  3. 경로의 `Guid.Empty`는 500으로 둔다(사용자 결정) — 라우트 제약 `{placeId:guid}`는 통과하지만 정상 클라이언트가 보낼 수 없는 값이라 `PlaceId.From`의 예외(개발자 실수·손상 취급)에 맡긴다. 404 `PlaceNotFound`로 바꾸면 "없는 장소"와 "있을 수 없는 ID"가 섞인다. TestServer는 예외 처리 미들웨어가 없으면 500이 아니라 예외를 던지므로 운영 응답 모양은 DEP에서 확인 (Claude 정리 — 사용자 요청, 결정은 사용자)
 - 막혔던 것 / 어떻게 풀었나: BM-01 초안 리뷰 🔴 3개 — `ExistsAsync` 조건 반전(`!` 누락), 괄호 오류, `bool`에 `is { } x` 패턴(항상 참 → changed 항상 true, 재저장 시 star=empty). 원인은 "이번에 바꿨나(changed)"와 "지금 그 상태인가(bookmarked)"를 한 값으로 씀. BM-02에서는 구분해 작성. 예측: 동시 저장 진 쪽 0행 ✅(보완: 미커밋 상대를 PK에서 기다림), 변이 `bookmarked: changed` → 2개 실패 ✅
 - Claude가 대신 작성한 부분 (있다면, 이유와 함께): BM-01 핸들러 리팩터링(사용자 요청 — 초안은 사용자), BM-02 `TODO(human)` 틀, `BookmarksApiTests` 9개(D4부터 테스트는 Claude, 사용자 예측 2/2)·변이 실험 실행, 커밋, `progress.md` 갱신. 사용자 작성: BM-01 초안, BM-02 핸들러. 결정은 사용자: 경로 `Guid.Empty` → 500
 - 내일 확인할 것:
