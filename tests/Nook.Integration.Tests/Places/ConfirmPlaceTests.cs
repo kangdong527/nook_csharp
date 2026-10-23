@@ -107,7 +107,7 @@ public sealed class ConfirmPlaceTests : IntegrationTestBase, IDisposable
         await using var b = _services.CreateAsyncScope();
         var tryB = Repository(b).TryAddAsync(NewPlace(), CancellationToken.None);
 
-        await AssertStillWaitingAsync(tryB);
+        await LockWait.AssertBlockedByAsync(Db, a.ServiceProvider.GetRequiredService<NookDbContext>(), tryB);
         await txA.CommitAsync();
 
         Assert.Null(await tryB);
@@ -125,7 +125,7 @@ public sealed class ConfirmPlaceTests : IntegrationTestBase, IDisposable
         var placeB = NewPlace();
         var tryB = Repository(b).TryAddAsync(placeB, CancellationToken.None);
 
-        await AssertStillWaitingAsync(tryB);
+        await LockWait.AssertBlockedByAsync(Db, a.ServiceProvider.GetRequiredService<NookDbContext>(), tryB);
         await txA.RollbackAsync();
 
         var added = await tryB;
@@ -167,13 +167,6 @@ public sealed class ConfirmPlaceTests : IntegrationTestBase, IDisposable
     {
         await using var scope = _services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<ConfirmPlaceHandler>().HandleAsync(command, CancellationToken.None);
-    }
-
-    // "기다리는 중"은 시간으로만 관찰된다. 500ms 안에 끝나면 기다리지 않은 것 — 느린 환경에서도 거짓 실패는 없는 방향(끝나면 실패).
-    private static async Task AssertStillWaitingAsync(Task task)
-    {
-        var finished = await Task.WhenAny(task, Task.Delay(TimeSpan.FromMilliseconds(500)));
-        Assert.NotSame(task, finished);
     }
 
     private static void AssertFailure<T>(Result<T> result, Error expected)
