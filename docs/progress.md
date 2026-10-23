@@ -1,13 +1,15 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-22, D5-6 종료). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·**BM-01·02** `bc95bd2`·**LK-01** `52481f0` 완료, RV-01 미착수. 달력 기준 약 5일 지연
+- 현재: **D5 진행 중** (2026-10-23, D5-7 진행 중). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·BM-01·02·LK-01·**RV-01** `e239562` 완료, **RV-02 핸들러 작성 중(미커밋)**. 남은 D5: RV-02 → RV-03 → BM-03 → PL-02. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **LK-01 변이 실험부터** (구현·테스트 10개 커밋 `52481f0`, 전체 172개 통과). 사용자 예측 대기 중인 질문: "`LikeRepository`의 `catch` 절을 지우면 `Add_WhileReviewDeleteUncommitted_WaitsThenReturns404OnCommit`은 어떻게 실패하나? (예외 처리 미들웨어 없음)" → 예측 → 변이 실행 → 원복
-  2. 그다음 **RV-01** 리뷰 작성(이미지 업로드는 트랜잭션 밖 — CLAUDE.md "하지 말 것")
-  3. 사용자: learning-log D5-4 검토, D5-6 내용 확인(Claude 정리). ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식** — C′·FK RESTRICT·BM 사전 확인이 기댐, 블라인드는 soft 상태로)
+  1. **RV-02 `EditReviewHandler.HandleAsync` 작성 (사용자, `TODO(human)`)** — 지금 본문이 비어 있어 **빌드가 깨진 상태**(CS0161)로 미커밋. 작업 트리에 RV-02 전부가 있다: `Review.Edit`+단위 테스트 6개, `ReviewImageUploads`(RV-01에서 추출), 리포지토리 `GetAsync`·`TrySaveAsync`(6b → `ReviewGone`), 오류 `ReviewNotFound`·`NotReviewAuthor`, `PUT /reviews/{id}`, DI, Application에 `Logging.Abstractions` 10.0.13
+     - 핸들러에서 정할 것(Learn by Doing 안내): 4c를 업로드 전에 `review.Images`로 사전 확인할지 / `KeepImageIds`의 `Guid.Empty`(`ReviewImageId.From` 예외 → 500) 처리 / 커밋 후 삭제는 `Saved`일 때만, 실패는 경고 로그 후 성공 / `ReviewGone`일 때 지우면 안 되는 이유
+  2. 핸들러 리뷰 → `ReviewsApiTests`에 RV-02 테스트(Claude 작성, 사용자 예측). **저장 → 다시 읽기 → 순서 변경 → 다시 읽기** 테스트 필수(EF 복원 순서는 보장 안 됨 — 단위 테스트로는 못 잡음) → 한 커밋 `feat(reviews): RV-02`
+  3. RV-03 → BM-03 → PL-02
+  4. 사용자: learning-log D5-4 검토, D5-6·D5-7 내용 확인. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -15,7 +17,7 @@
   3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. ~~`WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함~~ ✅ `dc67487`
-  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · ~~LK-01~~ ✅ `52481f0` · ~~RV-01~~ ✅ `e239562` · RV-02 · RV-03 (수정·삭제도 D5에 포함, 2026-10-23 사용자 결정)
+  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · ~~LK-01~~ ✅ `52481f0` · ~~RV-01~~ ✅ `e239562` · RV-02 · RV-03 (수정·삭제도 D5에 포함, 2026-10-23 사용자 결정) · BM-03 · PL-02 (조회 — "프론트가 부를 API 전부", 2026-10-23 사용자 결정. PL-02는 N+1 그대로 두고 D9에서 측정·개선)
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
@@ -281,6 +283,19 @@ Claude가 작성: `NookApiFactory`·API 테스트 13개, PL-01 뼈대(인터페�
 
 커밋: `bc95bd2` BM · `9c329c6`·`85f6070` docs · `52481f0` LK-01
 Claude가 작성: BM-01·AddLike 리팩터링(사용자 요청), LK 뼈대(`ILikeRepository`·`AddLikeOutcome`·`LikeRepository` 23503 번역·`LikeErrors`·`LikeView`·`IReviewRepository.ExistsAsync(ReviewId)`·`LikesController`·DI), 테스트 19개, learning-log D5-5·D5-6 정리(사용자 요청). 사용자 작성: BM-01 초안·BM-02·AddLike 초안·RemoveLike. 결정은 사용자: `Guid.Empty` 500, LK A안·취소 404·틈 사이 취소 200·BM 유지
+
+### 2026-10-23 (D5-7)
+1. LK-01 변이 실험(catch 제거): 단독 실행 5/20 거짓 통과 발견 → 원인 계측(첫 요청 준비 비용으로 `ExistsAsync` ~400ms, 500ms 시간 기반 단언과 경합) → `LockWait`(`pg_blocking_pids`로 잠금 대기 직접 관찰, B안 사용자 결정) → 0/20. `ConfirmPlaceTests`도 이전
+2. incident 001 작성(Claude, 사용자 요청 — 짧은 문장 + Mermaid). D6 게이트 "incident 1건 이상"으로 변경(사용자 결정)
+3. RV-01~03 유스케이스 상세화: RV-01 Claude 수정, RV-02·03 사용자 작성 + Claude 보완. ADR-009(Claude 작성): 이미지 커밋 후 삭제 + 배치(D3 결정 유지, N=6h), RV-01 201, RV-03 C안(한 문장 DELETE + 영향 행 수, 없음=성공 `changed=false` `star=null`, 남의 것=403), 403은 RV-02·03 공통. 이미지 5MB·jpg/png/webp 유지
+4. RV-01: 뼈대(Claude) → 핸들러 사용자 초안 🔴 3(장소 조건 반전·"지금" 세 번+로컬 시각·검증과 업로드 섞임) → 사용자 일부 수정 후 Claude 수정(사용자 요청). 5a 업로드 실패 = 500(문서 반영). 테스트 6개, 변이 2개(로컬 날짜·섞인 업로드) 모두 빨간불. 6a는 `RendezvousStorage`로 경로 고정(10/10). 고정 시계로 토큰이 만료되던 문제 → 토큰만 실제 시계로 발급
+5. 예측: 정상 202(✗ 201), 4장 스토리지 1개(✗ 0개 — 장수 검사가 형식 판별보다 앞), 6a 스토리지 개수(비결정 → 고정 필요)
+6. D5 범위 점검: GET이 하나도 없음 → **BM-03·PL-02를 D5에 추가**(사용자 결정, PL-02 N+1은 D9에서 측정)
+7. RV-02: 순서 계약 "KeepImageIds 순서 → 새 이미지 뒤"(원본 UI도 추가·삭제만, 사용자 결정). `Review.Edit` 사용자 작성 🔴 3(새 이미지 미추가·순서 미반영·중복 ID) → 사용자가 추가·재번호 작성, 중복·순서·사전 생성은 Claude 수정(사용자 요청). 재번호가 `_images` 물리 순서를 쓰던 문제 발견(EF 복원 순서 무보장). 단위 테스트 6개 예측 전부 적중, 변이(사전 생성 제거) → 실패 후 상태 단언이 잡음
+8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 184개 통과(Domain 94·Algorithms 1·Application 7·Integration 82) — RV-02 핸들러 착수 전 기준
+
+커밋: `b462fb2`·`4ed8507` LockWait · `36ce64d` incident 001 · `c95c0b1`·`2d5ace7` 유스케이스·ADR-009 · `e239562` RV-01 · `e3064cc` progress
+Claude가 작성: `LockWait`, incident 001, RV-01 유스케이스 수정·RV-02·03 보완, ADR-009, RV-01 뼈대·핸들러 수정·테스트 6개, `Review.Edit` 수정(중복·순서·사전 생성)·단위 테스트 6개, RV-02 뼈대(`ReviewImageUploads` 추출 포함). 사용자 작성: RV-02·03 유스케이스 초안, RV-01 핸들러 초안, `Review.Edit` 초안. 결정은 사용자: LockWait B안, D6 게이트, RV-02·03·BM-03·PL-02 D5 포함, 정리 방식 D3 유지, 403, 201, C안·`star=null`, 순서 계약
 
 ## 체크리스트
 
