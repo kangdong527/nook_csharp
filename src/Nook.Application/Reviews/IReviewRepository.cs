@@ -4,7 +4,7 @@ using Nook.Domain.Users;
 
 namespace Nook.Application.Reviews;
 
-// 리뷰 저장 담당(erd.md reviews). RV-01에서 쓰기 메서드가 추가된다.
+// 리뷰 저장 담당(erd.md reviews).
 public interface IReviewRepository
 {
     // 이 회원이 이 장소에 리뷰를 쓴 적이 있는가(R-STAR 입력). 받는 인덱스: reviews (user_id, place_id, review_date) UNIQUE의 앞 두 열.
@@ -12,4 +12,18 @@ public interface IReviewRepository
 
     // erd.md reviews Q1. LK-01 좋아요 대상 확인. 받는 인덱스: pk_reviews.
     Task<bool> ExistsAsync(ReviewId reviewId, CancellationToken ct);
+
+    // RV-01 4단계 사전 확인(R-RV-03). erd.md reviews Q5의 UNIQUE 세 열 그대로. 업로드 전에 걸러 고아 이미지를 줄이는 용도 —
+    // 최종 판정은 TryAddAsync의 UNIQUE다(동시 작성 6a).
+    Task<bool> ExistsOnDateAsync(UserId userId, PlaceId placeId, DateOnly reviewDate, CancellationToken ct);
+
+    // RV-01 6단계. 리뷰와 이미지를 한 번에 저장한다(SaveChanges 한 번 = 트랜잭션 하나).
+    Task<AddReviewOutcome> TryAddAsync(Review review, CancellationToken ct);
+}
+
+public enum AddReviewOutcome
+{
+    Added,
+    // ux_reviews_user_place_date 위반 — 사전 확인을 함께 통과한 동시 작성에서 진 쪽.
+    AlreadyReviewedToday,
 }

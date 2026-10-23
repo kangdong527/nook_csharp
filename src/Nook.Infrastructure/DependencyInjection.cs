@@ -53,4 +53,13 @@ public static class DependencyInjection
     // 개발 전용. 메일 본문(로그인 링크)을 로그로 찍는다.
     public static IServiceCollection AddConsoleEmailTransport(this IServiceCollection services) =>
         services.AddSingleton<IEmailTransport, ConsoleEmailTransport>();
+
+    // 개발·테스트 전용(D5). 운영 스토리지는 DEP 주간 — 그 전 운영 환경에서 RV-01을 부르면 DI 해석 실패(500)로 드러난다.
+    // 인스턴스 하나를 두 이름으로: 핸들러는 인터페이스, 테스트는 구현 클래스(Objects)로 꺼낸다.
+    public static IServiceCollection AddInMemoryReviewImageStorage(this IServiceCollection services)
+    {
+        services.AddSingleton<InMemoryReviewImageStorage>();
+        services.AddSingleton<IReviewImageStorage>(sp => sp.GetRequiredService<InMemoryReviewImageStorage>());
+        return services;
+    }
 }

@@ -6,12 +6,15 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nook.Application.Auth;
 using Nook.Domain.Users;
 using Nook.Infrastructure;
+using Nook.Infrastructure.Reviews;
 
 namespace Nook.Integration.Tests.Infrastructure;
 
 // Program.cs의 파이프라인(인증·인가 미들웨어, 컨트롤러, 상태 코드 번역)을 메모리 안에서 띄운다. 포트를 열지 않는다.
-// 바꾸는 것은 바깥 경계 셋뿐이다: DB(컨테이너), 비밀값(테스트 키), 메일(받은 토큰을 기록만).
-public sealed class NookApiFactory(string connectionString) : WebApplicationFactory<Program>
+// 바꾸는 것은 바깥 경계 넷뿐이다: DB(컨테이너), 비밀값(테스트 키), 메일(받은 토큰을 기록만), 이미지 스토리지(메모리).
+// configureServices: 테스트가 경계를 하나 더 바꿀 때(고정 시계, 업로드를 붙잡는 스토리지). 기본 등록 뒤에 실행되므로 마지막 등록이 이긴다.
+public sealed class NookApiFactory(string connectionString, Action<IServiceCollection>? configureServices = null)
+    : WebApplicationFactory<Program>
 {
     // Development가 아니라 별도 환경: user-secrets(로컬 DB·실제 키)와 개발 전용 분기(콘솔 발송기, OpenAPI)가 끼어들지 않는다.
     private const string EnvironmentName = "Testing";
@@ -20,6 +23,8 @@ public sealed class NookApiFactory(string connectionString) : WebApplicationFact
     public const string SigningKey = "nook-integration-tests-signing-key-0123456789";
 
     public RecordingMailQueue Mail => Services.GetRequiredService<RecordingMailQueue>();
+
+    public InMemoryReviewImageStorage ImageStorage => Services.GetRequiredService<InMemoryReviewImageStorage>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -38,6 +43,10 @@ public sealed class NookApiFactory(string connectionString) : WebApplicationFact
             services.AddSingleton<IMagicLinkMailQueue>(sp => sp.GetRequiredService<RecordingMailQueue>());
             // 워커가 발송기 없이는 시작하지 않으므로(운영 보호 장치) 콘솔 발송기로 채운다. 큐가 비어 있어 실제로 쓰이지 않는다.
             services.AddConsoleEmailTransport();
+            // 리뷰 이미지는 메모리에 — 테스트가 ImageStorage.Objects로 올라간 것을 확인한다.
+            services.AddInMemoryReviewImageStorage();
+
+            configureServices?.Invoke(services);
         });
     }
 }

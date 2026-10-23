@@ -8,6 +8,7 @@ using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
 using Nook.Application.Likes;
 using Nook.Application.Places;
+using Nook.Application.Reviews;
 using Nook.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,7 +20,10 @@ var connectionString = builder.Configuration.GetConnectionString("Nook")
     ?? throw new InvalidOperationException("연결 문자열 'Nook'이 설정되지 않았습니다.");
 builder.Services.AddInfrastructure(connectionString);
 if (builder.Environment.IsDevelopment())
+{
     builder.Services.AddConsoleEmailTransport();
+    builder.Services.AddInMemoryReviewImageStorage();
+}
 
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -31,6 +35,7 @@ builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
+builder.Services.AddScoped<CreateReviewHandler>();
 
 // 인증: API가 직접 서명한 Access 토큰(HS256)만 받는다(D5 결정)
 builder.Services.AddOptions<JwtOptions>()
