@@ -116,7 +116,7 @@ public sealed class LikesApiTests : IntegrationTestBase, IAsyncLifetime, IDispos
 
         var add = _client.PutAsync($"/reviews/{_review.Id.Value}/like", null);
 
-        await AssertStillWaitingAsync(add);
+        await LockWait.AssertBlockedByAsync(Db, deleter, add);
         await tx.CommitAsync();
 
         await AssertReviewNotFoundAsync(await add);
@@ -132,7 +132,7 @@ public sealed class LikesApiTests : IntegrationTestBase, IAsyncLifetime, IDispos
 
         var add = _client.PutAsync($"/reviews/{_review.Id.Value}/like", null);
 
-        await AssertStillWaitingAsync(add);
+        await LockWait.AssertBlockedByAsync(Db, deleter, add);
         await tx.RollbackAsync();
 
         var response = await add;
@@ -181,7 +181,7 @@ public sealed class LikesApiTests : IntegrationTestBase, IAsyncLifetime, IDispos
 
         var remove = _client.DeleteAsync($"/reviews/{_review.Id.Value}/like");
 
-        await AssertStillWaitingAsync(remove);
+        await LockWait.AssertBlockedByAsync(Db, deleter, remove);
         await tx.CommitAsync();
 
         var response = await remove;
@@ -215,13 +215,6 @@ public sealed class LikesApiTests : IntegrationTestBase, IAsyncLifetime, IDispos
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         Assert.Equal(LikeErrors.ReviewNotFound.Code, problem?.Title);
-    }
-
-    // ConfirmPlaceTests와 같은 기준: 500ms 안에 끝나면 기다리지 않은 것.
-    private static async Task AssertStillWaitingAsync(Task task)
-    {
-        var finished = await Task.WhenAny(task, Task.Delay(TimeSpan.FromMilliseconds(500)));
-        Assert.NotSame(task, finished);
     }
 
     private async Task<int> CountLikesAsync()
