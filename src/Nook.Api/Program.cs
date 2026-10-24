@@ -31,6 +31,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<RequestMagicLinkHandler>();
 builder.Services.AddScoped<ConsumeMagicLinkHandler>();
 builder.Services.AddScoped<ConfirmPlaceHandler>();
+builder.Services.AddScoped<GetPlaceHandler>();
+builder.Services.AddScoped<GetPlaceReviewsHandler>();
 builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<GetMyPlacesHandler>();

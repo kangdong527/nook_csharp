@@ -15,6 +15,10 @@ internal sealed class PlaceRepository(NookDbContext db) : IPlaceRepository
         // erd.md places Q2. 받는 인덱스: pk_places.
         db.Places.AnyAsync(p => p.Id == placeId, ct);
 
+    public Task<Place?> GetAsync(PlaceId placeId, CancellationToken ct) =>
+        // erd.md places Q2. 받는 인덱스: pk_places.
+        db.Places.AsNoTracking().SingleOrDefaultAsync(p => p.Id == placeId, ct);
+
     public async Task<Place?> TryAddAsync(Place place, CancellationToken ct)
     {
         // erd.md places Q3. 충돌 판정: ux_places_kakao_place_id. 0행 = 같은 카카오 ID가 이미 커밋됨(진 쪽).

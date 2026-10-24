@@ -113,6 +113,36 @@ internal sealed class ReviewRepository(NookDbContext db) : IReviewRepository
         };
     }
 
+    public async Task<IReadOnlyList<PlaceReview>> ListByPlaceAsync(
+        PlaceId placeId, UserId me, ReviewCursor? after, int take, CancellationToken ct)
+    {
+        // 키셋 조건은 행 값 비교 (created_at, id) < (@c, @id) — 정렬 키와 같은 모양이라 "이 위치 다음부터"가 정확하다.
+        // ReviewId에는 비교 연산자가 없어 LINQ로 쓸 수 없으므로 이 조건만 SQL로 두고, 정렬·개수·투영은 EF가 그 위에 합성한다.
+        // 받는 인덱스(예상): ix_reviews_place_created (place_id, created_at DESC). id 동점 깨기는 인덱스 밖 — D8에서 EXPLAIN.
+        var source = after is null
+            ? db.Reviews.Where(r => r.PlaceId == placeId)
+            : db.Reviews.FromSql($"""
+                SELECT * FROM reviews
+                WHERE place_id = {placeId.Value} AND (created_at, id) < ({after.CreatedAt}, {after.Id})
+                """);
+
+        var rows = await source
+            .AsNoTracking()
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(take)
+            .Select(r => new
+            {
+                Review = r,
+                Nickname = db.Users.Where(u => u.Id == r.UserId).Select(u => u.Nickname).Single(),
+                LikeCount = db.Likes.Count(l => l.ReviewId == r.Id),
+                LikedByMe = db.Likes.Any(l => l.ReviewId == r.Id && l.UserId == me),
+            })
+            .ToListAsync(ct);
+
+        return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname.Value, row.LikeCount, row.LikedByMe))];
+    }
+
     private sealed class DeletedReviewRow
     {
         public Guid PlaceId { get; init; }

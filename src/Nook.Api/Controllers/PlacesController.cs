@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using Nook.Api.Auth;
 using Nook.Application.Places;
+using Nook.Application.Reviews;
 using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
@@ -10,6 +12,40 @@ namespace Nook.Api.Controllers;
 [Route("places")]
 public sealed class PlacesController : ControllerBase
 {
+    // PL-02 장소 상세 + 내 별.
+    [HttpGet("{placeId:guid}")]
+    [ProducesResponseType<PlaceDetailView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Get(Guid placeId, [FromServices] GetPlaceHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetPlaceQuery(User.GetUserId(), placeId), ct);
+
+        return result.TryGetValue(out var view, out var error)
+            ? Ok(view)
+            : Problem(statusCode: StatusCodes.Status404NotFound, title: error.Code, detail: error.Description);
+    }
+
+    // PL-02 리뷰 목록(무한 스크롤). 첫 요청은 cursor 없이, 다음부터는 직전 응답의 nextCursor를 그대로.
+    [HttpGet("{placeId:guid}/reviews")]
+    [ProducesResponseType<ReviewPageView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reviews(
+        Guid placeId,
+        [FromQuery] string? cursor,
+        [FromQuery] int? limit,
+        [FromServices] GetPlaceReviewsHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetPlaceReviewsQuery(User.GetUserId(), placeId, cursor, limit), ct);
+
+        if (result.TryGetValue(out var page, out var error))
+            return Ok(page);
+
+        var status = error.Type == ErrorType.NotFound ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest;
+        return Problem(statusCode: status, title: error.Code, detail: error.Description);
+    }
+
     // PL-01. 새로 만들었든 기존 것이든 같은 응답(200) — 호출자는 "확정된 장소"만 필요하고, 몇 번 불러도 결과가 같다.
     [HttpPost]
     [ProducesResponseType<PlaceView>(StatusCodes.Status200OK)]

@@ -29,7 +29,14 @@ public interface IReviewRepository
     // RV-03 2단계(ADR-009 결정 3). id와 user_id가 모두 맞는 리뷰를 한 문장으로 지운다. 0행이면 null — 이유(없음·남의 것)는 호출 쪽이 가린다.
     // 지운 리뷰의 이미지 키도 같은 문장에서 돌려준다(커밋 후 스토리지 삭제용). review_images·likes는 CASCADE. 받는 인덱스: pk_reviews.
     Task<ReviewDeletion?> DeleteAsync(ReviewId reviewId, UserId userId, CancellationToken ct);
+
+    // PL-02 리뷰 목록. erd.md reviews Q2 + likes Q3. 최신순(created_at DESC, id DESC), after보다 뒤에서 take개. 쿼리 한 번.
+    // 작성자 닉네임·좋아요 수·내 좋아요 여부를 행마다 함께 계산한다(take개 × 상관 하위 쿼리). 카운터 비정규화 여부는 D9에서 측정 후.
+    Task<IReadOnlyList<PlaceReview>> ListByPlaceAsync(
+        PlaceId placeId, UserId me, ReviewCursor? after, int take, CancellationToken ct);
 }
+
+public sealed record PlaceReview(Review Review, string AuthorNickname, int LikeCount, bool LikedByMe);
 
 public sealed record ReviewDeletion(PlaceId PlaceId, IReadOnlyList<string> StorageKeys);
 
