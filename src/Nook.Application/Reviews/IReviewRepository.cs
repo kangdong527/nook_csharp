@@ -25,7 +25,13 @@ public interface IReviewRepository
 
     // RV-02 6단계. GetAsync로 읽어 바꾼 리뷰를 저장한다(SaveChanges 한 번 = 트랜잭션 하나).
     Task<SaveReviewOutcome> TrySaveAsync(Review review, CancellationToken ct);
+
+    // RV-03 2단계(ADR-009 결정 3). id와 user_id가 모두 맞는 리뷰를 한 문장으로 지운다. 0행이면 null — 이유(없음·남의 것)는 호출 쪽이 가린다.
+    // 지운 리뷰의 이미지 키도 같은 문장에서 돌려준다(커밋 후 스토리지 삭제용). review_images·likes는 CASCADE. 받는 인덱스: pk_reviews.
+    Task<ReviewDeletion?> DeleteAsync(ReviewId reviewId, UserId userId, CancellationToken ct);
 }
+
+public sealed record ReviewDeletion(PlaceId PlaceId, IReadOnlyList<string> StorageKeys);
 
 public enum AddReviewOutcome
 {

@@ -59,7 +59,7 @@ public sealed class EditReviewHandler(
         switch (outcome)
         {
             case SaveReviewOutcome.Saved:
-                await DeleteRemovedAsync(removedKeys);
+                await ReviewImageCleanup.DeleteAfterCommitAsync(storage, removedKeys, logger);
                 // 7단계. 리뷰가 있으니 R-STAR는 fill(RV-01 7단계와 같은 이유).
                 return ReviewView.From(review, StarRule.Evaluate(isBookmarked: false, hasReview: true));
 
@@ -73,23 +73,6 @@ public sealed class EditReviewHandler(
 
             default:
                 throw new UnreachableException($"처리하지 않은 {nameof(SaveReviewOutcome)}: {outcome}");
-        }
-    }
-
-    // 커밋 후 정리. 수정은 이미 성공했으므로 실패해도 응답을 바꾸지 않는다 — 남은 객체는 배치가 정리(ADR-009).
-    // 요청 ct를 넘기지 않는다: 커밋 뒤 클라이언트가 끊겨도 취소 예외가 성공한 수정을 500으로 바꾸면 안 된다.
-    private async Task DeleteRemovedAsync(IReadOnlyList<string> keys)
-    {
-        foreach (var key in keys)
-        {
-            try
-            {
-                await storage.DeleteAsync(key, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "리뷰 이미지 삭제 실패, 배치가 정리한다: {StorageKey}", key);
-            }
         }
     }
 }

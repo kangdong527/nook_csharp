@@ -9,6 +9,9 @@ namespace Nook.Infrastructure.Bookmarks;
 
 internal sealed class BookmarkRepository(NookDbContext db) : IBookmarkRepository
 {
+    public Task<bool> ExistsAsync(UserId userId, PlaceId placeId, CancellationToken ct) =>
+        db.Set<Bookmark>().AnyAsync(b => b.UserId == userId && b.PlaceId == placeId, ct);
+
     public async Task<bool> TryAddAsync(Bookmark bookmark, CancellationToken ct)
     {
         // erd.md bookmarks Q2. 충돌 판정: pk_bookmarks. 동시 저장(1b)은 PK가 직렬화한다 — 진 쪽은 상대 커밋을 기다린 뒤 0행.

@@ -8,6 +8,9 @@ namespace Nook.Application.Bookmarks;
 // 반환값은 "이번 요청이 상태를 바꿨는가" — 동시 요청(1b)에서 진 쪽·이미 같은 상태(2a)는 false.
 public interface IBookmarkRepository
 {
+    // erd.md bookmarks Q1. 이 장소를 북마크했는가(R-STAR 입력). 받는 인덱스: pk_bookmarks.
+    Task<bool> ExistsAsync(UserId userId, PlaceId placeId, CancellationToken ct);
+
     // erd.md bookmarks Q2. INSERT ... ON CONFLICT (user_id, place_id) DO NOTHING.
     Task<bool> TryAddAsync(Bookmark bookmark, CancellationToken ct);
 

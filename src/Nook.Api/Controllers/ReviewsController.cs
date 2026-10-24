@@ -71,6 +71,23 @@ public sealed class ReviewsController : ControllerBase
         }
     }
 
+    // RV-03. 멱등 — 없는 리뷰·이미 지운 리뷰도 200 changed=false, 남의 리뷰만 403(ADR-009 결정 3·4).
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType<DeleteReviewView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        [FromServices] DeleteReviewHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new DeleteReviewCommand(User.GetUserId(), id), ct);
+
+        if (!result.TryGetValue(out var view, out var error))
+            return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+
+        return Ok(view);
+    }
+
     // IFormFile 스트림은 요청 본문을 버퍼링한 것이라 되감을 수 있다(ReviewImageFile 전제).
     private static List<ReviewImageFile> OpenImages(List<IFormFile>? files) =>
         [.. (files ?? []).Select(f => new ReviewImageFile(f.OpenReadStream(), f.Length))];

@@ -8,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nook.Api.Auth;
 using Nook.Application.Reviews;
+using Nook.Domain.Bookmarks;
+using Nook.Domain.Likes;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
 using Nook.Domain.Users;
@@ -41,6 +43,17 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Edit_ConcurrentWithDifferentKeep_One200One409                      (6c — 0행)
     // - Edit_ConcurrentBothAppend_One200One409                             (6c — sort_order 23505, 커밋 시점)
     // - Edit_WhenReviewDeletedAfterRead_Returns404                         (6b)
+    //
+    // RV-03 — 시작 상태: 내 리뷰 R(오늘, 이미지 2장, 남의 좋아요 1개), 스토리지 2개, 북마크 없음
+    // - Delete_Own_Returns200ChangedAndCascadesImagesAndLikes               (1)
+    // - Delete_WhenOtherDayReviewRemains_StarStaysFill                     (2 — R-RV-03은 하루 1개)
+    // - Delete_WhenBookmarked_StarBecomesGray                              (3)
+    // - Delete_Twice_SecondReturns200Unchanged                             (4, 3a′ 멱등)
+    // - Delete_UnknownReview_Returns200Unchanged                           (5, 3a′)
+    // - Delete_ByOtherUser_Returns403AndKeepsEverything                    (6, 3b′)
+    // - Delete_Concurrent_OneChangedOneUnchanged                           (7, 3c)
+    // - Delete_WhenStorageDeleteFails_StillReturns200                      (8)
+    // - Delete_ThenCreateSameDay_Returns201                                (9 — R-RV-03 미결의 현재 동작 기록)
 
     // 시계를 고정한다: 사전 확인 날짜·키 날짜·CreatedAt이 이 값 하나에서 나오는지 확인할 수 있다.
     // 20:00Z = KST 다음 날 05:00 — 로컬 날짜와 UTC 날짜가 갈리는 시각이라, 날짜를 로컬로 계산하면 드러난다.
@@ -55,6 +68,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
     private readonly PostgresFixture _fixture;
     private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"));
+    // RV-03: R에 좋아요를 누른 다른 회원 — 남의 리뷰 삭제(403)의 요청자도 겸한다. SeedReviewToDeleteAsync가 저장한다.
+    private readonly User _liker = User.Create(Nickname.From("좋아요"), Email.From("liker@example.com"));
     private readonly Place _place = Place.Create(
         KakaoPlaceId.From("8130394"), "누크 카페", "서울", Coordinate.Create(37.5665, 126.978).Unwrap()).Unwrap();
 
@@ -349,6 +364,161 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.Equal(4, _factory.ImageStorage.Objects.Count);
     }
 
+    [Fact]
+    public async Task Delete_Own_Returns200ChangedAndCascadesImagesAndLikes()
+    {
+        var reviewId = await SeedReviewToDeleteAsync();
+
+        var response = await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertDeleteViewAsync(response, changed: true, star: "empty");
+        await using var db = Db.CreateContext();
+        Assert.False(await db.Reviews.AnyAsync());
+        // 이미지 행은 owned라 Reviews와 함께 사라지고, 좋아요는 fk_likes_reviews CASCADE.
+        Assert.Equal(0, await db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM review_images").SingleAsync());
+        Assert.False(await db.Likes.AnyAsync());
+        // CTE가 CASCADE 전의 이미지 키를 돌려줬다는 증거 — 키를 몰랐다면 스토리지에 남는다.
+        Assert.Empty(_factory.ImageStorage.Objects);
+    }
+
+    [Fact]
+    public async Task Delete_WhenOtherDayReviewRemains_StarStaysFill()
+    {
+        var reviewId = await SeedReviewToDeleteAsync();
+        await SeedReviewAtAsync(Now.AddDays(-1), "yesterday.jpg");
+
+        var response = await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertDeleteViewAsync(response, changed: true, star: "fill");
+        Assert.Single(_factory.ImageStorage.Objects);
+    }
+
+    [Fact]
+    public async Task Delete_WhenBookmarked_StarBecomesGray()
+    {
+        var reviewId = await SeedReviewToDeleteAsync();
+        await using (var db = Db.CreateContext())
+        {
+            db.Bookmarks.Add(Bookmark.Create(_user.Id, _place.Id, Now));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertDeleteViewAsync(response, changed: true, star: "gray");
+    }
+
+    [Fact]
+    public async Task Delete_Twice_SecondReturns200Unchanged()
+    {
+        var reviewId = await SeedReviewToDeleteAsync();
+        await AssertDeleteViewAsync(await _client.DeleteAsync($"/reviews/{reviewId}"), changed: true, star: "empty");
+
+        var second = await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertDeleteViewAsync(second, changed: false, star: null);
+    }
+
+    [Fact]
+    public async Task Delete_UnknownReview_Returns200Unchanged()
+    {
+        await SeedReviewToDeleteAsync();
+
+        var response = await _client.DeleteAsync($"/reviews/{Guid.NewGuid()}");
+
+        await AssertDeleteViewAsync(response, changed: false, star: null);
+        Assert.Equal(2, _factory.ImageStorage.Objects.Count);
+    }
+
+    [Fact]
+    public async Task Delete_ByOtherUser_Returns403AndKeepsEverything()
+    {
+        var reviewId = await SeedReviewToDeleteAsync();
+        using var otherClient = _factory.CreateClient();
+        Authorize(otherClient, _factory, _liker.Id.Value);
+
+        var response = await otherClient.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertProblemAsync(response, HttpStatusCode.Forbidden, ReviewWriteErrors.NotReviewAuthor);
+        Assert.Equal(2, (await ReloadAsync(reviewId)).Images.Count);
+        Assert.Equal(2, _factory.ImageStorage.Objects.Count);
+    }
+
+    [Fact]
+    public async Task Delete_Concurrent_OneChangedOneUnchanged()
+    {
+        // DELETE 직전에서 두 요청을 만나게 한다 — 둘 다 "아직 있음"에서 출발해, 늦은 쪽이 행 잠금을 기다린 뒤 0행이 되는 3c 경로.
+        _factory.Dispose();
+        var rendezvous = new Barrier(participantCount: 2);
+        (_factory, _client) = CreateClient(services =>
+        {
+            var original = services.Single(s => s.ServiceType == typeof(IReviewRepository));
+            services.Remove(original);
+            services.AddScoped<IReviewRepository>(sp => new RendezvousBeforeDeleteRepository(
+                (IReviewRepository)ActivatorUtilities.CreateInstance(sp, original.ImplementationType!), rendezvous));
+        });
+        var reviewId = await SeedReviewToDeleteAsync();
+
+        var responses = await Task.WhenAll(
+            _client.DeleteAsync($"/reviews/{reviewId}"), _client.DeleteAsync($"/reviews/{reviewId}"));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        var views = await Task.WhenAll(responses.Select(r => r.Content.ReadFromJsonAsync<DeleteReviewView>()));
+        Assert.Equal([false, true], views.Select(v => v!.Changed).Order());
+        Assert.Empty(_factory.ImageStorage.Objects);
+    }
+
+    [Fact]
+    public async Task Delete_WhenStorageDeleteFails_StillReturns200()
+    {
+        _factory.Dispose();
+        (_factory, _client) = CreateClient(services =>
+        {
+            services.RemoveAll<IReviewImageStorage>();
+            services.AddSingleton<IReviewImageStorage>(sp =>
+                new FailingDeleteStorage(sp.GetRequiredService<InMemoryReviewImageStorage>()));
+        });
+        var reviewId = await SeedReviewToDeleteAsync();
+
+        var response = await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        await AssertDeleteViewAsync(response, changed: true, star: "empty");
+        await using var db = Db.CreateContext();
+        Assert.False(await db.Reviews.AnyAsync());
+        // DB가 기준이다 — 리뷰는 지워졌고, 남은 파일은 배치가 정리한다(ADR-009 결정 1).
+        Assert.Equal(2, _factory.ImageStorage.Objects.Count);
+    }
+
+    [Fact]
+    public async Task Delete_ThenCreateSameDay_Returns201()
+    {
+        // R-RV-03과 삭제의 관계는 미결(usecases.md RV-03, PM 확인 필요). 이 테스트는 결정이 아니라 현재 동작의 기록이다 —
+        // ux_reviews_user_place_date는 남은 행만 보므로 오늘 다시 쓸 수 있다. 결정이 바뀌면 이 테스트부터 바꾼다.
+        var reviewId = await SeedReviewToDeleteAsync();
+        await _client.DeleteAsync($"/reviews/{reviewId}");
+
+        var response = await CreateAsync(_place.Id.Value, Jpeg);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    // RV-03 공통 시작 상태: 내 리뷰 R(오늘, 이미지 2장) + 다른 회원의 좋아요 1개.
+    private async Task<Guid> SeedReviewToDeleteAsync()
+    {
+        var (reviewId, _) = await SeedReviewAsync("a.jpg", "b.jpg");
+        await using var db = Db.CreateContext();
+        db.AddRange(_liker, Like.Create(_liker.Id, ReviewId.From(reviewId), Now));
+        await db.SaveChangesAsync();
+        return reviewId;
+    }
+
+    private static async Task AssertDeleteViewAsync(HttpResponseMessage response, bool changed, string? star)
+    {
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var view = await response.Content.ReadFromJsonAsync<DeleteReviewView>();
+        Assert.Equal(new DeleteReviewView(changed, star), view);
+    }
+
     // 6c 공통 단언: 한쪽만 반영되고, 이긴 쪽이 뺀 이미지만 지워지고, 진 쪽 새 이미지 1장이 고아로 남는다.
     private async Task AssertOneWinnerOneConflictAsync(HttpResponseMessage[] responses, Guid reviewId)
     {
@@ -383,10 +553,14 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return (id, images[0], images[1], images[2]);
     }
 
-    private async Task<(Guid ReviewId, IReadOnlyList<ReviewImage> Images)> SeedReviewAsync(params string[] names)
+    private Task<(Guid ReviewId, IReadOnlyList<ReviewImage> Images)> SeedReviewAsync(params string[] names) =>
+        SeedReviewAtAsync(Now.AddHours(-1), names);
+
+    private async Task<(Guid ReviewId, IReadOnlyList<ReviewImage> Images)> SeedReviewAtAsync(
+        DateTimeOffset createdAt, params string[] names)
     {
         var keys = names.Select(n => $"reviews/seed/{n}").ToArray();
-        var review = Review.Create(_user.Id, _place.Id, ReviewContent.From(Content), keys, Now.AddHours(-1)).Unwrap();
+        var review = Review.Create(_user.Id, _place.Id, ReviewContent.From(Content), keys, createdAt).Unwrap();
         await using (var db = Db.CreateContext())
         {
             db.Reviews.Add(review);
@@ -525,5 +699,24 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+    }
+
+    // DELETE 직전에서 두 요청이 서로를 기다린다. 나머지는 원래 리포지토리 그대로.
+    private sealed class RendezvousBeforeDeleteRepository(IReviewRepository inner, Barrier rendezvous) : IReviewRepository
+    {
+        public async Task<ReviewDeletion?> DeleteAsync(ReviewId reviewId, UserId userId, CancellationToken ct)
+        {
+            if (!await Task.Run(() => rendezvous.SignalAndWait(TimeSpan.FromSeconds(10), ct), ct))
+                throw new TimeoutException("상대 요청이 DELETE 지점에 오지 않았다.");
+            return await inner.DeleteAsync(reviewId, userId, ct);
+        }
+
+        public Task<bool> ExistsAsync(UserId userId, PlaceId placeId, CancellationToken ct) => inner.ExistsAsync(userId, placeId, ct);
+        public Task<bool> ExistsAsync(ReviewId reviewId, CancellationToken ct) => inner.ExistsAsync(reviewId, ct);
+        public Task<bool> ExistsOnDateAsync(UserId userId, PlaceId placeId, DateOnly reviewDate, CancellationToken ct) =>
+            inner.ExistsOnDateAsync(userId, placeId, reviewDate, ct);
+        public Task<AddReviewOutcome> TryAddAsync(Review review, CancellationToken ct) => inner.TryAddAsync(review, ct);
+        public Task<Review?> GetAsync(ReviewId reviewId, CancellationToken ct) => inner.GetAsync(reviewId, ct);
+        public Task<SaveReviewOutcome> TrySaveAsync(Review review, CancellationToken ct) => inner.TrySaveAsync(review, ct);
     }
 }
