@@ -91,17 +91,18 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.Equal("fill", view.Star);
 
         // 키 날짜는 고정 시계의 UTC 날짜, 확장자는 매직 바이트로 정한 형식, 순서는 보낸 순서.
-        Assert.Collection(view.ImageKeys,
-            k => Assert.Matches(@"^reviews/2026/10/22/[0-9a-f]{32}\.jpg$", k),
-            k => Assert.Matches(@"^reviews/2026/10/22/[0-9a-f]{32}\.png$", k));
-        Assert.Equal("image/jpeg", _factory.ImageStorage.Objects[view.ImageKeys[0]].ContentType);
-        Assert.Equal(Png, _factory.ImageStorage.Objects[view.ImageKeys[1]].Bytes);
+        Assert.Collection(view.Images,
+            i => Assert.Matches(@"^reviews/2026/10/22/[0-9a-f]{32}\.jpg$", i.Key),
+            i => Assert.Matches(@"^reviews/2026/10/22/[0-9a-f]{32}\.png$", i.Key));
+        Assert.Equal("image/jpeg", _factory.ImageStorage.Objects[view.Images[0].Key].ContentType);
+        Assert.Equal(Png, _factory.ImageStorage.Objects[view.Images[1].Key].Bytes);
         Assert.Equal(2, _factory.ImageStorage.Objects.Count);
 
         await using var db = Db.CreateContext();
         var saved = await db.Reviews.SingleAsync();
         Assert.Equal(DateOnly.FromDateTime(Now.UtcDateTime), saved.ReviewDate);
-        Assert.Equal(view.ImageKeys, saved.Images.Select(i => i.StorageKey));
+        // 응답의 이미지 ID가 저장된 ID다 — 클라이언트가 RV-02의 KeepImageIds로 그대로 돌려보낸다(ADR-009 결정 2).
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
     }
 
     [Fact]
@@ -182,7 +183,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     {
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
 
-        var response = await EditAsync(reviewId, [c, a], Png);
+        var response = await EditAsync(reviewId, Ids(c, a), Png);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var view = await response.Content.ReadFromJsonAsync<ReviewView>();
@@ -193,8 +194,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         // 다시 읽은 값이 기준이다 — 응답은 메모리의 애그리거트라 저장이 틀려도 맞게 나온다.
         var saved = await ReloadAsync(reviewId);
         Assert.Equal(EditedContent, saved.Content.Value);
-        Assert.Equal([c.StorageKey, a.StorageKey, view.ImageKeys[2]], saved.Images.Select(i => i.StorageKey));
-        Assert.Equal(view.ImageKeys, saved.Images.Select(i => i.StorageKey));
+        Assert.Equal([c.Id.Value, a.Id.Value, view.Images[2].Id], saved.Images.Select(i => i.Id.Value));
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
 
         // B만 지워지고 새 이미지가 올라간다: 3 - 1 + 1.
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -205,15 +206,16 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     public async Task Edit_ThenReorderAgain_PersistsNewOrderAfterReload()
     {
         // 두 번째 수정은 EF가 DB에서 복원한 애그리거트에서 시작한다 — 순서를 _images 물리 순서로 매기면 여기서 드러난다.
+        // 클라이언트처럼 첫 응답의 이미지 ID로 두 번째 요청을 만든다(DB를 들여다보지 않는다).
         var (reviewId, a, _, c) = await SeedReviewWithThreeImagesAsync();
-        Assert.Equal(HttpStatusCode.OK, (await EditAsync(reviewId, [c, a], Png)).StatusCode);
-        var x = (await ReloadAsync(reviewId)).Images[2];
+        var first = await (await EditAsync(reviewId, Ids(c, a), Png)).Content.ReadFromJsonAsync<ReviewView>();
+        var x = first!.Images[2].Id;
 
-        var response = await EditAsync(reviewId, [x, c]);
+        var response = await EditAsync(reviewId, [x, c.Id.Value]);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var saved = await ReloadAsync(reviewId);
-        Assert.Equal([x.Id, c.Id], saved.Images.Select(i => i.Id));
+        Assert.Equal([x, c.Id.Value], saved.Images.Select(i => i.Id.Value));
         Assert.Equal([0, 1], saved.Images.Select(i => i.SortOrder));
         Assert.Equal(2, _factory.ImageStorage.Objects.Count);
     }
@@ -231,7 +233,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         using var otherClient = _factory.CreateClient();
         Authorize(otherClient, _factory, other.Id.Value);
 
-        var response = await EditAsync(reviewId, [a], [Png], otherClient);
+        var response = await EditAsync(reviewId, Ids(a), [Png], otherClient);
 
         await AssertProblemAsync(response, HttpStatusCode.Forbidden, ReviewWriteErrors.NotReviewAuthor);
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -255,7 +257,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         // 요청 하나만 보면 새 이미지 1장 — 합계(3 + 1)로 판단해야 걸린다.
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
 
-        var response = await EditAsync(reviewId, [a, b, c], Png);
+        var response = await EditAsync(reviewId, Ids(a, b, c), Png);
 
         await AssertProblemAsync(response, HttpStatusCode.BadRequest, ReviewErrors.TooManyImages);
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -267,7 +269,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
         var otherImage = await SeedOtherUsersReviewImageAsync();
 
-        var response = await EditAsync(reviewId, [a, otherImage], Png);
+        var response = await EditAsync(reviewId, Ids(a, otherImage), Png);
 
         await AssertProblemAsync(response, HttpStatusCode.BadRequest, ReviewErrors.ImageNotInReview);
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -285,7 +287,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         });
         var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
 
-        var response = await EditAsync(reviewId, [a]);
+        var response = await EditAsync(reviewId, Ids(a));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal([a.Id], (await ReloadAsync(reviewId)).Images.Select(i => i.Id));
@@ -301,7 +303,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         UseRendezvousStorage();
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
 
-        var responses = await Task.WhenAll(EditAsync(reviewId, [a], Jpeg), EditAsync(reviewId, [b, c], Png));
+        var responses = await Task.WhenAll(EditAsync(reviewId, Ids(a), Jpeg), EditAsync(reviewId, Ids(b, c), Png));
 
         await AssertOneWinnerOneConflictAsync(responses, reviewId);
     }
@@ -314,7 +316,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         UseRendezvousStorage();
         var (reviewId, a, b) = await SeedReviewAsync("a.jpg", "b.jpg") switch { var (id, i) => (id, i[0], i[1]) };
 
-        var responses = await Task.WhenAll(EditAsync(reviewId, [a, b], Jpeg), EditAsync(reviewId, [a, b], Png));
+        var responses = await Task.WhenAll(EditAsync(reviewId, Ids(a, b), Jpeg), EditAsync(reviewId, Ids(a, b), Png));
 
         await AssertOneWinnerOneConflictAsync(responses, reviewId);
     }
@@ -338,7 +340,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
         deleteOnUpload = reviewId;
 
-        var response = await EditAsync(reviewId, [a], Png);
+        var response = await EditAsync(reviewId, Ids(a), Png);
 
         await AssertProblemAsync(response, HttpStatusCode.NotFound, ReviewWriteErrors.ReviewNotFound);
         await using var check = Db.CreateContext();
@@ -357,7 +359,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         var winner = await responses.Single(r => r.StatusCode == HttpStatusCode.OK).Content.ReadFromJsonAsync<ReviewView>();
         var saved = await ReloadAsync(reviewId);
-        Assert.Equal(winner!.ImageKeys, saved.Images.Select(i => i.StorageKey));
+        Assert.Equal(winner!.Images.Select(i => i.Key), saved.Images.Select(i => i.StorageKey));
         Assert.Equal(saved.Images.Count + 1, _factory.ImageStorage.Objects.Count);
         Assert.All(saved.Images, i => Assert.Contains(i.StorageKey, _factory.ImageStorage.Objects.Keys));
     }
@@ -412,16 +414,18 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return await db.Reviews.AsNoTracking().SingleAsync(r => r.Id == ReviewId.From(reviewId));
     }
 
-    private Task<HttpResponseMessage> EditAsync(Guid reviewId, ReviewImage[] keep, params byte[][] images) =>
+    private static Guid[] Ids(params ReviewImage[] images) => [.. images.Select(i => i.Id.Value)];
+
+    private Task<HttpResponseMessage> EditAsync(Guid reviewId, Guid[] keep, params byte[][] images) =>
         EditAsync(reviewId, keep, images, _client);
 
     private static Task<HttpResponseMessage> EditAsync(
-        Guid reviewId, ReviewImage[] keep, byte[][] images, HttpClient client)
+        Guid reviewId, Guid[] keep, byte[][] images, HttpClient client)
     {
         var form = new MultipartFormDataContent { { new StringContent(EditedContent), "Content" } };
         // 같은 이름을 여러 번 보내면 List<Guid>로 묶이고, 보낸 순서가 곧 KeepImageIds 순서다.
-        foreach (var image in keep)
-            form.Add(new StringContent(image.Id.Value.ToString()), "KeepImageIds");
+        foreach (var id in keep)
+            form.Add(new StringContent(id.ToString()), "KeepImageIds");
         for (var i = 0; i < images.Length; i++)
         {
             var file = new ByteArrayContent(images[i]);
