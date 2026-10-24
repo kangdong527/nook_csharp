@@ -33,6 +33,7 @@ builder.Services.AddScoped<ConsumeMagicLinkHandler>();
 builder.Services.AddScoped<ConfirmPlaceHandler>();
 builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
+builder.Services.AddScoped<GetMyPlacesHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();

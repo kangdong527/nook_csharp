@@ -16,4 +16,11 @@ public interface IBookmarkRepository
 
     // erd.md bookmarks Q2. DELETE ... WHERE user_id = ? AND place_id = ?
     Task<bool> RemoveAsync(UserId userId, PlaceId placeId, CancellationToken ct);
+
+    // BM-03 내 지도. 북마크했거나 리뷰를 쓴 장소 전부(합집합, 장소당 1행)와 별 판정 입력 두 개. 쿼리 한 번.
+    // 받는 인덱스: bookmarks Q3(pk_bookmarks 앞 열), reviews Q4(ux_reviews_user_place_date 앞 두 열), places PK — 예상, D8에서 EXPLAIN.
+    // 상한 없음: 지도는 한 번에 다 그린다. 개수·bbox 필터는 D8 시드 데이터로 측정한 뒤 정한다(2026-10-25 사용자 결정).
+    Task<IReadOnlyList<MyPlace>> ListMyPlacesAsync(UserId userId, CancellationToken ct);
 }
+
+public sealed record MyPlace(Place Place, bool IsBookmarked, bool HasReview);
