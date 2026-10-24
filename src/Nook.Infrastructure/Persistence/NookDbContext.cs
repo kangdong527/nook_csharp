@@ -42,5 +42,7 @@ public sealed class NookDbContext(DbContextOptions<NookDbContext> options) : DbC
         modelBuilder.ApplyConfiguration(new ReviewConfiguration());
         modelBuilder.ApplyConfiguration(new LikeConfiguration());
         modelBuilder.ApplyConfiguration(new GroupConfiguration());
+        // DbSet이 없다: MagicLinkToken은 internal이고, Infrastructure 밖에서 이 테이블을 직접 다루지 않는다.
+        modelBuilder.ApplyConfiguration(new MagicLinkTokenConfiguration());
     }
 }

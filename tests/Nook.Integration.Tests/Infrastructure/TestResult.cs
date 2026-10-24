@@ -1,4 +1,4 @@
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 
 namespace Nook.Integration.Tests.Infrastructure;
 

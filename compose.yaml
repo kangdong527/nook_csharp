@@ -1,4 +1,4 @@
-# 로컬 개발용 PostgreSQL. 배포용 compose는 D12에 deploy/에 따로 둔다.
+# 로컬 개발용 PostgreSQL. 배포용 compose는 DEP(배포 주간)에 deploy/에 따로 둔다.
 # 사용: cp .env.example .env → 비밀번호 채우기 → docker compose up -d
 services:
   db:

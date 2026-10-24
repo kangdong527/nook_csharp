@@ -14,6 +14,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     private DbContextOptions<NookDbContext> _options = null!;
 
+    // 운영 DI 구성(AddInfrastructure)을 그대로 띄워 볼 때 쓴다.
+    public string ConnectionString => _container.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();

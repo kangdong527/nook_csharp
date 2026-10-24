@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Nook.Domain.Common;
+namespace Nook.SharedKernel;
 
 // 성공해도 돌려줄 값이 없는 연산(예: Group.AddMember)의 결과.
 

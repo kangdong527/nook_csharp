@@ -1,4 +1,4 @@
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
 using Nook.Domain.Users;

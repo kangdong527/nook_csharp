@@ -3,6 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Nook.Application\Nook.Application.csproj" />
     <ProjectReference Include="..\Nook.Domain\Nook.Domain.csproj" />
+    <ProjectReference Include="..\Nook.SharedKernel\Nook.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <!-- BackgroundService·Options 바인딩·ILogger. 런타임과 같은 버전이 따라와 패키지 버전을 따로 관리하지 않는다 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

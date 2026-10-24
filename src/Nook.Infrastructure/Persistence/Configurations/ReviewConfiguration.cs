@@ -13,7 +13,10 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
     public void Configure(EntityTypeBuilder<Review> builder)
     {
         builder.ToTable("reviews", table =>
-            table.HasCheckConstraint("ck_reviews_content", $"char_length(btrim(content)) >= {ReviewContent.MinLength}"));
+        {
+            table.HasCheckConstraint("ck_reviews_content", $"char_length(btrim(content)) >= {ReviewContent.MinLength}");
+            table.HasCheckConstraint("ck_reviews_version", "version >= 0");
+        });
 
         // 받는 쿼리: erd.md reviews Q1
         builder.HasKey(r => r.Id).HasName("pk_reviews");
@@ -32,6 +35,11 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
 
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.ReviewDate).HasColumnName("review_date");
+
+        // 동시성 토큰: UPDATE reviews ... WHERE id = ? AND version = <읽은 값>. 0행이면 DbUpdateConcurrencyException(RV-02 6c, incident 002).
+        builder.Property(r => r.Version)
+            .HasColumnName("version")
+            .IsConcurrencyToken();
 
         // 받는 쿼리: erd.md reviews Q5 (R-RV-03 중복 방지), 앞 컬럼으로 Q3·Q4·Q6
         builder.HasIndex(r => new { r.UserId, r.PlaceId, r.ReviewDate })

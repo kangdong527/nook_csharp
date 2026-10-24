@@ -5,9 +5,11 @@
     <Project Path="src/Nook.Application/Nook.Application.csproj" />
     <Project Path="src/Nook.Domain/Nook.Domain.csproj" />
     <Project Path="src/Nook.Infrastructure/Nook.Infrastructure.csproj" />
+    <Project Path="src/Nook.SharedKernel/Nook.SharedKernel.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nook.Algorithms.Tests/Nook.Algorithms.Tests.csproj" />
+    <Project Path="tests/Nook.Application.Tests/Nook.Application.Tests.csproj" />
     <Project Path="tests/Nook.Domain.Tests/Nook.Domain.Tests.csproj" />
     <Project Path="tests/Nook.Integration.Tests/Nook.Integration.Tests.csproj" />
   </Folder>

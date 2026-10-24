@@ -145,3 +145,138 @@
 - 내일 확인할 것:
 
 ---
+
+### D5-1 (2026-10-18) — 인증 방식 결정, JWT 검증 골격, magic_link_tokens
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 매직 링크 + API가 직접 발급하는 Access 토큰(HS256, 60분, Refresh 없음). 매직 링크는 users가 아닌 **별도 테이블** — 가입자는 링크를 요청할 때 닉네임이 없어 users 행을 만들 수 없기 때문. 메일 요청은 가입 여부·속도 제한과 무관하게 항상 202, 개발 전용 토큰 발급 엔드포인트는 운영 노출 사고 패턴이라 기각
+  2. 질문으로 얻은 것: "상태 없는 JWT만으로 링크를 처리하면?" → 가능하지만 1회 사용·무효화·속도 제한을 잃고, 메모리 캐시로 대신하면 재시작·다중 서버에서 깨진다(상태를 없앤 게 아니라 옮긴 것). 마이그레이션 파일 3개의 역할: `.cs`(변경분, 손으로 고침) / `.Designer.cs`(그 시점 모델 사진) / `ModelSnapshot.cs`(최신 사진 — `migrations add`가 비교하는 대상은 DB가 아니라 이것). 손으로 넣은 SQL(식 인덱스)은 어느 사진에도 없다
+  3. 핵심 개념: 인가는 **기본 잠금**(Fallback 정책 `RequireAuthenticatedUser`, 공개만 `[AllowAnonymous]`) — 새 엔드포인트가 실수로 열리지 않는다. 토큰은 DB에 **해시만** 저장(256비트 난수라 salt·느린 해시 불필요 — 판단 기준은 입력의 엔트로피). `sub`는 이메일·닉네임이 아닌 사용자 ID — 바뀌는 값을 식별자로 쓰지 않는다
+- 막혔던 것 / 어떻게 풀었나: Api는 Domain을 못 봐서(ADR-001 결정 3) 발급기에 `UserId`를 썼다가 빌드 실패 → `Guid`로. `openssl`이 PowerShell에 없어 서명 키 생성 실패 → `RandomNumberGenerator`로 대체. 실행 중인 Api가 DLL을 잠가 마이그레이션 빌드 실패 → 서버 종료 후 진행
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `JwtOptions`·`AccessTokenIssuer`(`BuildClaims` 제외)·`Program.cs` 인증 설정(JwtBearer·Fallback 정책·`IncludeErrorDetails`), JwtBearer 패키지 추가, 서명 키 생성·user-secrets 설정(`openssl` 실패 후 대체), 보안 조사(OWASP·RFC 8725), erd.md `magic_link_tokens` 설계 전체, usecases.md AU-01~03 수정, `MagicLinkToken`·`MagicLinkTokenConfiguration`·`AddMagicLinkTokens` 마이그레이션(식 인덱스 SQL)·로컬 DB 적용, `CheckConstraintTests` CHECK 3개, `progress.md` 갱신 — 모두 사용자 요청. 결정은 사용자: 매직 링크, API 자체 발급, Access만(60분), 지킬 것(`sub` = 사용자 ID, 발급 한 곳), Fallback·`IncludeErrorDetails` 적용, 별도 테이블(근거: 가입자는 users 행이 없다), AU-01 응답 통일, 정책값(15분·3회·1일), 개발 토큰 엔드포인트 기각. 사용자 작성: `BuildClaims`
+- 내일 확인할 것:
+  - AU-01·AU-02 Application 유스케이스 + `/auth/magic-link`·`/auth/magic-link/consume` (`TODO(human)`)
+  - 질문 미답: Q1을 `SELECT` 후 `UPDATE` 두 문장으로 나누면 무슨 일이 생기나? / `BuildClaims`의 `TryParse`가 실제로 막는 경우는?
+
+---
+
+### D5-2 (2026-10-20) — 동시 소모·TryParse 정리, AU-01 계층 설계와 SharedKernel
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 메일은 백그라운드 발송 B안(`Channel` + `BackgroundService`, 재시작 시 유실 수용). 이메일 형식 오류만 400 — DB를 보지 않고 판단하니 가입 여부가 드러나지 않는다. `Result`·`Error`는 `Nook.SharedKernel`로 분리(A안). 서명은 통과했는데 `sub`가 Guid가 아니면 401이 아니라 **500 + 에러 로그** — 서명된 클레임의 형식 위반은 사용자 잘못이 아니라 서버 버그
+  2. 질문으로 얻은 것: 소모(Q1)를 `SELECT` 후 `UPDATE` 두 문장으로 나누면 동시 2요청이 둘 다 미소모를 읽어 토큰이 2번 쓰인다(TOCTOU). 한 문장 조건부 UPDATE는 행 잠금을 기다린 뒤 **최신 버전으로 WHERE를 다시 검사**해 0행 → 앱은 0행을 "무효 링크"로 처리. 위조 `sub`는 엔드포인트까지 오지 못한다(서명 검증 실패 → 인가 Fallback이 401). SharedKernel ≠ AOP(AOP는 실행 시점에 동작을 끼워 넣기, SharedKernel은 타입의 위치·참조 구조). Infrastructure는 별도 프로세스가 아니라 Api 프로세스에 로드되는 DLL — 그래서 같은 메모리의 Channel이 동작하고, 재시작하면 유실된다
+  3. 핵심 개념: **계약은 쓰는 쪽(Application)에 둔다**(DIP) — 핸들러는 `IMagicLinkTokenStore`·`IMagicLinkMailQueue`만 알고, 구현은 Infrastructure. 핸들러가 구현 클래스를 받으면 의존 방향이 뒤집힌다. 같은 싱글턴을 두 이름(인터페이스·구현)으로 꺼내야 핸들러와 워커가 같은 큐를 본다
+- 막혔던 것 / 어떻게 풀었나: AU-01 계약 위치를 처음에 `List<IMagicLinkToken>`(데이터)·`IEmailSender`를 Api에 두는 것으로 답함 → 힌트 3단계(시그니처) 후 "핸들러가 구현 클래스를 받으면 DIP가 깨진다"를 스스로 설명(CS F1 약점과 같은 패턴). 빌드 실패 `CS0012`(Api가 Domain의 `Result`를 못 봄) → ADR-001이 예상한 누출 → SharedKernel 분리
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `Nook.SharedKernel` 분리(Result·Error 이동, using·참조 수정 — 기계적 리팩터링), AU-01 뼈대 전체(Application 계약 2개·`MagicLinkPolicy`·`MagicLinkSecret`·핸들러 껍데기, Infrastructure 저장소·Channel 큐·워커·콘솔 발송기·DI, Api `AuthController`·등록·설정) — 협업 영역의 뼈대, 핸들러 본문은 `TODO(human)`. 결정은 사용자: 백그라운드 B안, 형식 오류 400, SharedKernel A안, sub 형식 위반 = 500
+- 내일 확인할 것:
+  - `RequestMagicLink.HandleAsync` `TODO(human)` 구현 → 테스트 → 손 테스트 → 커밋
+  - 질문 미답: `mail.Enqueue`를 INSERT 앞에 두면? / Q2(세기)와 INSERT 사이 동시 요청은?
+
+---
+
+### D5-3 (2026-10-20) — AU-01 핸들러, 매직 링크 TOCTOU와 메일 폭탄 방어, 일정 변경
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 요청, 2026-10-20):
+  1. 내가 결정한 것: 요청 순서 = 형식 검사 → Q2 → 토큰 생성 → **INSERT → Enqueue**(반대면 저장 전에 메일이 도착해 링크가 실패할 수 있다). TOCTOU는 허용하되 방어는 **② A3(IP 입구 제한) + Q2(이메일 DB 한도) + A1(워커 수신자별 상한)** — 막을 대상은 피해자 받은편지함과 발송 도메인 평판 둘 다. A1은 단일 소비자 전제라 소비자가 늘면 Redis·advisory lock으로 옮긴다. 일정 변경 채택: D6 → 프론트 연결 → 배포 1주(EC2·GitHub Actions)
+  2. 질문으로 얻은 것: 동시 요청 2개가 COUNT=2를 함께 보고 둘 다 INSERT → 4개(타임라인). READ COMMITTED 트랜잭션으로 감싸도 상대의 미커밋 INSERT가 안 보여서 못 막는다. "한 이메일 15분 3개"는 여러 행 조건이라 CHECK로 이중화할 수 없다 — 그래서 `MagicLinkPolicy`가 Domain이 아닌 Application에 있다. "단일 인스턴스라 괜찮다"는 A1·A2 둘 다에 해당해 둘을 가르는 근거가 아니다. 발송 지점에서 세는 방식이 실무에서 드문 이유 = 실무 발송은 소비자가 여러 개라 무경합 전제가 없다. A3만으로 단일 IP 폭주는 막히고, 남는 건 여러 IP의 분산 공격
+  3. 핵심 개념: `[NotNullWhen]`은 메서드 **반환값**에 묶인 약속 — `error != null`을 따로 검사해도 컴파일러는 `email`을 추론하지 못하니 `if (!TryGetValue(...)) return error;`로 분기한다. 만들고 버린 반환값(`Result.Failure(error);`, `return` 없음)은 경고 없이 컴파일된다 → 테스트가 필요한 이유. 고정 시계는 "시각을 두 번 읽는 실수"를 못 잡는다 → 부를 때마다 움직이는 시계. 경계 테스트는 양쪽(2개·3개)을 다 둬야 한쪽 방향 변이를 모두 잡는다
+- 막혔던 것 / 어떻게 풀었나: 첫 구현에서 `_ =`로 형식 검사 결과를 버림·`AddAsync` 미`await`·형식 오류를 `throw`로 처리 → 리뷰 질문으로 수정. 예측 ✗: "Fake 시계와 실제 시각이 어긋나 테스트가 실패한다" — 핸들러는 주입받은 시계 말고는 시각을 얻을 방법이 없어 어긋날 수 없었다. 어긋날 수 있는 건 같은 시계를 여러 번 부를 때뿐
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `HandleAsync`의 Q2 속도 제한·리팩터링(사용자 요청 — 본문 초안·INSERT→Enqueue 순서는 사용자), `Nook.Application.Tests`·핸들러 테스트 7개(D4부터 테스트는 Claude 작성, 사용자는 예측), 일정 변경 문서 반영. 결정은 사용자: 일정 변경(D6 → FE → DEP 1주, EC2·GitHub Actions), TOCTOU 방어 ② A3 + Q2 + A1
+- 내일 확인할 것:
+  - AU-02 consume
+  - A1·A3 미구현(DEP 5일째) — 지금은 Q2만 동작
+
+---
+
+### D5-4 (2026-10-20) — AU-02 매직 링크 소모, 핸들러가 쥐는 트랜잭션
+- 배운 것 (Claude가 세션 기록으로 정리 — 사용자 검토 필요):
+  1. 내가 결정한 것: 트랜잭션 경계는 핸들러가 쥔다((가)) — "회원이 없으면 닉네임 필요"는 업무 규칙이라 Application에 있어야 하고, D6 그룹 합류도 같은 방식으로 쓸 수 있다. 응답은 로그인 200 `{accessToken}` · 닉네임 필요 200 `{needsNickname}` · 무효 링크 400 · 닉네임 중복 409. 같은 이메일 동시 가입은 500 수용(같은 사람, 한쪽은 로그인됨, 데이터 손상 없음)
+  2. 질문으로 얻은 것: 무효 링크를 401로 하면 D2-1의 `ErrorType`(Unauthorized 없음)과 프론트의 "401 = 토큰 만료 → 다시 로그인" 공통 처리가 겹친다 — 상태 코드는 클라이언트와의 계약. Q1 전에는 이메일을 모르니 가입자인지 알 수 없다 → 닉네임은 "회원 없음"일 때만 검사. "싼 검사 먼저"는 **언제나 필요한 검사**일 때만 앞으로 당긴다. 사용자 입력에 `From`(빈 값만 검사)을 쓰면 검증을 우회한다
+  3. 핵심 개념: `await using var tx` — 커밋하지 않고 빠져나가면 Dispose가 롤백한다. 그래서 "닉네임 필요"는 성공 결과인데도 커밋하지 않아 Q1 소모가 되돌아가고 같은 토큰으로 재시도할 수 있다(통합 테스트 `consumed_at IS NULL`로 확인). 저장소·UnitOfWork가 Scoped라 같은 요청의 같은 `DbContext`를 받아 한 트랜잭션에 묶인다. 실패를 먼저 `return`하는 가드 절로 쓰면 공통 꼬리(Q3 → 커밋 → 반환)가 한 곳에 모인다
+- 막혔던 것 / 어떻게 풀었나: VS "메서드 생성"이 `SharedKernel/Result.cs`에 Application 타입을 넣음(원인은 Claude 안내의 잘못된 `Result.Success(...)` 표기) → `git status`의 예상 밖 `M`으로 발견, `git restore`. 핸들러 첫 구현에서 기존 회원 경로 누락·`return` 누락(D5-3과 같은 패턴)·시각 두 번 읽기. 통합 테스트 전체 실패 → 안 바꾼 테스트까지 실패해서 공통 기반 의심 → Docker 엔진 꺼짐
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): AU-02 뼈대 전체(`IUnitOfWork`·`EfUnitOfWork`·`IUserRepository`·`UserRepository`·Q1·Q3·`AuthErrors`·`UserErrors.NicknameTaken`·결과 타입·컨트롤러·DI — 협업 영역 뼈대), 핸들러 수정·리팩터링(사용자 요청 — 초안은 사용자), 통합 테스트 11개(D4부터 테스트는 Claude, 사용자 예측 2/2), 이 "배운 것" 초안(사용자 요청)
+- 내일 확인할 것:
+  - `WebApplicationFactory` API 테스트 기반(D5 게이트)
+  - 같은 이메일 동시 가입이 실제로 교착(40P01)이 나는지 — D6에서 재현
+
+---
+
+### D5-5 (2026-10-21) — WebApplicationFactory API 테스트, PL-01 장소 확정
+- 배운 것:
+  1. PL-01 동시 등록은 C′(Find → `INSERT ... ON CONFLICT DO NOTHING` → 0행이면 Find)로 결정, 흐름은 저장소에 숨기지 않고 핸들러에 둔다. `DO UPDATE`는 기각 — 클라이언트 입력으로 저장값을 덮어쓰면 안 되고(입력 불신), 같은 장소를 다시 고를 때마다 dead tuple이 쌓인다. 0행 뒤 Find가 반드시 1행인 근거 세 가지: ① ON CONFLICT는 미커밋 상대를 기다렸다가 커밋된 경우에만 0행 ② Read Committed는 문장마다 새 스냅샷 ③ 장소는 삭제하지 않는다. 변이(`ON CONFLICT` 삭제)로 23505가 나는 것까지 확인 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  2. 별 상태는 서버가 계산한다(A안, `StarRule.Evaluate` 직접 작성) — 원본은 같은 규칙이 4곳에 흩어져 있어 규칙이 바뀌면 4곳을 고쳐야 했다. 서버 한 곳이면 배포 한 번. JSON은 문자열(`"gray"`)이고 확장 가능 값이라 클라이언트는 모르는 값을 empty로 다룬다. 북마크 API는 토글 대신 PUT/DELETE(멱등 — 따닥 클릭이 상태를 뒤집지 않음), "이미 그 상태"는 409가 아니라 200 + `changed: false`, 장소 없음은 FK 위반(23503)을 잡지 않고 먼저 SELECT → 404 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  3. EF `FromSql`은 `ComplexProperty`(Coordinate)의 `HasColumnName`을 무시하고 `Coordinate_Latitude`를 찾는다(LINQ는 정상) — 탐침 P1 LINQ ✅ / P2 순수 SELECT ❌ / P3 별칭 ✅로 "RETURNING 탓"이 아니라 `FromSql` 자체임을 좁힘 → `TryAddAsync`는 id만 받고 넘긴 `place`를 돌려준다(B안). D7 근처 검색처럼 places를 SQL로 읽을 때 다시 만난다 (Claude가 기록 — 사용자 요청)
+- 막혔던 것 / 어떻게 풀었나: 예측 ✗ "없는 경로는 404" → 401(인가 미들웨어가 엔드포인트 null에도 Fallback 적용, 404는 파이프라인 끝의 기본값). PL-01 초안의 null place INSERT를 CS8604 경고가 잡음. `Coordinate_Latitude` 실패는 탐침으로 범위를 좁혀 해결(위 3)
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): `NookApiFactory`·API 테스트, PL-01 뼈대·핸들러 수정·`TryAddAsync` B안 수정(사용자 요청), PL-01·StarRule 테스트(D4부터 테스트는 Claude), usecases 1a 문구(사용자 요청), BM 뼈대(협업 영역). 사용자 작성: PL-01 핸들러·`TryAddAsync` 초안, `StarState`·`StarRule`
+- 내일 확인할 것:
+  - BM-01 핸들러 마무리(`Guid.Empty` 경로 처리 결정) → BM-02 → 테스트
+  - ADR 후보: "장소는 삭제하지 않는다" 불변식
+
+---
+
+### D5-6 (2026-10-22) — BM-01·02 북마크, LK-01 좋아요
+- 배운 것:
+  1. 멱등 API는 "이번 요청이 상태를 바꿨나(`changed`)"와 "지금 그 상태인가(`bookmarked`)"가 다른 질문이다. 저장이 성공으로 끝나면 changed와 무관하게 bookmarked=true, 해제면 false. 별 상태는 changed가 아니라 bookmarked로 계산한다 — BM-01 초안은 둘을 한 값으로 써서 재저장 시 star=empty가 나왔다 (Claude 정리 — 사용자 요청)
+  2. `x is { } y`는 "null이 아니면"이라 nullable이 아닌 `bool`에는 항상 참이다. PL-01(`Place?`)에서 맞던 관용구가 반환 타입이 바뀌면 다른 뜻이 된다. 변이 실험에서 `Remove_WhenNotBookmarked`는 changed가 원래 false라 `bookmarked: changed` 변이를 못 잡았다 — 테스트 입력이 두 값을 갈라 놓아야 변이가 드러난다 (Claude 정리 — 사용자 요청)
+  3. 경로의 `Guid.Empty`는 500으로 둔다(사용자 결정) — 라우트 제약 `{placeId:guid}`는 통과하지만 정상 클라이언트가 보낼 수 없는 값이라 `PlaceId.From`의 예외(개발자 실수·손상 취급)에 맡긴다. 404 `PlaceNotFound`로 바꾸면 "없는 장소"와 "있을 수 없는 ID"가 섞인다. TestServer는 예외 처리 미들웨어가 없으면 500이 아니라 예외를 던지므로 운영 응답 모양은 DEP에서 확인 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  4. 같은 "사전 확인 → 쓰기" 모양도 **확인한 대상이 사라질 수 있는가**에 따라 안전성이 갈린다. 장소는 삭제가 없어(불변식) 틈이 무해하지만, 리뷰는 RV-03·탈퇴 CASCADE로 지워져 틈이 실제 경합이 된다. `ON CONFLICT`는 UNIQUE·PK 충돌만 받고 FK 위반(23503)은 그대로 올라와 500 → 사전 확인을 유지하고 `fk_likes_reviews` 위반만 404로 번역(A안). 사전 확인 없이 FK만 잡는 B안은 D9에서 트랜잭션에 묶이면 오류 뒤 25P02로 계속 못 하고, 회원 FK(탈퇴 후 남은 토큰)와 섞이며, DELETE에는 FK 신호가 없어서 바꿨다 (Claude 정리 — 사용자 요청, 결정은 사용자)
+  5. 같은 틈이라도 **응답이 거짓이 되는가**로 번역 여부를 정한다. 좋아요 중 리뷰 삭제 → `liked:true`는 거짓이라 404로 번역, 취소 중 리뷰 삭제 → CASCADE가 먼저 지워 `liked:false`는 사실이라 200 허용. enum 결과를 묶을 때도 출력(changed=false)이 아니라 의미(성공/실패)로 묶는다 — AddLike 초안이 `ReviewGone`을 `AlreadyLiked`와 묶어 200을 냈다 (Claude 정리 — 사용자 요청, 결정은 사용자)
+- 막혔던 것 / 어떻게 풀었나: BM-01 초안 리뷰 🔴 3개 — `ExistsAsync` 조건 반전(`!` 누락), 괄호 오류, `bool`에 `is { } x` 패턴(항상 참 → changed 항상 true, 재저장 시 star=empty). 원인은 "이번에 바꿨나(changed)"와 "지금 그 상태인가(bookmarked)"를 한 값으로 씀. BM-02에서는 구분해 작성. 예측: 동시 저장 진 쪽 0행 ✅(보완: 미커밋 상대를 PK에서 기다림), 변이 `bookmarked: changed` → 2개 실패 ✅. LK: 처음엔 B안(FK 위반만 잡기)을 골랐다가 대가를 보고 A안으로. AddLike 초안 🔴 `ReviewGone` → 200(직접 수정)
+- Claude가 대신 작성한 부분 (있다면, 이유와 함께): BM-01·AddLike 리팩터링(사용자 요청 — 초안은 사용자), BM-02·LK `TODO(human)` 틀, LK 뼈대(`ILikeRepository`·`AddLikeOutcome`·`LikeRepository` 23503 번역·컨트롤러·DI), `BookmarksApiTests` 9개·`LikesApiTests` 10개(D4부터 테스트는 Claude, 사용자 예측 2/2 + LK Q1·Q2 ○)·변이 실험 실행, 커밋, `progress.md` 갱신, "배운 것" 정리(사용자 요청). 사용자 작성: BM-01 초안, BM-02, AddLike 초안·🔴 수정, RemoveLike. 결정은 사용자: 경로 `Guid.Empty` → 500, LK A안·취소 404·틈 사이 취소 200·BM 유지
+- 내일 확인할 것:
+  - LK 변이 실험 예측(catch 제거 시 어떻게 실패하나) → RV-01
+  - ADR 후보: "장소는 삭제하지 않는다" 불변식 — 결과 절에 "깨지면 BM도 LK처럼 23503 번역 필요"
+
+---
+
+### D5-7 (2026-10-23) — 테스트 거짓 통과(incident 001), RV-01 작성, RV-02 도메인
+> 이 항목은 Claude가 작성했다(2026-10-25 사용자 요청 — 예측이 틀린 곳과 사용자 결정 위주).
+- 배운 것:
+  1. **시간으로 기다림을 단언하면 거짓 통과가 생긴다.** LK-01의 catch를 지워도 테스트가 5/20 통과했다. 첫 요청 준비 비용(~400ms)이 500ms 기준과 경합했기 때문이다. 잠금 대기를 `pg_blocking_pids`로 직접 관찰하는 `LockWait`(B안, 사용자 결정)로 바꾸자 0/20 → incident 001
+  2. **"지금"은 한 번만 정한다(ADR-007).** RV-01 초안은 시각을 세 번 읽었고 `GetLocalNow`를 썼다. KST 00~09시에는 사전 확인 날짜와 UNIQUE 날짜가 갈린다. 테스트 시각을 20:00Z(KST 다음 날 05:00)로 잡아 로컬 날짜로 바꾸는 변이를 잡았다
+  3. **사전 검사는 정확성이 아니라 비용(고아 이미지)을 줄이는 장치다.** 그래서 테스트는 응답 코드와 함께 "스토리지에 무엇이 남았나"를 단언해야 순서가 틀린 구현을 잡는다
+  4. EF가 복원한 `_images`의 물리적 순서는 보장되지 않는다. 순서는 `keepImageIds` 안의 인덱스로 매긴다
+- 테스트 예측이 틀린 곳:
+  - 정상 작성 응답을 202로 예측 → 실제 201(ADR-009 결정 2)
+  - 이미지 4장 요청에서 스토리지 1개로 예측 → 실제 0개. 장수 검사가 형식 판별보다 앞이라 하나도 올라가지 않는다
+  - 6a(동시 작성) 스토리지 개수 → 어느 쪽이 사전 확인을 통과하는지가 매번 달라 비결정. `RendezvousStorage`로 "둘 다 통과" 경로를 고정했다
+  - `Review.Edit` 단위 테스트 6개는 모두 적중
+- 사용자 결정: LockWait B안 · D6 게이트 "incident 1건 이상" · RV-02·03·BM-03·PL-02를 D5에 포함 · 이미지 정리는 D3 결정 유지(커밋 후 삭제 + 배치) · RV-01 201 · 남의 리뷰 403 · RV-03 C안(`star=null`) · RV-02 순서 계약 "남길 기존 → 새 이미지"
+- 막혔던 것 / 어떻게 풀었나: RV-01 초안 🔴 3(장소 조건 반전, "지금" 세 번 + 로컬 시각, 검증과 업로드가 섞임) → 사용자 일부 수정 후 Claude 수정. `Review.Edit` 초안 🔴 3(새 이미지 미추가, 순서 미반영, 중복 ID 허용) → 사용자가 추가·재번호, 나머지 Claude. content null 검사는 "이미 검증됨" 주석을 보고 생략했던 것 — 규칙 검증(Result)과 null(버그 → 예외)은 다른 질문이라 가드 추가
+- Claude가 대신 작성한 부분: `LockWait`, incident 001, RV 유스케이스 수정·보완, ADR-009, RV-01 뼈대·핸들러 수정·테스트, `Review.Edit` 수정·테스트, RV-02 뼈대·`ReviewImageUploads`
+- 내일 확인할 것: RV-02 핸들러 작성
+
+---
+
+### D5-8 (2026-10-24~25) — RV-02 동시 수정 데드락(incident 002), RV-03·BM-03·PL-02, D5 기능 완료
+> 이 항목은 Claude가 작성했다(2026-10-25 사용자 요청 — 예측이 틀린 곳과 사용자 결정 위주, 데드락은 반드시 포함).
+- 배운 것:
+  1. **DEFERRED 제약은 검사를 미룰 뿐 없애지 않는다.** 미뤄진 검사는 COMMIT에서 상대 트랜잭션을 기다리고, 그 대기는 코드 어디에도 보이지 않는다. 다른 락(본문 UPDATE의 행 잠금)과 엮이면 데드락이 된다
+  2. **충돌을 "0행·유니크 위반" 같은 부수 효과로 감지하면 빈틈이 있다.** EF는 바뀌지 않은 엔티티에 문장을 보내지 않으므로, 신호가 하나도 안 나는 조합이 생긴다. 버전 토큰은 신호가 반드시 생기게 한다
+  3. **잠금과 버전은 하는 일이 다르다.** 잠금은 "언제 실행할지"(한 줄로 세움), 버전은 "실행해도 되는지"(읽은 뒤 바뀌었나)를 정한다. 하나만으로는 데드락이나 섞인 저장 중 하나가 남는다
+  4. **한 결함을 고치면 그 뒤에 숨어 있던 결함이 드러난다.** 데드락(500)이 섞인 저장을 가리고 있었다. 고친 뒤에도 같은 테스트를 반복 실행해야 한다
+  5. **무한 스크롤에 OFFSET은 결과가 틀린다(성능 이전의 문제).** 첫 페이지 뒤에 새 글이 생기면 한 칸씩 밀려 본 항목이 다시 나온다. 불투명 커서 + 키셋 `(created_at, id)`로 만들면 나중에 방식을 바꿔도 클라이언트 계약이 그대로다
+- 테스트 예측이 틀린 곳과 그 뒤의 결정:
+  - **RV-02 동시 추가(9번): "둘 다 200"으로 예측 → 의도는 한쪽 409, 실제로는 3/10 확률로 500(40P01 deadlock)**
+    - 가설 1(사용자): "t1 INSERT가 잠그고 t2 INSERT가 대기 → t1 커밋 → t2 유니크 위반". psql 실험 A로 검증 → **틀림.** DEFERRED라 INSERT는 기다리지 않고, 검사가 COMMIT으로 미뤄져 23505가 난다. 이건 409로 바꾸는 정상 경로라 데드락을 설명하지 못했다
+    - 실험 B(본문 UPDATE 추가): 처음 결과가 이상했다 — 실험 A가 남긴 행 때문이었다. **동시성 실험은 초기 상태부터 확인해야 한다**
+    - 실험 C(INSERT 순서만 바꿈): 40P01 재현. 근본 원인: 나중에 INSERT한 쪽이 커밋 때 DEFERRED 재검사로 상대를 기다리고, 상대는 이쪽이 쥔 reviews 행(본문 UPDATE)을 기다린다
+    - **결정: ① 리뷰 행을 먼저 잠근다(`FOR UPDATE`)** — 40P01을 409로 덮는 ②, 재시도 ③은 원인을 남기고 최소 1초 지연이라 기각
+  - **잠금 뒤 새 결함: 남길 이미지가 다른 두 수정이 둘 다 200, DB에는 `[n1@1, n2@2]`(5/20)**
+    - "늦은 쪽이 보내는 문장"을 물었을 때 사용자는 의도(A 유지, B·C 삭제, n1 추가)로 답했다. 실제 문장은 A 없음(변경 없음), B·C DELETE 1행씩(행은 남아 있음), n1 INSERT 성공 — 신호가 하나도 없었다
+    - **결정: (나) `reviews.version` 낙관적 동시성 토큰.** 이미지 목록 비교(가)는 본문만 바꾼 충돌을 놓쳐 기각. 결과 0/30 실패, 토큰 제거 변이는 6/15만 잡음(누가 먼저 커밋하는지 비결정)
+  - **RV-02 8번(서로 다른 keep): 진 쪽 409는 맞음.** 남는 이미지 수는 누가 이기느냐에 따라 달라 "DB 이미지 + 진 쪽 고아 1장 = 스토리지"로 단언을 바꿨다
+  - RV-02 1~7번, RV-03 9번(삭제 후 오늘 다시 작성 가능)은 적중
+- 그 밖의 사용자 결정:
+  - 동시 수정의 진 쪽: 404와 구분해 **409 `Review.EditConflict`**((b))
+  - 응답 이미지: **`images: [{ id, key }]`**((A)) — 키는 DEP에서 URL로 바뀌므로 식별자로 쓰지 않는다. ADR-009 결정 2 개정
+  - incident 002 미결 2건(테스트 결정성, `version` + `If-Match`)은 D6에서
+  - BM-03: `PlaceView + star`, D5는 상한 없이 전체(D8 측정 후 결정), 쿼리는 Claude 작성
+  - PL-02: 좋아요 수·내 좋아요·작성자 닉네임·내 리뷰 여부 포함, 무한 스크롤
+- 막혔던 것 / 어떻게 풀었나:
+  - RV-02 핸들러 초안 🔴 3 — 작성자 확인(4b) 없음, 업로드가 조회보다 먼저(거절돼도 고아 이미지), 커밋 후 삭제 예외 미처리(성공한 수정이 500). 순서를 "키 생성 → `Edit` → 업로드"로 바꿔 모든 거절을 업로드 전에 끝냈다
+  - RV-03 초안 🔴 1 — 삭제 후 `hasReview`를 `false`로 고정. R-RV-03은 "하루 1개"라 다른 날 리뷰가 남을 수 있다 → 사용자가 수정, 변이로 테스트가 잡는 것 확인
+  - BM-03 주석 "UNION이 중복을 지운다"가 틀렸다 — UNION ALL로 바꿔도 통과. 장소당 1행은 `IN`(세미 조인)이 보장한다. 변이는 설명의 오류도 드러낸다
+- Claude가 대신 작성한 부분 (이유: 사용자 요청): RV-02 핸들러 리팩터링(4b·순서·삭제 처리), `ReviewGone`·`Conflict` 처리, 행 잠금 + `Review.Version`·`AddReviewVersion` 마이그레이션, incident 002, 응답 이미지 ID 변경, RV-03 뼈대·CTE 삭제 쿼리·`ReviewImageCleanup`, BM-03·PL-02 전체, 모든 테스트와 변이 실험, 이 학습 로그. 사용자 작성: RV-02 핸들러 초안, RV-03 핸들러(판정·별 계산), psql 실험 A·B·C 실행
+- 내일 확인할 것:
+  - `feat/d5-auth` 푸시·PR·병합(사용자)
+  - D6 시작: GR-01 5명 동시 합류 재현. incident 002 미결 2건을 함께
+
+---

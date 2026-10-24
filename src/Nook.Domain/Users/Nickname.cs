@@ -1,4 +1,4 @@
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 using System.Text;
 
 namespace Nook.Domain.Users;

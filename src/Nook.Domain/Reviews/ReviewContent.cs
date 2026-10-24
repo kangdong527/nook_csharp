@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Globalization;
 using System.Text;
-using Nook.Domain.Common;
+using Nook.SharedKernel;
 
 namespace Nook.Domain.Reviews;
 

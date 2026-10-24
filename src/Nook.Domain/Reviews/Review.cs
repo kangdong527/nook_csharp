@@ -1,4 +1,5 @@
 using Nook.Domain.Common;
+using Nook.SharedKernel;
 using Nook.Domain.Places;
 using Nook.Domain.Users;
 
@@ -16,7 +17,7 @@ public sealed class Review
     public ReviewId Id { get; }
     public UserId UserId { get; }
     public PlaceId PlaceId { get; }
-    public ReviewContent Content { get; }
+    public ReviewContent Content { get; private set; }
 
     // 순서(R-RV-02)는 Review가 지킨다. EF Core 복원 시 _images 순서는 보장되지 않으므로 읽을 때마다 SortOrder 순으로 정렬한 새 목록을 반환한다(erd.md §3).
     // 복사본이라 원본 _images는 밖에서 바뀌지 않는다. AsReadOnly는 복사본에 Add하는 실수가 조용히 사라지지 않고 예외로 드러나게 한다.
@@ -27,6 +28,10 @@ public sealed class Review
 
     // R-RV-03 기준 날짜(UTC). DB의 (user_id, place_id, review_date) UNIQUE가 하루 1개를 최종 보장한다.
     public DateOnly ReviewDate { get; }
+
+    // 낙관적 동시성 토큰(incident 002). Edit가 성공할 때마다 1 오른다. 저장은 "읽은 Version과 같을 때만" 반영되므로,
+    // 읽은 뒤 다른 수정이 먼저 커밋됐으면 바뀐 내용(본문·이미지 무엇이든)과 상관없이 늦은 쪽이 실패한다. 0부터 시작.
+    public int Version { get; private set; }
 
     private Review(ReviewId id, UserId userId, PlaceId placeId, ReviewContent content, DateTimeOffset createdAt)
     {
@@ -65,5 +70,48 @@ public sealed class Review
             review._images.Add(ReviewImage.Create(storageKeys[i], i));
 
         return review;
+    }
+
+    // RV-02 수정. 본문은 통째로 바꾸고, 이미지 최종 순서 = keepImageIds 순서 → 그 뒤에 newStorageKeys 순서(2026-10-23 사용자 결정).
+    // keepImageIds에 없는 기존 이미지는 빠진다. 반환: 빠진 이미지의 스토리지 키 — 핸들러가 커밋 후 지운다(ADR-009 결정 1).
+    // 실패(Result): 합계 장수 초과(R-RV-02, 3c), 이 리뷰의 이미지가 아닌 ID(4c). 본문 글자 수(R-RV-01)는 ReviewContent가 이미 검증했다.
+    // null 인자·잘못된 키는 규칙 위반이 아니라 호출 코드의 버그 → 예외(Create와 같은 구분).
+    public Result<IReadOnlyList<string>> Edit(
+        ReviewContent content,
+        IReadOnlyList<ReviewImageId> keepImageIds,
+        IReadOnlyList<string> newStorageKeys)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(keepImageIds);
+        ArgumentNullException.ThrowIfNull(newStorageKeys);
+
+        if (keepImageIds.Count + newStorageKeys.Count > MaxImages)
+            return ReviewErrors.TooManyImages;
+
+        // 1) 검사 먼저: 하나라도 이 리뷰에 없는 ID면 아무것도 지우지 않고 거절한다.
+        //    같은 ID 중복([A, A])도 4c — 존재 검사는 통과하지만 1장을 2장으로 세고, 한 이미지가 두 자리를 차지하게 된다.
+        if (keepImageIds.Distinct().Count() != keepImageIds.Count
+            || keepImageIds.Any(id => !_images.Exists(image => image.Id == id)))
+            return ReviewErrors.ImageNotInReview;
+
+        // 2) 새 이미지도 변경 전에 만든다. 키가 잘못되면(버그) ReviewImage.Create가 예외를 던지는데, 그때도 애그리거트는 그대로다.
+        //    sortOrder = 최종 목록 인덱스 — 남길 이미지 뒤에 이어 붙는다.
+        var added = newStorageKeys
+            .Select((key, i) => ReviewImage.Create(key, keepImageIds.Count + i))
+            .ToList();
+
+        // 3) 변경. 남길 이미지의 순서는 keepImageIds 안의 위치로 매긴다 — _images의 물리적 순서는 EF 복원 시 보장되지 않아 의미가 없다.
+        //    다시 매기는 도중 sort_order가 겹쳐도 ux_review_images_review_sort_order가 DEFERRED라 커밋 시점에만 검사한다.
+        Content = content;
+
+        var removed = _images.Where(image => !keepImageIds.Contains(image.Id)).Select(image => image.StorageKey).ToList();
+        _images.RemoveAll(image => !keepImageIds.Contains(image.Id));
+
+        for (var i = 0; i < keepImageIds.Count; i++)
+            _images.Single(image => image.Id == keepImageIds[i]).ChangeSortOrder(i);
+
+        _images.AddRange(added);
+        Version++;
+        return removed;
     }
 }
