@@ -14,4 +14,10 @@ public static class ReviewErrors
         "Review.TooManyImages",
         $"리뷰 이미지는 최대 {Review.MaxImages}장까지 첨부할 수 있습니다.",
         ErrorType.Validation);
+
+    // RV-02 4c. 남길 이미지로 보낸 ID가 이 리뷰의 이미지가 아니다(다른 리뷰의 ID, 지어낸 ID, 같은 ID 중복).
+    public static readonly Error ImageNotInReview = new(
+        "Review.ImageNotInReview",
+        "이 리뷰에 없는 이미지는 남길 수 없습니다.",
+        ErrorType.Validation);
 }

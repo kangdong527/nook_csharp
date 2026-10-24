@@ -23,9 +23,7 @@ public sealed class ReviewsController : ControllerBase
         [FromServices] CreateReviewHandler handler,
         CancellationToken ct)
     {
-        // IFormFile 스트림은 요청 본문을 버퍼링한 것이라 되감을 수 있다(ReviewImageFile 전제).
-        var files = request.Images ?? [];
-        var images = files.Select(f => new ReviewImageFile(f.OpenReadStream(), f.Length)).ToList();
+        var images = OpenImages(request.Images);
         try
         {
             var command = new CreateReviewCommand(User.GetUserId(), request.PlaceId!.Value, request.Content, images);
@@ -38,9 +36,49 @@ public sealed class ReviewsController : ControllerBase
         }
         finally
         {
-            foreach (var image in images)
-                await image.Content.DisposeAsync();
+            await DisposeAsync(images);
         }
+    }
+
+    // RV-02. 본문·이미지를 통째로 보낸다(최종 상태) → PUT. 200 + 수정된 리뷰.
+    [HttpPut("{id:guid}")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<ReviewView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Edit(
+        Guid id,
+        [FromForm] EditReviewRequest request,
+        [FromServices] EditReviewHandler handler,
+        CancellationToken ct)
+    {
+        var images = OpenImages(request.Images);
+        try
+        {
+            var command = new EditReviewCommand(User.GetUserId(), id, request.Content, request.KeepImageIds ?? [], images);
+            var result = await handler.HandleAsync(command, ct);
+
+            if (!result.TryGetValue(out var review, out var error))
+                return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+
+            return Ok(review);
+        }
+        finally
+        {
+            await DisposeAsync(images);
+        }
+    }
+
+    // IFormFile 스트림은 요청 본문을 버퍼링한 것이라 되감을 수 있다(ReviewImageFile 전제).
+    private static List<ReviewImageFile> OpenImages(List<IFormFile>? files) =>
+        [.. (files ?? []).Select(f => new ReviewImageFile(f.OpenReadStream(), f.Length))];
+
+    private static async Task DisposeAsync(List<ReviewImageFile> images)
+    {
+        foreach (var image in images)
+            await image.Content.DisposeAsync();
     }
 
     private static int StatusCodeOf(Error error) => error.Type switch
@@ -60,6 +98,16 @@ public sealed class CreateReviewRequest
     public Guid? PlaceId { get; init; }
 
     public string? Content { get; init; }
+
+    public List<IFormFile>? Images { get; init; }
+}
+
+// RV-02 multipart 폼. KeepImageIds의 순서가 남길 이미지의 순서, Images는 그 뒤에 붙는다. 둘 다 비면 이미지 0장.
+public sealed class EditReviewRequest
+{
+    public string? Content { get; init; }
+
+    public List<Guid>? KeepImageIds { get; init; }
 
     public List<IFormFile>? Images { get; init; }
 }

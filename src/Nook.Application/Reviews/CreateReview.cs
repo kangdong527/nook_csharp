@@ -32,18 +32,8 @@ public sealed class CreateReviewHandler(
         if (command.Images.Count > Review.MaxImages)
             return ReviewErrors.TooManyImages;
 
-        var formats = new List<ReviewImageFormat>(command.Images.Count);
-        foreach (var image in command.Images)
-        {
-            if (image.Length > ReviewImageFile.MaxBytes)
-                return ReviewWriteErrors.ImageTooLarge;
-
-            var format = await ReviewImageFormat.DetectAsync(image.Content, ct);
-            if (format is null)
-                return ReviewWriteErrors.UnsupportedImageFormat;
-
-            formats.Add(format);
-        }
+        if (!(await ReviewImageUploads.ValidateAsync(command.Images, ct)).TryGetValue(out var formats, out var imageError))
+            return imageError;
 
         // 3단계(3a).
         var placeId = PlaceId.From(command.PlaceId);
@@ -61,13 +51,8 @@ public sealed class CreateReviewHandler(
             return ReviewWriteErrors.AlreadyReviewedToday;
 
         // 5단계. 업로드 실패(5a)는 잡지 않는다 — 예외 → 500. 먼저 올라간 이미지는 배치가 정리한다(ADR-009).
-        var storageKeys = new List<string>(command.Images.Count);
-        for (var i = 0; i < command.Images.Count; i++)
-        {
-            var key = ReviewImageKeys.New(now, formats[i]);
-            await storage.PutAsync(key, command.Images[i].Content, formats[i].ContentType, ct);
-            storageKeys.Add(key);
-        }
+        var storageKeys = ReviewImageUploads.NewKeys(formats, now);
+        await ReviewImageUploads.UploadAsync(storage, command.Images, formats, storageKeys, ct);
 
         // 6단계. 입력은 2단계에서 모두 검증했다. 여기서 실패하면 Review와 핸들러의 규칙이 어긋난 버그다.
         if (!Review.Create(userId, placeId, content, storageKeys, now).TryGetValue(out var review, out var reviewError))

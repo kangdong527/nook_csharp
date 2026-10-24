@@ -234,6 +234,7 @@ erDiagram
 | content | `varchar(50)` | NOT NULL | 없음 | trim된 본문(`ReviewContent.Value`). 상한은 `ReviewContent.MaxLength`와 같다 |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
 | review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 UTC 날짜로 계산한 `Review.ReviewDate`를 그대로 저장한다 |
+| version | `integer` | NOT NULL | `0` | 낙관적 동시성 토큰(`Review.Version`). `Review.Edit` 성공마다 +1, EF가 `UPDATE … WHERE version = <읽은 값>`으로 저장한다. 동시 수정의 늦은 쪽은 0행 → 409(RV-02 6c). *(2026-10-24 사용자 결정, Claude 작성, incident 002)* |
 
 - 수정 시각(`updated_at`)은 두지 않는다. `Review`에 없고, 수정 시각을 쓰는 규칙·화면이 없다(ADR-007 기준)
 - 좋아요 수 컬럼은 두지 않는다. 카운터를 저장할지 likes에서 셀지는 D9(LK-01 "좋아요 수 갱신 유실")
@@ -246,6 +247,7 @@ erDiagram
 | 보조 인덱스 | `ix_reviews_place_created (place_id, created_at DESC)` | Q2. 장소 상세마다 실행되는 조회라 정렬까지 인덱스로 받는다. places 삭제 시 RESTRICT 검사(`WHERE place_id = ?`)도 받는다 | PL-02 |
 | FK | `fk_reviews_users`: `user_id → users(id) ON DELETE CASCADE` | 탈퇴 시 users 행 DELETE 한 문장으로 리뷰까지 지워진다(bookmarks와 같은 근거). 리뷰가 지워지면 review_images·likes도 아래 CASCADE로 따라 지워진다. 스토리지 이미지는 트랜잭션 밖 정리 배치가 맡는다 | PF-02, ADR-005 |
 | FK | `fk_reviews_places`: `place_id → places(id) ON DELETE RESTRICT` | 리뷰가 남은 장소의 삭제를 거부한다(bookmarks와 같은 근거) | ADR-005 |
+| CHECK | `ck_reviews_version`: `version >= 0` | 앱을 거치지 않은 쓰기로 음수 버전이 들어오는 것 | RV-02 6c |
 | CHECK | `ck_reviews_content`: `char_length(btrim(content)) >= 10` | 앱을 거치지 않은 쓰기로 10자 미만 본문이 들어오는 것. 상한 50은 `varchar(50)`이 맡는다. `btrim`은 ASCII 공백만 지우는 최소 이중화(users 메모와 같음) | R-RV-01 |
 
 메모

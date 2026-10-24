@@ -36,6 +36,7 @@ builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();
+builder.Services.AddScoped<EditReviewHandler>();
 
 // 인증: API가 직접 서명한 Access 토큰(HS256)만 받는다(D5 결정)
 builder.Services.AddOptions<JwtOptions>()

@@ -187,6 +187,11 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_reviews");
 
@@ -201,6 +206,8 @@ namespace Nook.Infrastructure.Persistence.Migrations
                     b.ToTable("reviews", null, t =>
                         {
                             t.HasCheckConstraint("ck_reviews_content", "char_length(btrim(content)) >= 10");
+
+                            t.HasCheckConstraint("ck_reviews_version", "version >= 0");
                         });
                 });
 

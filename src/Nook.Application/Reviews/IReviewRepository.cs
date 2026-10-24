@@ -19,6 +19,12 @@ public interface IReviewRepository
 
     // RV-01 6단계. 리뷰와 이미지를 한 번에 저장한다(SaveChanges 한 번 = 트랜잭션 하나).
     Task<AddReviewOutcome> TryAddAsync(Review review, CancellationToken ct);
+
+    // RV-02 4단계. 수정할 리뷰를 이미지와 함께 추적 상태로 읽는다(Images는 소유 엔티티라 함께 온다). 없으면 null. 받는 인덱스: pk_reviews.
+    Task<Review?> GetAsync(ReviewId reviewId, CancellationToken ct);
+
+    // RV-02 6단계. GetAsync로 읽어 바꾼 리뷰를 저장한다(SaveChanges 한 번 = 트랜잭션 하나).
+    Task<SaveReviewOutcome> TrySaveAsync(Review review, CancellationToken ct);
 }
 
 public enum AddReviewOutcome
@@ -26,4 +32,13 @@ public enum AddReviewOutcome
     Added,
     // ux_reviews_user_place_date 위반 — 사전 확인을 함께 통과한 동시 작성에서 진 쪽.
     AlreadyReviewedToday,
+}
+
+public enum SaveReviewOutcome
+{
+    Saved,
+    // 6b. 읽은 뒤 저장 전에 RV-03이 리뷰를 지웠다 — UPDATE/DELETE 0행 또는 review_images INSERT의 FK 위반.
+    ReviewGone,
+    // 6c. 읽은 뒤 저장 전에 다른 RV-02가 같은 리뷰의 이미지를 바꿨다 — 리뷰는 남아 있다(2026-10-24 사용자 결정: 409로 구분).
+    Conflict,
 }
