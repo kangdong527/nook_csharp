@@ -1,15 +1,15 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 진행 중** (2026-10-23, D5-7 진행 중). 브랜치 `feat/d5-auth`(미푸시). 인증·API 테스트 기반·PL-01·R-STAR·BM-01·02·LK-01·**RV-01** `e239562` 완료, **RV-02 핸들러 작성 중(미커밋)**. 남은 D5: RV-02 → RV-03 → BM-03 → PL-02. 달력 기준 약 6일 지연
+- 현재: **D5 기능 완료** (2026-10-25, D5-8). 브랜치 `feat/d5-auth`(미푸시 — 푸시·PR은 사용자). D5 API 전부(인증·PL-01·02·R-STAR·BM-01~03·LK-01·RV-01~03) 커밋됨, 테스트 217개 통과. 다음은 D6. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **RV-02 `EditReviewHandler.HandleAsync` 작성 (사용자, `TODO(human)`)** — 지금 본문이 비어 있어 **빌드가 깨진 상태**(CS0161)로 미커밋. 작업 트리에 RV-02 전부가 있다: `Review.Edit`+단위 테스트 6개, `ReviewImageUploads`(RV-01에서 추출), 리포지토리 `GetAsync`·`TrySaveAsync`(6b → `ReviewGone`), 오류 `ReviewNotFound`·`NotReviewAuthor`, `PUT /reviews/{id}`, DI, Application에 `Logging.Abstractions` 10.0.13
-     - 핸들러에서 정할 것(Learn by Doing 안내): 4c를 업로드 전에 `review.Images`로 사전 확인할지 / `KeepImageIds`의 `Guid.Empty`(`ReviewImageId.From` 예외 → 500) 처리 / 커밋 후 삭제는 `Saved`일 때만, 실패는 경고 로그 후 성공 / `ReviewGone`일 때 지우면 안 되는 이유
-  2. 핸들러 리뷰 → `ReviewsApiTests`에 RV-02 테스트(Claude 작성, 사용자 예측). **저장 → 다시 읽기 → 순서 변경 → 다시 읽기** 테스트 필수(EF 복원 순서는 보장 안 됨 — 단위 테스트로는 못 잡음) → 한 커밋 `feat(reviews): RV-02`
-  3. RV-03 → BM-03 → PL-02
-  4. 사용자: learning-log D5-4 검토, D5-6·D5-7 내용 확인. ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
+  1. **사용자: `feat/d5-auth` 푸시 → PR → `main` 병합**(PR 머지 방식은 미결). 병합 후 D6 브랜치
+  2. **D6 시작**: GR-01 5명 동시 합류 테스트를 먼저 써서 정원 초과 재현 → 해결책 3개 비교(`FOR UPDATE` / 조건부 UPDATE / Serializable + 재시도) + `xmin` 비교
+     - incident 002 미결 ①: 동시 수정 테스트가 변이를 6/15만 잡음(누가 먼저 커밋하는지 비결정) → "요청 2가 먼저 커밋"을 고정하는 장치. GR-01 동시성 테스트와 같은 기법
+     - incident 002 미결 ②: 응답에 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지). `xmin`과 `reviews.version` 비교 때 결정, 구현은 FE 전까지(API 계약 변경 — 사용자 결정)
+  3. 사용자: learning-log D5-7·D5-8 확인(이번엔 Claude 작성, 사용자 요청). ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -17,7 +17,7 @@
   3. ~~AU-01·AU-02 유스케이스 + `POST /auth/magic-link`, `/auth/magic-link/consume`~~ ✅ `c11794a` · `720f388`. 메일은 콘솔 발송기 + 백그라운드 워커(A1·A3는 DEP 5일째)
   4. ~~개발 전용 토큰 발급 엔드포인트~~ 기각(사용자 결정) — 운영 노출 사고 패턴. 자동 테스트는 DI의 `AccessTokenIssuer`로 토큰 생성, 손 테스트는 매직 링크 + 콘솔 발송기
   5. ~~`WebApplicationFactory` API 테스트(D5 게이트: 정상·실패 흐름) — 401·Fallback 정책 포함~~ ✅ `dc67487`
-  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · ~~LK-01~~ ✅ `52481f0` · ~~RV-01~~ ✅ `e239562` · RV-02 · RV-03 (수정·삭제도 D5에 포함, 2026-10-23 사용자 결정) · BM-03 · PL-02 (조회 — "프론트가 부를 API 전부", 2026-10-23 사용자 결정. PL-02는 N+1 그대로 두고 D9에서 측정·개선)
+  6. 나머지 D5 API: ~~PL-01~~ ✅ `485133c` · ~~R-STAR~~ ✅ `df3da5b` · ~~BM-01·02~~ ✅ `bc95bd2`(경로 `Guid.Empty` → 500 유지, 사용자 결정) · ~~LK-01~~ ✅ `52481f0` · ~~RV-01~~ ✅ `e239562` · ~~RV-02~~ ✅ `2e9b825`·`3aa20c7` · ~~RV-03~~ ✅ `cc242c7` (수정·삭제도 D5에 포함, 2026-10-23 사용자 결정) · ~~BM-03~~ ✅ `3a4d2df` · ~~PL-02~~ ✅ `a3fe19c` (조회 — "프론트가 부를 API 전부", 2026-10-23 사용자 결정. PL-02는 N+1 그대로 두고 D9에서 측정·개선)
   - 확인 못 한 것: Production 환경에서 `IncludeErrorDetails = false`로 `error_description`이 빠지는지(환경변수로 키를 넣어야 함) — DEP 5일째
 - D4 할 일 (완료)
   0. ~~D4-1 커밋~~ ✅ `f920a05` + SQL 로깅 커밋
@@ -297,6 +297,19 @@ Claude가 작성: BM-01·AddLike 리팩터링(사용자 요청), LK 뼈대(`ILik
 커밋: `b462fb2`·`4ed8507` LockWait · `36ce64d` incident 001 · `c95c0b1`·`2d5ace7` 유스케이스·ADR-009 · `e239562` RV-01 · `e3064cc` progress
 Claude가 작성: `LockWait`, incident 001, RV-01 유스케이스 수정·RV-02·03 보완, ADR-009, RV-01 뼈대·핸들러 수정·테스트 6개, `Review.Edit` 수정(중복·순서·사전 생성)·단위 테스트 6개, RV-02 뼈대(`ReviewImageUploads` 추출 포함). 사용자 작성: RV-02·03 유스케이스 초안, RV-01 핸들러 초안, `Review.Edit` 초안. 결정은 사용자: LockWait B안, D6 게이트, RV-02·03·BM-03·PL-02 D5 포함, 정리 방식 D3 유지, 403, 201, C안·`star=null`, 순서 계약
 
+### 2026-10-24~25 (D5-8)
+1. RV-02 핸들러: 사용자 초안 🔴 3(작성자 확인 없음 · 업로드가 조회보다 먼저 · 커밋 후 삭제 예외 미처리) → Claude 리팩터링(사용자 요청). 순서 "내용·이미지 검증 → 조회·4b → 키 생성 → `Edit`(메모리) → 업로드 → 저장 → 삭제"로 거절은 모두 업로드 전. `ReviewImageUploads`를 `NewKeys`/`UploadAsync`로 분리, 커밋 후 삭제는 `CancellationToken.None` + 경고 로그
+2. 동시 수정 진 쪽을 404와 구분 → **409 `Review.EditConflict`**(사용자 결정 (b)), usecases RV-02 6c 추가
+3. **incident 002**: 동시 추가 테스트 3/10 → 40P01. psql 실험 A·B·C(사용자 실행)로 DEFERRED 재검사 ↔ reviews 행 잠금 순환 확인 → **행 잠금 `FOR UPDATE`**(사용자 결정 ①) → 0/20이 됐지만 섞인 저장(둘 다 200, `[n1@1, n2@2]`) 5/20 발견 → **`reviews.version` 낙관적 동시성 토큰**(사용자 결정 (나), `AddReviewVersion` 마이그레이션) → 0/30. 토큰 제거 변이 6/15
+4. 응답 이미지 `imageKeys` → **`images: [{ id, key }]`**(사용자 결정 (A), ADR-009 결정 2 개정). 클라이언트가 `KeepImageIds`를 알 길이 없던 계약 빈틈 — 테스트가 DB에서 ID를 읽어 가리고 있었다
+5. RV-03: 데이터 변경 CTE 한 문장으로 삭제 + CASCADE 전 이미지 키 회수(Claude), 핸들러는 사용자(🔴 `hasReview=false` 고정 → 수정). `ReviewImageCleanup` 공용화. 테스트 9개, 변이 3개 모두 빨간불, 동시 삭제 10/10
+6. BM-03 `GET /me/places`: `PlaceView + star`, 상한 없음(D8 측정 후), 쿼리 한 번 `IN (bookmarks UNION reviews)` + EXISTS 2개(Claude, 사용자 선택). 변이로 "UNION이 중복 제거" 주석이 틀림을 발견 → `IN`(세미 조인)이 보장
+7. PL-02 `GET /places/{id}` + `GET /places/{id}/reviews`: 좋아요 수·내 좋아요·작성자·`mine`, **무한 스크롤 = 불투명 커서 + 키셋 `(created_at, id)`**, 기본 10·최대 30, `limit+1`로 다음 페이지 판단(사용자 결정, Claude 작성). 동점 경계·스크롤 중 새 글 테스트, 변이 3개 빨간불
+8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 217개 통과(Domain 95·Algorithms 1·Application 7·Integration 114)
+
+커밋: `2e9b825` RV-02 · `af623d9` incident 002 · `3aa20c7` 이미지 ID · `cc242c7` RV-03 · `3a4d2df` BM-03 · `a3fe19c` PL-02 · (이 기록) docs
+Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version`·마이그레이션·RV-02 테스트 10개, incident 002, 이미지 ID 응답·ADR-009 개정, RV-03 뼈대·CTE·`ReviewImageCleanup`·테스트 9개, BM-03·PL-02 전체·테스트, learning-log D5-7·D5-8(사용자 요청). 사용자 작성: RV-02 핸들러 초안, RV-03 핸들러, psql 실험 A·B·C. 결정은 사용자: 409 구분 (b), 행 잠금 ①, 버전 토큰 (나), 이미지 응답 (A), incident 미결 D6, BM-03 응답·상한·작성자, PL-02 포함 필드·무한 스크롤
+
 ## 체크리스트
 
 진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
@@ -306,15 +319,15 @@ Claude가 작성: `LockWait`, incident 001, RV-01 유스케이스 수정·RV-02�
 - [x] D2 클래스·엔티티·값 객체 (design-review 🔴 0) — Error·Result, 값 객체 8개, 강타입 ID 5개, 분류표, 다이어그램, 엔티티 8개, Group 단위 테스트 21개, ADR-004~007
 - [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
-- [ ] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT)
-- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001
+- [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
+- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행), 미결 2건 이어받음
 - [ ] FE 프론트 연결(원본 Next.js 재사용, 로컬 3흐름 동작)
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
 
 ### 2주차 — 대용량·성능·배포
-- [ ] D8 대용량 시드·인덱스·Keyset — incident 002, 003 · 🚀 운영 DB에 `CONCURRENTLY`
+- [ ] D8 대용량 시드·인덱스·Keyset(PL-02 키셋 `EXPLAIN` 포함) — incident 003~ · 🚀 운영 DB에 `CONCURRENTLY`
 - [ ] D9 쿼리 튜닝·N+1·카운터 전략 · 🚀 운영 반영
 - [ ] D10 k6 부하 테스트·커넥션 풀 — incident 004 · 🚀 풀 설정 반영
 - [ ] D11 LRU 캐시·Token Bucket — dsa/02, 03 · 🚀 compose에 redis 추가
@@ -323,6 +336,8 @@ Claude가 작성: `LockWait`, incident 001, RV-01 유스케이스 수정·RV-02�
 - [ ] D14 README·회고
 
 ## 미결 결정
+- 응답 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지) — D6에서 `xmin` 비교와 함께 결정, FE 전까지 구현(incident 002 §7)
+- R-RV-03과 삭제 후 재작성: 오늘 쓴 리뷰를 지우면 오늘 다시 쓸 수 있다(현재 동작, `Delete_ThenCreateSameDay_Returns201`이 기록) — 원본 PM 확인 필요
 - ~~일정 변경안 보류~~ → 채택(2026-10-20, "확정된 결정 (D5)")
 - ~~매직 링크 TOCTOU 보완 조합~~ → "확정된 결정 (D5)" ② A3 + Q2 + A1
 - 프론트 호스팅 위치: 같은 EC2(Caddy가 Next.js도 프록시) vs Vercel 등 별도 — FE 끝날 때. 별도면 CORS·쿠키 도메인 영향
