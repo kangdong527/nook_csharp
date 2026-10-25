@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ILikeRepository, LikeRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddSingleton<IInviteCodeGenerator, RandomInviteCodeGenerator>();
 
         services.AddOptions<MagicLinkOptions>()
             .BindConfiguration(MagicLinkOptions.SectionName)

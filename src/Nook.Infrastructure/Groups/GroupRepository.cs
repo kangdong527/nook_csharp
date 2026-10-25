@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nook.Application.Groups;
 using Nook.Domain.Groups;
 using Nook.Infrastructure.Persistence;
+using Npgsql;
 
 namespace Nook.Infrastructure.Groups;
 
@@ -29,6 +30,27 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
         // erd.md groups Q3 + group_members Q1. 받는 인덱스: pk_groups, pk_group_members. 추적한다 — SaveAsync가 새 멤버를 INSERT한다.
         var groupId = GroupId.From(id);
         return await db.Groups.SingleAsync(g => g.Id == groupId, ct);
+    }
+
+    public async Task<bool> TryAddAsync(Group group, CancellationToken ct)
+    {
+        // erd.md groups Q4 + group_members Q3. 충돌 판정: ux_groups_invite_code.
+        // groups·group_members INSERT가 SaveChanges 한 번 = 암묵적 트랜잭션 하나 — 멤버 INSERT가 실패하면 그룹도 남지 않는다(GR-02 원자성).
+        db.Groups.Add(group);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_groups_invite_code",
+        })
+        {
+            // 실패한 Added 상태(그룹 + owned 멤버)가 남으면 다음 SaveChanges가 같은 INSERT를 다시 보낸다(ReviewRepository와 같은 이유).
+            db.ChangeTracker.Clear();
+            return false;
+        }
     }
 
     public Task SaveAsync(Group group, CancellationToken ct) =>
