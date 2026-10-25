@@ -234,7 +234,7 @@ erDiagram
 | content | `varchar(50)` | NOT NULL | 없음 | trim된 본문(`ReviewContent.Value`). 상한은 `ReviewContent.MaxLength`와 같다 |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
 | review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 UTC 날짜로 계산한 `Review.ReviewDate`를 그대로 저장한다 |
-| version | `integer` | NOT NULL | `0` | 낙관적 동시성 토큰(`Review.Version`). `Review.Edit` 성공마다 +1, EF가 `UPDATE … WHERE version = <읽은 값>`으로 저장한다. 동시 수정의 늦은 쪽은 0행 → 409(RV-02 6c). *(2026-10-24 사용자 결정, Claude 작성, incident 002)* |
+| version | `integer` | NOT NULL | `0` | 낙관적 동시성 토큰(`Review.Version`). `Review.Edit` 성공마다 +1, EF가 `UPDATE … WHERE version = <읽은 값>`으로 저장한다. 동시 수정의 늦은 쪽은 0행 → 409(RV-02 6c). *(2026-10-24 사용자 결정, Claude 작성, incident 002)* API로도 나간다: 응답 `version`(불투명 값) → RV-02 폼 `Version`으로 돌아와 화면을 연 사이의 수정을 409로 거절(RV-02 4d). 그래서 이 값은 `Review.Edit` 성공 말고는 바뀌면 안 된다 — 다른 갱신이 올리면 거짓 충돌 *(2026-10-26, ADR-011)* |
 
 - 수정 시각(`updated_at`)은 두지 않는다. `Review`에 없고, 수정 시각을 쓰는 규칙·화면이 없다(ADR-007 기준)
 - 좋아요 수 컬럼은 두지 않는다. 카운터를 저장할지 likes에서 셀지는 D9(LK-01 "좋아요 수 갱신 유실")

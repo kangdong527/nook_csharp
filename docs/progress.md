@@ -6,7 +6,7 @@
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **D6 남은 것** (순서는 사용자가 정함)
-     - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). **사용자: ADR-011 작성**(결정 A~D + "불투명 값" 계약), usecases.md RV-02에 Version 입력·6c 사전 확인 반영
+     - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). ADR-011·usecases.md RV-02(3d·4d·6c)·PL-02·erd.md reviews version·ADR-009 결정 2 반영(Claude 작성, 사용자 요청)
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - GR-01·02·04 API 엔드포인트(FE 전에 필요) — 생성은 201 + Location(RV-01과 같은 형식), 응답 `GroupView(id, name, inviteCode)`
      - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
@@ -333,7 +333,7 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 5. 구현: 사용자가 핸들러 사전 비교 작성(권한 뒤·업로드 전 — 남의 리뷰에 409면 정보 노출). 41줄 비교 통과 시 읽은 값 = 화면 값이라 저장의 version WHERE가 그대로 최종 판정(41 vs 58 양자택일은 Claude 질문 오류)
 6. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 242개 통과(Domain 95·Algorithms 1·Application 7·Integration 139)
 
-Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청). 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
 
 ## 체크리스트
 
