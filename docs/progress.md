@@ -1,14 +1,14 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 테스트 242개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
+- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 그룹 API 3개, 테스트 252개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **D6 남은 것** (순서는 사용자가 정함)
      - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). ADR-011·usecases.md RV-02(3d·4d·6c)·PL-02·erd.md reviews version·ADR-009 결정 2 반영(Claude 작성, 사용자 요청)
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
-     - GR-01·02·04 API 엔드포인트(FE 전에 필요) — 생성은 201 + Location(RV-01과 같은 형식), 응답 `GroupView(id, name, inviteCode)`
+     - ~~GR-01·02·04 API 엔드포인트~~ ✅ D6-2 — `POST /groups`(201 + Location + `GroupView`), `POST /groups/join` 본문 `{ inviteCode }`(200 + `GroupView`), `DELETE /groups/{id}/membership`(204, 멱등). 이월: 그룹 조회 API(내 그룹 목록·상세)는 유스케이스에 없음 — FE 연결 때 필요하면 사용자가 유스케이스부터
      - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
   2. 사용자: learning-log D6-1 작성(Claude 작성분 목록은 아래 세션 기록). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
   3. 사용자: `feat/d6-concurrency` 푸시 → PR → `main` 병합(D6 끝나면)
@@ -332,8 +332,10 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 4. **incident 002 미결 ②**: 사용자 예측 △ — "화면 버전이 낮으니 실패"(실제: 화면 버전이 서버에 안 가므로 41줄이 최신을 읽고 통과 → 덮어씀). 결정(사용자) A 토큰 `reviews.version` · B 바디 필드 · C 409 재사용 · D 필수. 변경 비용: A는 불투명 값 계약이면 서버 내부, B는 단건 GET 신설 + FE 흐름 변경
 5. 구현: 사용자가 핸들러 사전 비교 작성(권한 뒤·업로드 전 — 남의 리뷰에 409면 정보 노출). 41줄 비교 통과 시 읽은 값 = 화면 값이라 저장의 version WHERE가 그대로 최종 판정(41 vs 58 양자택일은 Claude 질문 오류)
 6. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 242개 통과(Domain 95·Algorithms 1·Application 7·Integration 139)
+7. **그룹 API**(사용자 결정, Claude 추천 채택): 합류는 코드만 아는 상태라 `/groups/{id}/membership`에 PUT할 수 없음 → `POST /groups/join`, 코드는 본문(경로는 로그에 남음). 합류 응답 `200 + GroupView`(핸들러 `Result<GroupView>`로 변경), 탈퇴 `DELETE …/membership` 204. 그룹 핸들러가 API DI에 빠져 있던 것도 등록. 첫 실행 4건 실패 = 시드 시각이 실제 시계보다 미래(`AddMember`의 joinedAt ≥ CreatedAt 가드)
+8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 252개 통과(Domain 95·Algorithms 1·Application 7·Integration 149)
 
-Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청). 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청), `GroupsController`·DI 등록·합류 핸들러 반환 타입·`GroupsApiTests` 10개·기존 그룹 테스트 헬퍼 수정. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
 
 ## 체크리스트
 

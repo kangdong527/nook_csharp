@@ -185,8 +185,10 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
     private async Task<Result> JoinAsync(UserId userId, string code = Code)
     {
         await using var scope = _services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<JoinGroupHandler>()
+        var result = await scope.ServiceProvider.GetRequiredService<JoinGroupHandler>()
             .HandleAsync(new JoinGroupCommand(userId.Value, code), CancellationToken.None);
+        // 응답 모양(GroupView)은 GroupsApiTests가 본다. 여기서는 성공/실패와 에러만.
+        return result.TryGetValue(out _, out var error) ? Result.Success() : error;
     }
 
     private static void AssertFailure(Result result, Error expected)
