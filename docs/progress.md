@@ -9,8 +9,9 @@
      - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). ADR-011·usecases.md RV-02(3d·4d·6c)·PL-02·erd.md reviews version·ADR-009 결정 2 반영(Claude 작성, 사용자 요청)
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - ~~GR-01·02·04 API 엔드포인트~~ ✅ D6-2 — `POST /groups`(201 + Location + `GroupView`), `POST /groups/join` 본문 `{ inviteCode }`(200 + `GroupView`), `DELETE /groups/{id}/membership`(204, 멱등). 이월: 그룹 조회 API(내 그룹 목록·상세)는 유스케이스에 없음 — FE 연결 때 필요하면 사용자가 유스케이스부터
-     - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
-  2. 사용자: learning-log D6-1 작성(Claude 작성분 목록은 아래 세션 기록). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
+     - ~~ADR-010 "후속" 반영~~ ✅ D6-2 — "후속 결정" 절(잠금 순서·강도·탈퇴·생성)
+     - **▶ 다음 재개: 이월 메모** — 그룹 조회 API(내 그룹 목록·상세)가 유스케이스에 없음. FE 연결에 필요한지 판단 → 필요하면 사용자가 유스케이스부터
+  2. ~~learning-log D6-1·D6-2~~ ✅ Claude 작성(사용자 요청). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
   3. 사용자: `feat/d6-concurrency` 푸시 → PR → `main` 병합(D6 끝나면)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
