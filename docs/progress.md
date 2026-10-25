@@ -1,15 +1,17 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D5 기능 완료** (2026-10-25, D5-8). 브랜치 `feat/d5-auth`(미푸시 — 푸시·PR은 사용자). D5 API 전부(인증·PL-01·02·R-STAR·BM-01~03·LK-01·RV-01~03) 커밋됨, 테스트 217개 통과. 다음은 D6. 달력 기준 약 6일 지연
+- 현재: **D6 진행 중** (2026-10-25, D6-1). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, 테스트 239개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **사용자: `feat/d5-auth` 푸시 → PR → `main` 병합**(PR 머지 방식은 미결). 병합 후 D6 브랜치
-  2. **D6 시작**: GR-01 5명 동시 합류 테스트를 먼저 써서 정원 초과 재현 → 해결책 3개 비교(`FOR UPDATE` / 조건부 UPDATE / Serializable + 재시도) + `xmin` 비교
-     - incident 002 미결 ①: 동시 수정 테스트가 변이를 6/15만 잡음(누가 먼저 커밋하는지 비결정) → "요청 2가 먼저 커밋"을 고정하는 장치. GR-01 동시성 테스트와 같은 기법
-     - incident 002 미결 ②: 응답에 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지). `xmin`과 `reviews.version` 비교 때 결정, 구현은 FE 전까지(API 계약 변경 — 사용자 결정)
-  3. 사용자: learning-log D5-7·D5-8 확인(이번엔 Claude 작성, 사용자 요청). ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
+  1. **D6 남은 것** (순서는 사용자가 정함)
+     - incident 002 미결 ②: 응답에 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지). `xmin`과 `reviews.version` 비교 후 결정, 구현은 FE 전까지(API 계약 변경 — 사용자 결정)
+     - incident 002 미결 ①: 동시 수정 테스트가 변이를 6/15만 잡음(누가 먼저 커밋하는지 비결정) → "요청 2가 먼저 커밋"을 고정하는 장치. `LockWait`로 한쪽이 잠금을 쥔 상태를 만든 뒤 출발시키는 결정적 테스트(D6-1 탈퇴·합류 분포에서 같은 문제 확인)
+     - GR-01·02·04 API 엔드포인트(FE 전에 필요) — 생성은 201 + Location(RV-01과 같은 형식), 응답 `GroupView(id, name, inviteCode)`
+     - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
+  2. 사용자: learning-log D6-1 작성(Claude 작성분 목록은 아래 세션 기록). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
+  3. 사용자: `feat/d6-concurrency` 푸시 → PR → `main` 병합(D6 끝나면)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -310,6 +312,19 @@ Claude가 작성: `LockWait`, incident 001, RV-01 유스케이스 수정·RV-02�
 커밋: `2e9b825` RV-02 · `af623d9` incident 002 · `3aa20c7` 이미지 ID · `cc242c7` RV-03 · `3a4d2df` BM-03 · `a3fe19c` PL-02 · (이 기록) docs
 Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version`·마이그레이션·RV-02 테스트 10개, incident 002, 이미지 ID 응답·ADR-009 개정, RV-03 뼈대·CTE·`ReviewImageCleanup`·테스트 9개, BM-03·PL-02 전체·테스트, learning-log D5-7·D5-8(사용자 요청). 사용자 작성: RV-02 핸들러 초안, RV-03 핸들러, psql 실험 A·B·C. 결정은 사용자: 409 구분 (b), 행 잠금 ①, 버전 토큰 (나), 이미지 응답 (A), incident 미결 D6, BM-03 응답·상한·작성자, PL-02 포함 필드·무한 스크롤
 
+### 2026-10-25 (D6-1)
+1. PR #7(D5) 병합 후 `feat/d6-concurrency`. **GR-01 동시 합류 재현**: 빈자리 3에 5명 동시 → 5명 모두 성공, 멤버 6명(사용자 예측 "3 + 동시 요청 수"는 만든 회원 1명을 빠뜨림)
+2. 해결책 비교 (가) `FOR UPDATE` / (나) 조건부 UPDATE(카운터 컬럼) / (다) SERIALIZABLE + 재시도 → 사용자가 (나)를 골랐다가 erd.md의 "카운터 컬럼 없음" 근거를 다시 보고 **(가) 채택**. 조건부 INSERT + COUNT는 직렬화되지 않음, SERIALIZABLE은 재시도 없이 40001(GroupFull 아님)
+3. **incident 003**: 실험 1(`FromSql ... FOR UPDATE` 한 문장)이 여전히 6명 — EF가 OwnsMany 때문에 서브쿼리 + `LEFT JOIN group_members`로 감싸고, 잠금 대기 뒤 최신으로 다시 보는 것은 잠긴 groups 행뿐(JOIN한 멤버는 옛 스냅샷). **잠그는 문장과 읽는 문장을 나눠** 5/5 → 성공 3·실패 2·4명. `FOR UPDATE` 제거 변이 3/3 빨간불. ADR-010
+4. **GR-02 생성**: 그룹 + 첫 멤버는 `SaveChanges` 한 번(암묵적 트랜잭션) → 없는 회원으로 멤버 INSERT만 FK 실패시켜 그룹도 안 남음 확인(사용자 예측 적중). 초대 코드 충돌은 `TryAddAsync` → `false`로 최대 3회 재시도, 다 실패하면 예외(사용자 결정). 사용자 루프 초안(`catch (Exception)` 재시도·반환값 무시·범위 오류) → Claude 수정(사용자 요청)
+5. **R-GR-02·04**: 같은 회원의 합류·생성이 서로 다른 그룹이면 그룹 행 잠금으로 못 막음(사용자 답) → 공통 행 = users 행. **잠금 순서 users → groups, 강도 `FOR NO KEY UPDATE`**(사용자 결정 — FK 검사 `FOR KEY SHARE`는 통과, 자기끼리는 충돌). 재현: 참여 2개 회원이 합류 2 + 생성 1 동시 → 4개 → 사용자 구현(`>` 경계 오류 한 번) 후 5/5 성공 1·실패 2·3개. 합류 잠금 제거 변이 → 5개(생성의 잠금만으로는 못 막음 — 같은 잠금을 쓰는 쪽끼리만 줄 선다). 반대 순서 교착 학습 테스트(40P01, 약 1초), 강도 변이(`FOR UPDATE` → FK INSERT 시간 초과)
+6. 생성의 코드 재시도를 트랜잭션 안으로 — UNIQUE 위반 후에도 계속 쓸 수 있는 것은 EF가 `SaveChanges`마다 세이브포인트를 만들기 때문(충돌 테스트 통과로 확인)
+7. **R-GR-09 탈퇴(GR-04)**: 공통 행 = groups 행(사용자 답), users는 안 잠금(탈퇴는 R-GR-02를 못 깸). `LockByIdAsync`(문장 분리) + `DeleteAsync`. 사용자가 `MemberRemoval` switch + `UnreachableException` 작성. 마지막 두 멤버 동시 탈퇴 10라운드 × 3회 그룹 0, 잠금 제거 변이 10/10 빈 그룹. 탈퇴·합류 겹침은 "탈퇴 먼저" 9~10/10 — 합류는 users 잠금 왕복이 하나 더 있어 늦게 도착(선착순 = 잠금 획득 순)
+8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 239개 통과(Domain 95·Algorithms 1·Application 7·Integration 136)
+
+커밋: `339d328` GR-01 · `79a1efd` incident 003·ADR-010 · `5992212` GR-02 · `271f70f` R-GR-02/04 · `5879f1b` GR-04
+Claude가 작성: 모든 테스트(Join·Create·GroupMembershipLimit·Leave)와 변이 실험, `GroupRepository` 전체(`LockByInviteCodeAsync` 문장 분리·`LockByIdAsync`·`TryAddAsync`·`CountMembershipsAsync`·`DeleteAsync`), `UserRepository.LockAsync`, `IInviteCodeGenerator`·`RandomInviteCodeGenerator`·`GroupView`, GR-02 핸들러(재시도 루프 수정 포함, 사용자 요청)·잠금 부분, 합류 핸들러 AlreadyMember 순서 변경, 도메인 `Group.MaxGroupsPerUser`·`GroupErrors.TooManyGroups`, incident 003·ADR-010·erd.md groups 표기(사용자 요청). 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+
 ## 체크리스트
 
 진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
@@ -320,7 +335,7 @@ Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version
 - [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
-- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행), 미결 2건 이어받음
+- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족). 남음: incident 002 미결 2건, 그룹 API 엔드포인트
 - [ ] FE 프론트 연결(원본 Next.js 재사용, 로컬 3흐름 동작)
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
@@ -346,7 +361,7 @@ Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version
 - 운영 DB: EC2 안 postgres 컨테이너(compose) vs RDS — DEP 2일째. 컨테이너면 백업·디스크 책임이 본인
 - 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
-- 마지막 멤버의 탈퇴 두 번째 요청: 그룹이 이미 삭제돼 Application이 NotFound → 첫 요청은 성공, 두 번째는 실패라 R-GR-09 멱등 근거와 충돌. 204로 볼지 — D5
+- ~~마지막 멤버의 탈퇴 두 번째 요청~~ → 성공(멱등), "확정된 결정 (D6)"
 - 북마크 API: 토글 vs PUT/DELETE — D5. R-BM-02 A안(커밋 순서, 클릭 순서는 클라이언트 책임) → 멱등한 PUT/DELETE 쪽으로 기움. likes(LK-01)도 같은 구조
 - ~~배포 대상(단일 VM vs Azure vs Fly.io)~~ → AWS EC2 단일 인스턴스(2026-10-20 사용자 결정)
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
@@ -356,13 +371,21 @@ Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version
 - D5 테스트 항목(D4에서 이월, Application 계층 필요): 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가)
 - `ReviewContent.Create`의 `string.Normalize`는 짝 없는 서로게이트에서 `ArgumentException`(문서상 동작, 미실측) → 회원 입력이 Result가 아니라 예외가 됨. API 역직렬화(System.Text.Json)에서 이미 걸러지는지 확인 후 결정 — D5
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
-- 합류는 사용자 행(R-GR-04)과 그룹 행(R-GR-03)을 둘 다 잠근다 — 데드락을 피할 잠금 순서(예: 항상 사용자 → 그룹) — D6
+- ~~합류의 잠금 순서~~ → users → groups, "확정된 결정 (D6)"
+- R-GR-02에 닿는 새 경로(회원 탈퇴 PF-02 등)는 같은 users 잠금을 거쳐야 한다 — 잠금은 같은 잠금을 쓰는 쪽끼리만 줄 세운다(D6-1 변이: 합류만 빼도 5개)
 - 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
 - ADR 번호: 003(마이그레이션·배포, DEP 3일째)은 `개발_프로세스.md`에 예약됨 → 새 ADR은 008부터. 작성됨: 002 원본과 다른 점(Claude 작성, 2026-10-17 사용자 검토 후 채택), 004 그룹 생애, 005 FK 유지, 006 강타입 ID, 007 엔티티 시각(Claude 작성, 2026-10-13 사용자 검토 후 채택)
 - ADR-002 범위 = 스키마 차이만(D3-2 사용자 결정, 근거 erd.md §4). 닉네임 UNIQUE는 포함. 도메인 규칙 차이(리뷰 길이 trim 후 계산, 하루 기준 UTC(원본 "00시"), 닉네임 화이트리스트·NFC)를 어디에 남길지 미정 — `domain.md`에 이미 있으면 정리 불필요
 - design-review 🟡(D2-5, 고칠지 사용자 결정): `Group.MaxGroupMembers` vs `Review.MaxImages` 이름 규칙 불일치(`MaxMembers`?) · `GroupErrors`·`PlaceErrors`·`UserErrors` 헤더 주석 없음(`ReviewErrors`만 있음) · ~~`Members`/`Images` 공개 타입 불일치~~ → 의도된 차이로 종료(D3-2)
+
+## 확정된 결정 (D6)
+- 그룹 동시 합류(R-GR-03): **(가) 그룹 행 `FOR UPDATE`**, 잠그는 문장과 멤버를 읽는 문장을 나눈다(ADR-010, incident 003)
+- 그룹 생성(GR-02): 그룹 + 첫 멤버 `SaveChanges` 한 번. 초대 코드 충돌은 새 코드로 최대 3회, 다 실패하면 `InvalidOperationException`(생성기 고장). 응답 `GroupView(id, name, inviteCode)`, API는 201 + Location
+- 회원당 3그룹(R-GR-02·04): users 행 **`FOR NO KEY UPDATE`** 뒤 참여 수 확인 — 합류·생성 모두. **잠금 순서는 항상 users → groups.** 생성은 users만, 탈퇴는 groups만 잠근다
+- 합류 오류 우선순위: AlreadyMember·GroupFull이 TooManyGroups보다 먼저(참여 수는 `AddMember` 뒤에 센다)
+- 탈퇴(GR-04, R-GR-09): 그룹 행 잠금 뒤 `RemoveMember` → `GroupEmptied`면 같은 트랜잭션에서 삭제. 멤버가 아니거나 그룹이 이미 없어도 성공(멱등)
 
 ## 확정된 결정 (D5)
 - PL-01 장소 확정(2026-10-21 사용자 결정)
