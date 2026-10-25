@@ -40,7 +40,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Edit_TotalExceedsMax_Returns400AndUploadsNothing                   (3c)
     // - Edit_KeepIdFromOtherReview_Returns400AndUploadsNothing             (4c)
     // - Edit_WhenDeleteFails_StillReturns200                               (커밋 후 삭제 실패는 응답을 바꾸지 않는다)
-    // - Edit_ConcurrentWithDifferentKeep_One200One409                      (6c — 0행)
+    // - Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409(B·C 먼저)    (6c — version, 순서 고정)
+    // - Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409(A 먼저)      (6c — 0행, 순서 고정)
     // - Edit_ConcurrentBothAppend_One200One409                             (6c — sort_order 23505, 커밋 시점)
     // - Edit_WhenReviewDeletedAfterRead_Returns404                         (6b)
     //
@@ -310,17 +311,25 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
     }
 
-    [Fact]
-    public async Task Edit_ConcurrentWithDifferentKeep_One200One409()
+    [Theory]
+    [InlineData(true)]  // keep [B, C]가 먼저 커밋 — 진 쪽(keep [A])의 문장은 전부 1행·23505 없음. version만 잡는다
+    [InlineData(false)] // keep [A]가 먼저 커밋 — 진 쪽(keep [B, C])의 B sort_order UPDATE가 0행
+    public async Task Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409(bool keepBcCommitsFirst)
     {
-        // 업로드 지점에서 만나게 해 "둘 다 조회를 마친 뒤 저장"을 고정한다. 누가 이기는지는 정하지 않는다.
-        // 진 쪽은 이긴 쪽이 지운 이미지 행을 UPDATE/DELETE하려다 0행 → 리뷰는 남아 있으므로 6c.
-        UseRendezvousStorage();
+        // 업로드 지점에서 만나게 해 "둘 다 조회를 마친 뒤 저장"을 고정하고, 늦은 쪽은 이긴 쪽이 커밋한 뒤에 풀어 준다.
+        // 순서를 스케줄러에 맡기면 version 변이를 절반만 잡는다(incident 002 §7).
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        UseOrderedGateStorage(heldContentType: keepBcCommitsFirst ? "image/jpeg" : "image/png", release.Task);
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
 
-        var responses = await Task.WhenAll(EditAsync(reviewId, Ids(a), Jpeg), EditAsync(reviewId, Ids(b, c), Png));
+        var keepA = EditAsync(reviewId, Ids(a), Jpeg);
+        var keepBc = EditAsync(reviewId, Ids(b, c), Png);
+        var (first, later) = keepBcCommitsFirst ? (keepBc, keepA) : (keepA, keepBc);
 
-        await AssertOneWinnerOneConflictAsync(responses, reviewId);
+        Assert.Equal(HttpStatusCode.OK, (await first).StatusCode);
+        release.SetResult();
+        Assert.Equal(HttpStatusCode.Conflict, (await later).StatusCode); // 본문(에러 코드)은 아래 공통 단언이 읽는다 — 두 번 읽으면 스트림이 닫혀 있다
+        await AssertOneWinnerOneConflictAsync([await first, await later], reviewId);
     }
 
     [Fact]
@@ -546,6 +555,18 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         });
     }
 
+    private void UseOrderedGateStorage(string heldContentType, Task release)
+    {
+        _factory.Dispose();
+        var rendezvous = new Barrier(participantCount: 2);
+        (_factory, _client) = CreateClient(services =>
+        {
+            services.RemoveAll<IReviewImageStorage>();
+            services.AddSingleton<IReviewImageStorage>(sp => new OrderedGateStorage(
+                sp.GetRequiredService<InMemoryReviewImageStorage>(), rendezvous, heldContentType, release));
+        });
+    }
+
     // 시드는 DB와 메모리 스토리지에 직접 넣는다 — POST로 만들면 테스트용 스토리지(랑데부·삭제 실패)를 거쳐 버린다.
     private async Task<(Guid ReviewId, ReviewImage A, ReviewImage B, ReviewImage C)> SeedReviewWithThreeImagesAsync()
     {
@@ -673,6 +694,25 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         {
             if (!await Task.Run(() => rendezvous.SignalAndWait(Timeout, ct), ct))
                 throw new TimeoutException("상대 요청이 업로드 지점에 오지 않았다 — 사전 확인에서 걸렸거나 직렬화된 것.");
+            await inner.PutAsync(storageKey, content, contentType, ct);
+        }
+
+        public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+    }
+
+    // 랑데부 뒤 heldContentType 업로드만 붙잡는다 — 다른 요청이 커밋까지 끝낸 다음 테스트가 release로 풀어 준다.
+    // 랑데부는 출발선(둘 다 조회 완료)을, release는 커밋 순서를 고정한다.
+    private sealed class OrderedGateStorage(
+        InMemoryReviewImageStorage inner, Barrier rendezvous, string heldContentType, Task release) : IReviewImageStorage
+    {
+        private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
+
+        public async Task PutAsync(string storageKey, Stream content, string contentType, CancellationToken ct)
+        {
+            if (!await Task.Run(() => rendezvous.SignalAndWait(Timeout, ct), ct))
+                throw new TimeoutException("상대 요청이 업로드 지점에 오지 않았다 — 사전 확인에서 걸렸거나 직렬화된 것.");
+            if (contentType == heldContentType)
+                await release.WaitAsync(Timeout, ct);
             await inner.PutAsync(storageKey, content, contentType, ct);
         }
 

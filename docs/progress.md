@@ -1,13 +1,13 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D6 진행 중** (2026-10-25, D6-1). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, 테스트 239개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
+- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ① 해소, 테스트 240개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **D6 남은 것** (순서는 사용자가 정함)
      - incident 002 미결 ②: 응답에 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지). `xmin`과 `reviews.version` 비교 후 결정, 구현은 FE 전까지(API 계약 변경 — 사용자 결정)
-     - incident 002 미결 ①: 동시 수정 테스트가 변이를 6/15만 잡음(누가 먼저 커밋하는지 비결정) → "요청 2가 먼저 커밋"을 고정하는 장치. `LockWait`로 한쪽이 잠금을 쥔 상태를 만든 뒤 출발시키는 결정적 테스트(D6-1 탈퇴·합류 분포에서 같은 문제 확인)
+     - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - GR-01·02·04 API 엔드포인트(FE 전에 필요) — 생성은 201 + Location(RV-01과 같은 형식), 응답 `GroupView(id, name, inviteCode)`
      - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
   2. 사용자: learning-log D6-1 작성(Claude 작성분 목록은 아래 세션 기록). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
@@ -323,7 +323,15 @@ Claude가 작성: RV-02 핸들러 리팩터링·409·행 잠금·`Review.Version
 8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 239개 통과(Domain 95·Algorithms 1·Application 7·Integration 136)
 
 커밋: `339d328` GR-01 · `79a1efd` incident 003·ADR-010 · `5992212` GR-02 · `271f70f` R-GR-02/04 · `5879f1b` GR-04
-Claude가 작성: 모든 테스트(Join·Create·GroupMembershipLimit·Leave)와 변이 실험, `GroupRepository` 전체(`LockByInviteCodeAsync` 문장 분리·`LockByIdAsync`·`TryAddAsync`·`CountMembershipsAsync`·`DeleteAsync`), `UserRepository.LockAsync`, `IInviteCodeGenerator`·`RandomInviteCodeGenerator`·`GroupView`, GR-02 핸들러(재시도 루프 수정 포함, 사용자 요청)·잠금 부분, 합류 핸들러 AlreadyMember 순서 변경, 도메인 `Group.MaxGroupsPerUser`·`GroupErrors.TooManyGroups`, incident 003·ADR-010·erd.md groups 표기(사용자 요청). 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Leave)와 변이 실험, `GroupRepository` 전체(`LockByInviteCodeAsync` 문장 분리·`LockByIdAsync`·`TryAddAsync`·`CountMembershipsAsync`·`DeleteAsync`), `UserRepository.LockAsync`, `IInviteCodeGenerator`·`RandomInviteCodeGenerator`·`GroupView`, GR-02 핸들러(재시도 루프 수정 포함, 사용자 요청)·잠금 부분, 합류 핸들러 AlreadyMember 순서 변경, 도메인 `Group.MaxGroupsPerUser`·`GroupErrors.TooManyGroups`, incident 003·ADR-010·erd.md groups 표기(사용자 요청).
+
+### 2026-10-26 (D6-2)
+1. **incident 002 미결 ①**: 원인 = 랑데부는 출발선(둘 다 조회 완료)만 고정, 커밋 순서는 스케줄러. 사용자 예측 △ — 반대 순서(keep A 먼저)에서 진 쪽 B 문장을 INSERT로 답함(실제: 추적 중 엔티티의 `ChangeSortOrder` → `UPDATE sort_order` 0행), 0행 결과는 정답
+2. `OrderedGateStorage`: Barrier 랑데부 뒤 한쪽 `PutAsync`를 `TaskCompletionSource`로 붙잡고, 테스트가 이긴 쪽 200(= 커밋 완료)을 받은 뒤 푼다. `Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409` Theory(keep B·C 먼저 = version 경로 / keep A 먼저 = 0행 경로). 10/10 초록
+3. 변이(`IsConcurrencyToken()` 제거, 사용자 실행): `True`만 매번 빨강(`later` 200) — version이 꼭 필요한 순서는 하나뿐임을 확인. 첫 실행 실패는 테스트 결함(응답 본문 두 번 읽기 → `ObjectDisposedException`)
+4. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 240개 통과(Domain 95·Algorithms 1·Application 7·Integration 137)
+
+Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신. 사용자: 변이 실행·되돌리기. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
 
 ## 체크리스트
 
