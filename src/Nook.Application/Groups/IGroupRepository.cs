@@ -1,0 +1,14 @@
+using Nook.Domain.Groups;
+
+namespace Nook.Application.Groups;
+
+// 그룹 저장 담당(erd.md groups·group_members). 동시 합류(R-GR-03)는 그룹 행 잠금(D6 (가) FOR UPDATE, 사용자 결정)으로 직렬화한다.
+public interface IGroupRepository
+{
+    // erd.md groups Q1·Q2 + group_members Q1. 초대 코드로 그룹 행을 잠그고, 멤버까지 추적 상태로 돌려준다.
+    // 잠금은 트랜잭션 끝까지 유지된다 — 호출한 쪽이 트랜잭션 안에서 불러야 의미가 있다(밖이면 문장 끝에 바로 풀린다).
+    Task<Group?> LockByInviteCodeAsync(InviteCode inviteCode, CancellationToken ct);
+
+    // 추적 중인 그룹의 변경(멤버 추가·제거)을 저장한다. erd.md group_members Q3.
+    Task SaveAsync(Group group, CancellationToken ct);
+}
