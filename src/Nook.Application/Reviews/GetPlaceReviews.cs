@@ -15,12 +15,14 @@ public sealed record GetPlaceReviewsQuery(Guid UserId, Guid PlaceId, string? Cur
 public sealed record ReviewPageView(IReadOnlyList<PlaceReviewView> Items, string? NextCursor);
 
 // Mine: 수정·삭제 버튼을 보일지. 클라이언트가 자기 회원 ID를 몰라도 되게 서버가 판정한다.
+// Version: 수정 화면이 RV-02에 그대로 돌려보낼 불투명 값(ReviewView.Version과 같다).
 public sealed record PlaceReviewView(
     Guid Id,
     ReviewAuthorView Author,
     string Content,
     IReadOnlyList<ReviewImageView> Images,
     DateTimeOffset CreatedAt,
+    int Version,
     int LikeCount,
     bool LikedByMe,
     bool Mine);
@@ -108,6 +110,7 @@ public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepos
         row.Review.Content.Value,
         [.. row.Review.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey))],
         row.Review.CreatedAt,
+        row.Review.Version,
         row.LikeCount,
         row.LikedByMe,
         row.Review.UserId == me);

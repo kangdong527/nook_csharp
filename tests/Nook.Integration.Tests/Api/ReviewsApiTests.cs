@@ -44,6 +44,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409(A 먼저)      (6c — 0행, 순서 고정)
     // - Edit_ConcurrentBothAppend_One200One409                             (6c — sort_order 23505, 커밋 시점)
     // - Edit_WhenReviewDeletedAfterRead_Returns404                         (6b)
+    // - Edit_WithVersionSeenBeforeOtherEdit_Returns409AndUploadsNothing    (6c — 화면을 연 사이의 수정, 업로드 전 거절)
+    // - Edit_WithoutVersion_Returns400AndUploadsNothing                    (Version 필수)
     //
     // RV-03 — 시작 상태: 내 리뷰 R(오늘, 이미지 2장, 남의 좋아요 1개), 스토리지 2개, 북마크 없음
     // - Delete_Own_Returns200ChangedAndCascadesImagesAndLikes               (1)
@@ -65,6 +67,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     private static readonly byte[] Gif = "GIF89a\0\0\0\0\0\0"u8.ToArray();
 
     private const string Content = "조용하고 커피가 맛있는 곳";
+    private const int SeededVersion = 0;
     private const string EditedContent = "다시 가 보니 디저트도 맛있는 곳";
 
     private readonly PostgresFixture _fixture;
@@ -206,6 +209,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.NotNull(view);
         Assert.Equal(EditedContent, view.Content);
         Assert.Equal("fill", view.Star);
+        Assert.Equal(SeededVersion + 1, view.Version);
 
         // 다시 읽은 값이 기준이다 — 응답은 메모리의 애그리거트라 저장이 틀려도 맞게 나온다.
         var saved = await ReloadAsync(reviewId);
@@ -227,7 +231,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var first = await (await EditAsync(reviewId, Ids(c, a), Png)).Content.ReadFromJsonAsync<ReviewView>();
         var x = first!.Images[2].Id;
 
-        var response = await EditAsync(reviewId, [x, c.Id.Value]);
+        var response = await EditAsync(reviewId, [x, c.Id.Value], [], _client, first.Version);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var saved = await ReloadAsync(reviewId);
@@ -371,6 +375,37 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.False(await check.Reviews.AnyAsync());
         // 기존 3장은 이 테스트에서 지운 쪽(가짜 RV-03)이 맡을 몫, 새 1장은 고아.
         Assert.Equal(4, _factory.ImageStorage.Objects.Count);
+    }
+
+    [Fact]
+    public async Task Edit_WithVersionSeenBeforeOtherEdit_Returns409AndUploadsNothing()
+    {
+        // 화면 A가 목록에서 버전을 받아 둔 사이 다른 기기의 수정이 커밋된다. 화면 A의 저장은 요청 안에서는 낡은 데이터가
+        // 없으므로(최신을 읽는다) 화면이 본 버전을 돌려받지 않으면 다른 기기의 수정을 덮어쓴다(incident 002 미결 ②).
+        var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
+        var seen = await GetPlaceReviewVersionAsync(reviewId);
+        Assert.Equal(HttpStatusCode.OK, (await EditAsync(reviewId, Ids(a, b, c), [], _client, seen)).StatusCode);
+
+        var response = await EditAsync(reviewId, Ids(a), [Png], _client, seen);
+
+        await AssertProblemAsync(response, HttpStatusCode.Conflict, ReviewWriteErrors.EditConflict);
+        var saved = await ReloadAsync(reviewId);
+        Assert.Equal(seen + 1, saved.Version);
+        Assert.Equal([a.Id, b.Id, c.Id], saved.Images.Select(i => i.Id));
+        // 거절은 업로드 전 — 고아 없음. 58줄의 version WHERE만으로도 409는 나지만 새 이미지가 고아로 남는다.
+        Assert.Equal(3, _factory.ImageStorage.Objects.Count);
+    }
+
+    [Fact]
+    public async Task Edit_WithoutVersion_Returns400AndUploadsNothing()
+    {
+        var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
+
+        var response = await EditAsync(reviewId, Ids(a), [Png], _client, version: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(3, (await ReloadAsync(reviewId)).Images.Count);
+        Assert.Equal(3, _factory.ImageStorage.Objects.Count);
     }
 
     [Fact]
@@ -609,15 +644,25 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return await db.Reviews.AsNoTracking().SingleAsync(r => r.Id == ReviewId.From(reviewId));
     }
 
+    // 클라이언트가 수정 화면에 들어가는 길 — 단건 GET이 없어 장소별 목록에서 버전을 얻는다.
+    private async Task<int> GetPlaceReviewVersionAsync(Guid reviewId)
+    {
+        var page = await _client.GetFromJsonAsync<ReviewPageView>($"/places/{_place.Id.Value}/reviews");
+        return page!.Items.Single(r => r.Id == reviewId).Version;
+    }
+
     private static Guid[] Ids(params ReviewImage[] images) => [.. images.Select(i => i.Id.Value)];
 
     private Task<HttpResponseMessage> EditAsync(Guid reviewId, Guid[] keep, params byte[][] images) =>
         EditAsync(reviewId, keep, images, _client);
 
+    // version: 화면이 받아 둔 값. 시드 직후 리뷰는 SeededVersion이라 기본값으로 둔다. null이면 폼에서 뺀다.
     private static Task<HttpResponseMessage> EditAsync(
-        Guid reviewId, Guid[] keep, byte[][] images, HttpClient client)
+        Guid reviewId, Guid[] keep, byte[][] images, HttpClient client, int? version = SeededVersion)
     {
         var form = new MultipartFormDataContent { { new StringContent(EditedContent), "Content" } };
+        if (version is not null)
+            form.Add(new StringContent(version.Value.ToString()), "Version");
         // 같은 이름을 여러 번 보내면 List<Guid>로 묶이고, 보낸 순서가 곧 KeepImageIds 순서다.
         foreach (var id in keep)
             form.Add(new StringContent(id.ToString()), "KeepImageIds");

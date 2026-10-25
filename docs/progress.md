@@ -1,12 +1,12 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ① 해소, 테스트 240개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
+- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 테스트 242개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **D6 남은 것** (순서는 사용자가 정함)
-     - incident 002 미결 ②: 응답에 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지). `xmin`과 `reviews.version` 비교 후 결정, 구현은 FE 전까지(API 계약 변경 — 사용자 결정)
+     - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). **사용자: ADR-011 작성**(결정 A~D + "불투명 값" 계약), usecases.md RV-02에 Version 입력·6c 사전 확인 반영
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - GR-01·02·04 API 엔드포인트(FE 전에 필요) — 생성은 201 + Location(RV-01과 같은 형식), 응답 `GroupView(id, name, inviteCode)`
      - ADR-010 "후속" 반영 여부(사용자): 잠금 순서 users → groups, users `FOR NO KEY UPDATE`, 탈퇴는 groups만 잠금
@@ -329,9 +329,11 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 1. **incident 002 미결 ①**: 원인 = 랑데부는 출발선(둘 다 조회 완료)만 고정, 커밋 순서는 스케줄러. 사용자 예측 △ — 반대 순서(keep A 먼저)에서 진 쪽 B 문장을 INSERT로 답함(실제: 추적 중 엔티티의 `ChangeSortOrder` → `UPDATE sort_order` 0행), 0행 결과는 정답
 2. `OrderedGateStorage`: Barrier 랑데부 뒤 한쪽 `PutAsync`를 `TaskCompletionSource`로 붙잡고, 테스트가 이긴 쪽 200(= 커밋 완료)을 받은 뒤 푼다. `Edit_ConcurrentWithDifferentKeep_LaterSaveReturns409` Theory(keep B·C 먼저 = version 경로 / keep A 먼저 = 0행 경로). 10/10 초록
 3. 변이(`IsConcurrencyToken()` 제거, 사용자 실행): `True`만 매번 빨강(`later` 200) — version이 꼭 필요한 순서는 하나뿐임을 확인. 첫 실행 실패는 테스트 결함(응답 본문 두 번 읽기 → `ObjectDisposedException`)
-4. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 240개 통과(Domain 95·Algorithms 1·Application 7·Integration 137)
+4. **incident 002 미결 ②**: 사용자 예측 △ — "화면 버전이 낮으니 실패"(실제: 화면 버전이 서버에 안 가므로 41줄이 최신을 읽고 통과 → 덮어씀). 결정(사용자) A 토큰 `reviews.version` · B 바디 필드 · C 409 재사용 · D 필수. 변경 비용: A는 불투명 값 계약이면 서버 내부, B는 단건 GET 신설 + FE 흐름 변경
+5. 구현: 사용자가 핸들러 사전 비교 작성(권한 뒤·업로드 전 — 남의 리뷰에 409면 정보 노출). 41줄 비교 통과 시 읽은 값 = 화면 값이라 저장의 version WHERE가 그대로 최종 판정(41 vs 58 양자택일은 Claude 질문 오류)
+6. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 242개 통과(Domain 95·Algorithms 1·Application 7·Integration 139)
 
-Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신. 사용자: 변이 실행·되돌리기. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
 
 ## 체크리스트
 
