@@ -12,6 +12,9 @@ public sealed class Group
 {
     public const int MaxGroupMembers = 4;
 
+    // R-GR-02. 여러 그룹에 걸친 규칙이라 루트가 검사하지 못한다 — 값만 여기 두고 Application이 users 행 잠금 뒤 센다(R-GR-04).
+    public const int MaxGroupsPerUser = 3;
+
     public GroupId Id { get; }
     public GroupName Name { get; }
     public InviteCode InviteCode { get; }

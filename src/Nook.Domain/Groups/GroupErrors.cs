@@ -28,4 +28,9 @@ public static class GroupErrors
     "Group.GroupFull",
     $"그룹 정원({Group.MaxGroupMembers}명)이 가득 찼습니다.",
     ErrorType.Conflict);
+
+    public static readonly Error TooManyGroups = new(
+    "Group.TooManyGroups",
+    $"이미 최대 그룹 수({Group.MaxGroupsPerUser}개)에 참여 중입니다.",
+    ErrorType.Conflict);
 }

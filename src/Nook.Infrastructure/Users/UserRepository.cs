@@ -32,4 +32,10 @@ internal sealed class UserRepository(NookDbContext db) : IUserRepository
         }
         // ux_users_email_lower 위반(같은 이메일 동시 가입)은 일부러 잡지 않는다 → 500. 처리 방식은 미결(progress.md D5).
     }
+
+    public Task LockAsync(UserId userId, CancellationToken ct) =>
+        // erd.md users Q2. 받는 인덱스: pk_users. 엔티티를 싣지 않는다 — 잠금만 필요하다.
+        db.Database.SqlQuery<Guid>($"""
+            SELECT id AS "Value" FROM users WHERE id = {userId.Value} FOR NO KEY UPDATE
+            """).ToListAsync(ct);
 }

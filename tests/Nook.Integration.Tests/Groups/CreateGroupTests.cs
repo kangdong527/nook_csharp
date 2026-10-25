@@ -17,6 +17,7 @@ public sealed class CreateGroupTests : IntegrationTestBase, IDisposable
     // 흐름
     // - Create_WithValidName_SavesGroupWithCreatorAsOnlyMember
     // - Create_WithInvalidName_ReturnsValidationAndAddsNothing
+    // - Create_WhenUserInMaxGroups_ReturnsTooManyGroupsAndAddsNothing   (R-GR-02)
     //
     // 원자성(R-GR-08)
     // - Create_WhenMemberInsertFails_LeavesNoGroup                 (없는 회원 → fk_group_members_users)
@@ -70,6 +71,23 @@ public sealed class CreateGroupTests : IntegrationTestBase, IDisposable
         Assert.False(result.TryGetValue(out _, out var error));
         Assert.Equal(GroupErrors.GroupNameLengthOutOfRange, error);
         Assert.Equal(0, await Db.CreateContext().Groups.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_WhenUserInMaxGroups_ReturnsTooManyGroupsAndAddsNothing()
+    {
+        var creator = await SeedUserAsync(1);
+        var existing = new[] { "BBBBBB", "CCCCCC", "DDDDDD" }.Take(Group.MaxGroupsPerUser).ToArray();
+        foreach (var code in existing)
+            await SeedGroupAsync(code, creator.Id);
+        _codes.Enqueue("ABCDEF");
+
+        var result = await CreateAsync(creator.Id, "넷째모임");
+
+        Assert.False(result.TryGetValue(out _, out var error));
+        Assert.Equal(GroupErrors.TooManyGroups, error);
+        Assert.Equal(existing.Length, await Db.CreateContext().Groups.CountAsync());
+        Assert.Equal(1, _codes.Remaining);   // 코드를 꺼내기 전에 거절했다
     }
 
     // ── 원자성 ────────────────────────────────────────────
@@ -126,10 +144,11 @@ public sealed class CreateGroupTests : IntegrationTestBase, IDisposable
         return user;
     }
 
-    private async Task SeedGroupAsync(string code)
+    // owner를 주지 않으면 100번 회원을 새로 만들어 주인으로 쓴다.
+    private async Task SeedGroupAsync(string code, UserId? owner = null)
     {
-        var owner = await SeedUserAsync(100);
-        var group = Group.Create(GroupName.From("기존모임"), owner.Id, InviteCode.From(code),
+        owner ??= (await SeedUserAsync(100)).Id;
+        var group = Group.Create(GroupName.From("기존모임"), owner, InviteCode.From(code),
             new DateTimeOffset(2026, 10, 18, 9, 0, 0, TimeSpan.Zero));
         await using var db = Db.CreateContext();
         db.Groups.Add(group);

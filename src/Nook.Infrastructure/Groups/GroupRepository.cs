@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nook.Application.Groups;
 using Nook.Domain.Groups;
+using Nook.Domain.Users;
 using Nook.Infrastructure.Persistence;
 using Npgsql;
 
@@ -52,6 +53,12 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
             return false;
         }
     }
+
+    public Task<int> CountMembershipsAsync(UserId userId, CancellationToken ct) =>
+        // erd.md group_members Q2. 받는 인덱스: ix_group_members_user_id. 멤버는 Group의 owned 타입이라 DbSet이 없다 → SQL.
+        db.Database.SqlQuery<int>($"""
+            SELECT COUNT(*)::int AS "Value" FROM group_members WHERE user_id = {userId.Value}
+            """).SingleAsync(ct);
 
     public Task SaveAsync(Group group, CancellationToken ct) =>
         db.SaveChangesAsync(ct);

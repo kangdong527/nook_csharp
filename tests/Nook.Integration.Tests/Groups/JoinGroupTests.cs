@@ -19,6 +19,7 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
     // - Join_WithValidCode_AddsMember
     // - Join_WithUnknownCode_ReturnsNotFound
     // - Join_WhenFull_ReturnsGroupFull
+    // - Join_WhenUserInMaxGroups_ReturnsTooManyGroups              (3b, R-GR-02)
     //
     // 동시 합류(5b)
     // - Join_ConcurrentIntoGroupWithThreeSeats_KeepsFourMembers   (빈자리 3, 5명 동시)
@@ -79,6 +80,20 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
         Assert.Equal(Group.MaxGroupMembers, (await MemberIdsAsync(group.Id)).Count);
     }
 
+    [Fact]
+    public async Task Join_WhenUserInMaxGroups_ReturnsTooManyGroups()
+    {
+        var group = await SeedGroupAsync(extraMembers: 0);
+        var joiner = await SeedUserAsync(1);
+        foreach (var code in new[] { "BBBBBB", "CCCCCC", "DDDDDD" }.Take(Group.MaxGroupsPerUser))
+            await SeedGroupCreatedByAsync(joiner.Id, code);
+
+        var result = await JoinAsync(joiner.Id);
+
+        AssertFailure(result, GroupErrors.TooManyGroups);
+        Assert.DoesNotContain(joiner.Id, await MemberIdsAsync(group.Id));
+    }
+
     // ── 동시 합류 ─────────────────────────────────────────
 
     // 만든 회원 1명 + 빈자리 3. 5명이 동시에 합류하면 3명 성공, 2명 GroupFull, 최종 4명이어야 한다(R-GR-01·03).
@@ -136,6 +151,13 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         return group;
+    }
+
+    private async Task SeedGroupCreatedByAsync(UserId creator, string code)
+    {
+        await using var db = Db.CreateContext();
+        db.Groups.Add(Group.Create(GroupName.From("다른모임"), creator, InviteCode.From(code), CreatedAt));
+        await db.SaveChangesAsync();
     }
 
     private async Task<List<UserId>> MemberIdsAsync(GroupId groupId)

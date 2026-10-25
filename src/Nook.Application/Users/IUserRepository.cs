@@ -12,4 +12,10 @@ public interface IUserRepository
     // INSERT 후 저장까지 한다. 닉네임 UNIQUE 위반은 실패(UserErrors.NicknameTaken)로 돌려준다 — 예상 가능한 실패.
     // 위반이 나면 PostgreSQL 트랜잭션은 중단 상태가 된다. 호출한 쪽은 더 쓰지 말고 돌아가야 한다(Dispose = 롤백).
     Task<Result> AddAsync(User user, CancellationToken ct);
+
+    // erd.md users Q2. 회원별 직렬화 지점(R-GR-04) — 그룹 합류·생성이 참여 수를 세기 전에 부른다. 트랜잭션 안에서만 의미가 있다.
+    // 잠금 순서는 항상 users → groups(D6 사용자 결정). 행을 고치지 않는 자리 잡기 잠금이라 FOR NO KEY UPDATE(D6 사용자 결정):
+    // 같은 회원의 리뷰·북마크 INSERT(FK 검사 = FOR KEY SHARE)는 막지 않고, 같은 잠금끼리는 줄 세운다.
+    // 없는 회원이면 잠글 행이 없을 뿐 오류가 아니다 — UserId는 토큰에서 오고, 이후 FK가 최종 보장한다.
+    Task LockAsync(UserId userId, CancellationToken ct);
 }
