@@ -338,7 +338,7 @@ erDiagram
 | # | 쿼리 | 쓰는 곳 |
 |---|---|---|
 | Q1 | `WHERE invite_code = ?` | 초대 코드로 그룹 식별(GR-01 4) |
-| Q2 | `WHERE id = ? FOR UPDATE` (잠금 강도·순서는 D6) | 인원을 세기 전 그룹 행 잠금: 합류(R-GR-03), 탈퇴(R-GR-09 Write Skew) |
+| Q2 | `SELECT id … WHERE invite_code = ? FOR UPDATE` (합류) / `WHERE id = ? FOR UPDATE` (탈퇴, 예정) — 멤버는 **다음 문장**에서 읽는다(ADR-010, incident 003). users와의 잠금 순서는 D6 | 인원을 세기 전 그룹 행 잠금: 합류(R-GR-03), 탈퇴(R-GR-09 Write Skew) |
 | Q3 | `WHERE id = ?` | 그룹맵·이름 변경(GR-05·GR-03), group_members FK 검사 |
 | Q4 | `INSERT` → `invite_code` UNIQUE 위반이면 새 코드로 재시도 | 그룹 생성(GR-02, R-GR-06) |
 | Q5 | `DELETE WHERE id = ?` | 마지막 멤버 탈퇴 시 같은 트랜잭션에서 삭제(R-GR-09) |
@@ -363,7 +363,7 @@ erDiagram
 | FK (들어오는 것) | group_members `.group_id → groups` — `ON DELETE CASCADE` (group_members FK 행·메모 참고) | 정상 경로(R-GR-09)는 멤버 0명일 때만 삭제하므로 따라 지워지는 행이 없다. 버그로 멤버가 남은 그룹을 지우면 멤버십이 조용히 지워진다 — 애그리거트 경계 표현을 우선하고 앱 테스트(D4)로 막는다 | ADR-004, R-GR-09 |
 
 메모
-- 정원 4명(R-GR-01)은 여러 행에 걸친 규칙이라 CHECK로 막을 수 없다. 동시 합류는 Q2(그룹 행 잠금) 뒤 인원을 세는 것으로 막는다(D6)
+- 정원 4명(R-GR-01)은 여러 행에 걸친 규칙이라 CHECK로 막을 수 없다. 동시 합류는 Q2(그룹 행 잠금) 뒤 인원을 세는 것으로 막는다(ADR-010). 잠금과 멤버 로딩(group_members Q1)을 한 문장(JOIN)으로 합치면 대기 뒤에도 멤버가 대기 전 스냅샷이라 막지 못한다(incident 003)
 - 합류는 users 행(R-GR-04)과 groups 행(R-GR-03)을 둘 다 잠근다. 데드락을 피할 잠금 순서(예: 항상 users → groups)는 D6
 
 
@@ -397,7 +397,7 @@ erDiagram
 메모
 - users 쪽 FK 중 group_members만 RESTRICT다. bookmarks·reviews·likes는 지워도 깨지는 불변식이 없지만, 멤버십 삭제는 R-GR-09 판정을 거쳐야 하기 때문이다
 - groups 쪽 FK 중 group_members는 CASCADE다. 버그로 멤버가 남은 그룹을 지우면 멤버십이 조용히 지워진다. 애그리거트 경계 표현을 우선하고, 이 경로는 앱 테스트로 막는다
-- 인덱스는 동시 합류로 정원을 넘는 것(메모리 COUNT의 스냅샷 경합)을 막지 못한다. 막는 것은 groups Q2의 행 잠금이다(D6)
+- 인덱스는 동시 합류로 정원을 넘는 것(메모리 COUNT의 스냅샷 경합)을 막지 못한다. 막는 것은 groups Q2의 행 잠금이다(ADR-010)
 
 
 ### magic_link_tokens
