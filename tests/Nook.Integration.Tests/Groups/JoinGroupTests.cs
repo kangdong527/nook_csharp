@@ -20,6 +20,7 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
     // - Join_WithUnknownCode_ReturnsNotFound
     // - Join_WhenFull_ReturnsGroupFull
     // - Join_WhenUserInMaxGroups_ReturnsTooManyGroups              (3b, R-GR-02)
+    // - Join_WhenUserInMaxGroupsIncludingThisOne_ReturnsAlreadyMember (중복이 3개 제한보다 먼저)
     //
     // 동시 합류(5b)
     // - Join_ConcurrentIntoGroupWithThreeSeats_KeepsFourMembers   (빈자리 3, 5명 동시)
@@ -92,6 +93,19 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
 
         AssertFailure(result, GroupErrors.TooManyGroups);
         Assert.DoesNotContain(joiner.Id, await MemberIdsAsync(group.Id));
+    }
+
+    // 3개 중 하나에 다시 합류 — TooManyGroups가 아니라 AlreadyMember(D6 사용자 결정).
+    [Fact]
+    public async Task Join_WhenUserInMaxGroupsIncludingThisOne_ReturnsAlreadyMember()
+    {
+        var joiner = await SeedUserAsync(1);
+        foreach (var code in new[] { Code, "CCCCCC", "DDDDDD" }.Take(Group.MaxGroupsPerUser))
+            await SeedGroupCreatedByAsync(joiner.Id, code);
+
+        var result = await JoinAsync(joiner.Id);
+
+        AssertFailure(result, GroupErrors.AlreadyMember);
     }
 
     // ── 동시 합류 ─────────────────────────────────────────

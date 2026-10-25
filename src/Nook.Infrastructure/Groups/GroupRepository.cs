@@ -27,10 +27,30 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
             throw new InvalidOperationException(
                 $"초대 코드 {inviteCode.Value}에 해당하는 그룹이 {locked.Count}개입니다(ux_groups_invite_code 위반).");
 
-        // 문장 2 — 새 문장 = 새 스냅샷(READ COMMITTED). 잠금을 얻기 전에 커밋된 멤버가 모두 보인다.
-        // erd.md groups Q3 + group_members Q1. 받는 인덱스: pk_groups, pk_group_members. 추적한다 — SaveAsync가 새 멤버를 INSERT한다.
-        var groupId = GroupId.From(id);
-        return await db.Groups.SingleAsync(g => g.Id == groupId, ct);
+        return await LoadLockedAsync(GroupId.From(id), ct);
+    }
+
+    public async Task<Group?> LockByIdAsync(GroupId groupId, CancellationToken ct)
+    {
+        // 문장 1 — 잠금만. erd.md groups Q2(탈퇴). 받는 인덱스: pk_groups. 나누는 이유는 LockByInviteCodeAsync와 같다.
+        // 다른 트랜잭션이 이 그룹을 지우고 커밋하면, 기다리던 이 문장은 지워진 행을 건너뛰어 빈 결과가 된다.
+        var locked = await db.Database.SqlQuery<Guid>($"""
+            SELECT id AS "Value" FROM groups WHERE id = {groupId.Value} FOR UPDATE
+            """).ToListAsync(ct);
+
+        return locked is [] ? null : await LoadLockedAsync(groupId, ct);
+    }
+
+    // 문장 2 — 새 문장 = 새 스냅샷(READ COMMITTED). 잠금을 얻기 전에 커밋된 멤버가 모두 보인다.
+    // erd.md groups Q3 + group_members Q1. 받는 인덱스: pk_groups, pk_group_members. 추적한다 — SaveAsync가 멤버 변경을 저장한다.
+    private Task<Group> LoadLockedAsync(GroupId groupId, CancellationToken ct) =>
+        db.Groups.SingleAsync(g => g.Id == groupId, ct);
+
+    public Task DeleteAsync(Group group, CancellationToken ct)
+    {
+        // erd.md groups Q5. R-GR-09로 멤버 0명일 때만 불린다 — 마지막 멤버 DELETE와 그룹 DELETE가 SaveChanges 한 번에 나간다.
+        db.Groups.Remove(group);
+        return db.SaveChangesAsync(ct);
     }
 
     public async Task<bool> TryAddAsync(Group group, CancellationToken ct)

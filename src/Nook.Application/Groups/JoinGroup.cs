@@ -25,8 +25,6 @@ public sealed class JoinGroupHandler(IUserRepository users, IGroupRepository gro
         await using var tx = await uow.BeginAsync(ct);
 
         await users.LockAsync(userId, ct);
-        if (await groups.CountMembershipsAsync(userId, ct) >= Group.MaxGroupsPerUser)
-            return GroupErrors.TooManyGroups;
 
         var group = await groups.LockByInviteCodeAsync(inviteCode, ct);
 
@@ -35,6 +33,12 @@ public sealed class JoinGroupHandler(IUserRepository users, IGroupRepository gro
 
         if (group.AddMember(userId, time.GetUtcNow()).IsFailure(out var error))
             return error;
+
+        // 3b. 참여 수는 AddMember 뒤에 센다 — 이미 멤버인 그룹에 다시 들어오면 TooManyGroups보다 AlreadyMember가 정확하다(D6 사용자 결정).
+        // 그래서 GroupFull도 TooManyGroups보다 먼저다. users 잠금은 위에서 이미 쥐었으므로 센 값은 커밋까지 유지된다.
+        // 여기서 돌아가면 메모리의 AddMember 변경은 저장되지 않고 버려진다(SaveAsync 전, Dispose = 롤백).
+        if (await groups.CountMembershipsAsync(userId, ct) >= Group.MaxGroupsPerUser)
+            return GroupErrors.TooManyGroups;
 
         await groups.SaveAsync(group, ct);
         await tx.CommitAsync(ct);
