@@ -57,7 +57,7 @@ public sealed class ReviewsController : ControllerBase
         var images = OpenImages(request.Images);
         try
         {
-            var command = new EditReviewCommand(User.GetUserId(), id, request.Content, request.KeepImageIds ?? [], images);
+            var command = new EditReviewCommand(User.GetUserId(), id, request.Version!.Value, request.Content, request.KeepImageIds ?? [], images);
             var result = await handler.HandleAsync(command, ct);
 
             if (!result.TryGetValue(out var review, out var error))
@@ -120,8 +120,12 @@ public sealed class CreateReviewRequest
 }
 
 // RV-02 multipart 폼. KeepImageIds의 순서가 남길 이미지의 순서, Images는 그 뒤에 붙는다. 둘 다 비면 이미지 0장.
+// Version은 필수 — 빠지면 0으로 바인딩되어 "버전 0을 본 화면"으로 통과하는 것을 400으로 막는다(PlaceId와 같은 이유).
 public sealed class EditReviewRequest
 {
+    [Required]
+    public int? Version { get; init; }
+
     public string? Content { get; init; }
 
     public List<Guid>? KeepImageIds { get; init; }
