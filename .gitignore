@@ -9,6 +9,7 @@ CLAUDE.local.md
 
 # dotenv files
 .env
+.env*.local
 
 # User-specific files
 *.rsuser
