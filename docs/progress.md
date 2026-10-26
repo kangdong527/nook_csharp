@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D6 진행 중** (2026-10-26, D6-2). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 그룹 API 3개, 테스트 252개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
+- 현재: **D6 마무리** (2026-10-26, D6-3 — 남은 것: 푸시·PR·병합, PM 확인 항목). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 그룹 API 3개, 테스트 252개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
@@ -10,9 +10,9 @@
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - ~~GR-01·02·04 API 엔드포인트~~ ✅ D6-2 — `POST /groups`(201 + Location + `GroupView`), `POST /groups/join` 본문 `{ inviteCode }`(200 + `GroupView`), `DELETE /groups/{id}/membership`(204, 멱등). 이월: 그룹 조회 API(내 그룹 목록·상세)는 유스케이스에 없음 — FE 연결 때 필요하면 사용자가 유스케이스부터
      - ~~ADR-010 "후속" 반영~~ ✅ D6-2 — "후속 결정" 절(잠금 순서·강도·탈퇴·생성)
-     - **▶ 다음 재개: 이월 메모** — 그룹 조회 API(내 그룹 목록·상세)가 유스케이스에 없음. FE 연결에 필요한지 판단 → 필요하면 사용자가 유스케이스부터
+     - ~~이월 메모: 그룹 조회 API~~ → D6-3에서 원본 조사, 판단은 PM 확인 후("PM 확인 항목" 2)
   2. ~~learning-log D6-1·D6-2~~ ✅ Claude 작성(사용자 요청). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
-  3. 사용자: `feat/d6-concurrency` 푸시 → PR → `main` 병합(D6 끝나면)
+  3. **▶ 다음 재개**: 사용자가 `feat/d6-concurrency` 푸시 → PR → `main` 병합하면 D6 종료. PM과 "PM 확인 항목" 1~4 의논 → 결과에 따라 FE 시작(그룹 조회 유스케이스가 먼저일 수 있음)
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -336,6 +336,14 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 7. **그룹 API**(사용자 결정, Claude 추천 채택): 합류는 코드만 아는 상태라 `/groups/{id}/membership`에 PUT할 수 없음 → `POST /groups/join`, 코드는 본문(경로는 로그에 남음). 합류 응답 `200 + GroupView`(핸들러 `Result<GroupView>`로 변경), 탈퇴 `DELETE …/membership` 204. 그룹 핸들러가 API DI에 빠져 있던 것도 등록. 첫 실행 4건 실패 = 시드 시각이 실제 시계보다 미래(`AddMember`의 joinedAt ≥ CreatedAt 가드)
 8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 252개 통과(Domain 95·Algorithms 1·Application 7·Integration 149)
 
+### 2026-10-26 (D6-3)
+1. 이월 메모(그룹 조회 API) 원본 조사: 그룹 함수 6개 중 `getMyGroups`만 유스케이스 목록에 없음(MapScreen 첫 로드가 호출). D1 목록이 쓰기 위주로 뽑혀 "화면 진입용 읽기"가 빠짐. 판단은 PM 확인 후
+2. 회원 탈퇴 users 잠금(D6 미결): PF-02가 일정에 없음 → PF-02 구현 때로 미룸(사용자 결정). 흩어진 PF-02 미결 3건을 "PF-02 착수 전 결정 묶음"으로 합침
+3. `progress.md`에 "PM 확인 항목" 절 신설(프론트 범위·그룹 조회·PF-02 범위·R-RV-03 재작성)
+4. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 252개 통과(Domain 95·Algorithms 1·Application 7·Integration 149)
+
+Claude가 작성(D6-3): 원본 조사 표, `progress.md` 정리(PM 확인 항목·PF-02 묶음·낡은 줄) — 사용자 요청. 결정은 사용자: PF-02 미룸, PM 확인 대상
+
 Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청), `GroupsController`·DI 등록·합류 핸들러 반환 타입·`GroupsApiTests` 10개·기존 그룹 테스트 헬퍼 수정. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
 
 ## 체크리스트
@@ -348,7 +356,7 @@ Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6
 - [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
-- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족). 남음: incident 002 미결 2건, 그룹 API 엔드포인트
+- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
 - [ ] FE 프론트 연결(원본 Next.js 재사용, 로컬 3흐름 동작)
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
@@ -363,13 +371,23 @@ Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6
 - [ ] D13 운영 검증·장애 시나리오
 - [ ] D14 README·회고
 
+## PM 확인 항목
+> 사용자 혼자 정할 수 없는 범위·정책 질문. PM과 의논한 뒤 결과를 "확정된 결정"으로 옮기고 여기서 지운다.
+
+1. **프론트 연결 범위**: 데모 3흐름 + 로그인만 vs 원본 화면 전체 — FE 시작 전. 아래 2·3이 이 답에 달려 있다
+2. **그룹 조회(내 그룹 목록, 원본 `getMyGroups`)** — 원본 MapScreen 첫 로드(`src/app/map/MapScreen.tsx:182`)가 부르지만 유스케이스 목록에 없음(D1 목록이 쓰기 위주). 물을 것: ① 데모 "그룹 합류" 흐름의 끝(합류 응답까지 vs 새로고침 후에도 그룹 표시) ② 데모에 GR-05 그룹맵 포함 여부. 필요하면 사용자가 유스케이스부터, 원본의 그룹별 `memberCount` N+1을 그대로 둘지도 결정 — FE 시작 전 (D6-3 원본 조사)
+3. **PF-02 회원 탈퇴를 이번 범위에 넣는가** — 현재 D1~D14·FE·DEP 어디에도 없음. 넣으면 "미결 결정"의 PF-02 착수 전 결정 묶음부터 (D6-3)
+4. **R-RV-03과 삭제 후 재작성**: 오늘 쓴 리뷰를 지우면 오늘 다시 쓸 수 있다(현재 동작, `Delete_ThenCreateSameDay_Returns201`이 기록). ADR-009 · usecases.md RV-03에 미결로 표시
+
 ## 미결 결정
-- 응답 `version` + `If-Match`(화면을 열어 둔 사이의 수정 감지) — D6에서 `xmin` 비교와 함께 결정, FE 전까지 구현(incident 002 §7)
-- R-RV-03과 삭제 후 재작성: 오늘 쓴 리뷰를 지우면 오늘 다시 쓸 수 있다(현재 동작, `Delete_ThenCreateSameDay_Returns201`이 기록) — 원본 PM 확인 필요
+- ~~응답 `version` + `If-Match`~~ → 바디 필드 `Version`, ADR-011(D6-2)
+- **PF-02 착수 전 결정 묶음** (D6-3 사용자 결정: PF-02 구현 때로 미룸. 일정 여부는 "PM 확인 항목" 3)
+  - ① 탈퇴 트랜잭션도 처음에 users 행을 잠그는가 — 안 잠그면 탈퇴 중 같은 회원의 합류가 끼어들어 users DELETE가 RESTRICT 오류(500). 정합성은 RESTRICT가 지키므로 실패 표시 문제. 잠근다면 잠금 순서 users → groups(ADR-010 후속)와 같게. 근거: R-GR-02에 닿는 경로는 같은 users 잠금을 거쳐야 줄이 선다(D6-1 변이: 합류만 빼도 5개)
+  - ② 탈퇴 후 남은 60분 액세스 토큰의 좋아요·북마크 요청 → `fk_likes_users` 등 FK 위반 500 (원래 "확정된 결정 (D5)" 하위 미결)
+  - ③ 오래된 prefix의 탈퇴 회원 스토리지 이미지 정리 — "모든 데이터 삭제" 충족 여부(erd.md 스토리지 키 "회원 ID" 행)
 - ~~일정 변경안 보류~~ → 채택(2026-10-20, "확정된 결정 (D5)")
 - ~~매직 링크 TOCTOU 보완 조합~~ → "확정된 결정 (D5)" ② A3 + Q2 + A1
 - 프론트 호스팅 위치: 같은 EC2(Caddy가 Next.js도 프록시) vs Vercel 등 별도 — FE 끝날 때. 별도면 CORS·쿠키 도메인 영향
-- 프론트 연결 범위: 데모 3흐름 + 로그인만 vs 원본 화면 전체 — FE 시작 전
 - 운영 메일 발송기 선택(예: AWS SES — 샌드박스는 검증된 수신자만 발송 가능, 데모 계정 운영과 연결) — DEP 5일째
 - 운영 DB: EC2 안 postgres 컨테이너(compose) vs RDS — DEP 2일째. 컨테이너면 백업·디스크 책임이 본인
 - 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")
@@ -380,12 +398,10 @@ Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6
 - 브랜치 접두사 `chore/*` 허용 시 CLAUDE.md 반영
 - PR 머지 방식(merge / squash / rebase)
 - 이메일 소문자 변환 일치: PostgreSQL `lower()`(DB `LC_CTYPE` 따름) vs C# `ToLowerInvariant()` — 비ASCII에서 다를 수 있음. DB를 띄운 뒤 `SELECT lower('ÄÖ')`로 확인
-- 회원 탈퇴 중 같은 회원의 다른 요청이 새 그룹에 합류하면 users DELETE가 RESTRICT 오류 → 탈퇴 트랜잭션도 처음에 users 행을 잠가야 하는가(R-GR-04와 연결) — D6
 - D5 테스트 항목(D4에서 이월, Application 계층 필요): 멤버가 남은 그룹은 Application 경로로 삭제되지 않는다(`group_members.group_id` CASCADE 유지의 대가)
 - `ReviewContent.Create`의 `string.Normalize`는 짝 없는 서로게이트에서 `ArgumentException`(문서상 동작, 미실측) → 회원 입력이 Result가 아니라 예외가 됨. API 역직렬화(System.Text.Json)에서 이미 걸러지는지 확인 후 결정 — D5
 - 정원이 찬 그룹에서 멤버가 나가면 노출된 초대 코드가 다시 유효해짐 — 코드 재발급·만료 필요 여부, GR 유스케이스 상세화 때
 - ~~합류의 잠금 순서~~ → users → groups, "확정된 결정 (D6)"
-- R-GR-02에 닿는 새 경로(회원 탈퇴 PF-02 등)는 같은 users 잠금을 거쳐야 한다 — 잠금은 같은 잠금을 쓰는 쪽끼리만 줄 세운다(D6-1 변이: 합류만 빼도 5개)
 - 고아 이미지 정리 배치 구현 시: 삭제 흐름을 한 곳에 모으기(C안 전환 전제) — D5. 전체 스캔 소요 시간 측정(C안 도입 기준선) — D8
 - 강타입 ID `From(Guid.Empty)`는 예외 → 클라이언트가 빈 Guid를 경로로 보내면 500. Api/Application에서 미리 거를지(A) vs `From`이 허용하고 NotFound로 둘지(B) — D5
 - ID Guid v7 vs v4: 삽입 성능·인덱스 크기 측정(주석의 "페이지 분할이 적다"는 미측정) — D8. v7은 생성 시각이 ID에 드러남
