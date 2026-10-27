@@ -13,11 +13,11 @@
 erDiagram
     users ||--o{ bookmarks : "user_id · CASCADE"
     places ||--o{ bookmarks : "place_id · RESTRICT"
-    users ||..o{ reviews : "user_id · CASCADE"
+    users |o..o{ reviews : "user_id · SET NULL"
     places ||..o{ reviews : "place_id · RESTRICT"
     reviews ||..o{ review_images : "review_id · CASCADE (0~3장)"
     reviews ||--o{ likes : "review_id · CASCADE"
-    users ||--o{ likes : "user_id · CASCADE"
+    users |o..o{ likes : "user_id · SET NULL"
     groups ||--o{ group_members : "group_id · CASCADE"
     users ||--o{ group_members : "user_id · RESTRICT"
 
@@ -238,7 +238,7 @@ erDiagram
 | 컬럼 | 타입 | NULL | 기본값 | 비고 |
 |---|---|---|---|---|
 | id | `uuid` | NOT NULL | 없음 | 앱이 `ReviewId.New()`(UUID v7)로 발급(ADR-006) |
-| user_id | `uuid` | NOT NULL | 없음 | 작성자. `Review.UserId` |
+| user_id | `uuid` | NULL | 없음 | 작성자. `Review.UserId`. **NULL = 탈퇴한 작성자**(PF-02, PM: 리뷰는 남긴다) *(FE-2)* |
 | place_id | `uuid` | NOT NULL | 없음 | 리뷰 대상 장소. `Review.PlaceId`. 수정으로 바뀌지 않는다(RV-02) |
 | content | `varchar(50)` | NOT NULL | 없음 | trim된 본문(`ReviewContent.Value`). 상한은 `ReviewContent.MaxLength`와 같다 |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
@@ -254,7 +254,7 @@ erDiagram
 | PK | `pk_reviews (id)` | Q1. review_images·likes FK가 가리키는 대상 | ADR-006 |
 | UNIQUE | `ux_reviews_user_place_date (user_id, place_id, review_date)` | Q5. 같은 회원·장소·날짜의 두 번째 리뷰를 막는다(동시 작성도 이 인덱스가 직렬화). 앞 컬럼이 `user_id`, `(user_id, place_id)`라서 Q4·Q6과 Q3의 필터도 받는다 | R-RV-03 |
 | 보조 인덱스 | `ix_reviews_place_created (place_id, created_at DESC)` | Q2. 장소 상세마다 실행되는 조회라 정렬까지 인덱스로 받는다. places 삭제 시 RESTRICT 검사(`WHERE place_id = ?`)도 받는다 | PL-02 |
-| FK | `fk_reviews_users`: `user_id → users(id) ON DELETE CASCADE` | 탈퇴 시 users 행 DELETE 한 문장으로 리뷰까지 지워진다(bookmarks와 같은 근거). 리뷰가 지워지면 review_images·likes도 아래 CASCADE로 따라 지워진다. 스토리지 이미지는 트랜잭션 밖 정리 배치가 맡는다 | PF-02, ADR-005 |
+| FK | `fk_reviews_users`: `user_id → users(id) ON DELETE SET NULL` | 탈퇴해도 리뷰·이미지는 남고 작성자만 끊긴다(PF-02 ⓪ (가), PM). UNIQUE `(user_id, place_id, review_date)`는 NULL끼리 다르다고 보므로 탈퇴 회원들의 리뷰가 공존한다 — `NULLS NOT DISTINCT`로 바꾸지 말 것. 이전: CASCADE("모든 데이터 삭제" 전제, D6-3) *(FE-2)* | PF-02, ADR-005 |
 | FK | `fk_reviews_places`: `place_id → places(id) ON DELETE RESTRICT` | 리뷰가 남은 장소의 삭제를 거부한다(bookmarks와 같은 근거) | ADR-005 |
 | CHECK | `ck_reviews_version`: `version >= 0` | 앱을 거치지 않은 쓰기로 음수 버전이 들어오는 것 | RV-02 6c |
 | CHECK | `ck_reviews_content`: `char_length(btrim(content)) >= 10` | 앱을 거치지 않은 쓰기로 10자 미만 본문이 들어오는 것. 상한 50은 `varchar(50)`이 맡는다. `btrim`은 ASCII 공백만 지우는 최소 이중화(users 메모와 같음) | R-RV-01 |
@@ -324,16 +324,18 @@ erDiagram
 | 컬럼 | 타입 | NULL | 기본값 | 비고 |
 |---|---|---|---|---|
 | review_id | `uuid` | NOT NULL | 없음 | 좋아요 대상 리뷰. `Like.ReviewId` |
-| user_id | `uuid` | NOT NULL | 없음 | 좋아요한 회원. `Like.UserId` |
+| id | `uuid` | NOT NULL | 없음 | 대리 키(PF-02). 앱이 UUIDv7로(`GuidV7Generator`, ADR-006). 도메인 `Like`는 모른다(EF 섀도 속성) *(FE-2)* |
+| user_id | `uuid` | NULL | 없음 | 좋아요한 회원. `Like.UserId`. **NULL = 탈퇴한 회원**(PM: 좋아요는 지우지 않는다) *(FE-2)* |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
 
 - "좋아요 여부" 컬럼은 두지 않는다. 행이 있으면 좋아요한 것이다(bookmarks와 같은 근거)
 
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
 |---|---|---|---|
-| PK | `pk_likes (review_id, user_id)` | Q1·Q2·Q3·Q4. 같은 (회원, 리뷰) 두 번째 행을 막는다. `review_id`를 앞에 둔 이유: 리뷰 단독 조회(Q3 좋아요 수)는 장소 상세마다 실행되고, 회원 단독 조회(Q5)는 탈퇴 때만 실행된다 | R-LK-01, ADR-005(복합 PK) |
+| PK | `pk_likes (id)` | 대리 키. 이전 PK `(review_id, user_id)`는 user_id가 NULL이 될 수 있게 되어(PF-02) UNIQUE로 옮겼다 *(FE-2)* | PF-02 |
+| UNIQUE | `ux_likes_review_user (review_id, user_id)` | Q1·Q2·Q3·Q4. 같은 (회원, 리뷰) 두 번째 행을 막는다(이전 PK와 같은 컬럼 순서 — 리뷰 단위 좋아요 수가 앞 컬럼을 탄다). NULL끼리는 다르다 → 탈퇴 회원 여러 명의 좋아요가 한 리뷰에 남는다. LK-01의 `ON CONFLICT (review_id, user_id)`가 이 인덱스로 판정 | R-LK-01 |
 | 보조 인덱스 | `ix_likes_user_id (user_id)` | Q5. 탈퇴 시 users DELETE의 CASCADE·FK 검사가 likes 전체를 읽지 않게 한다(users 표 "자식 테이블마다 `user_id`로 시작하는 인덱스" 확인 항목) | PF-02 |
-| FK | `fk_likes_users`: `user_id → users(id) ON DELETE CASCADE` | 탈퇴 시 그 회원의 좋아요도 함께 지워진다 | PF-02, ADR-005 |
+| FK | `fk_likes_users`: `user_id → users(id) ON DELETE SET NULL` | 탈퇴해도 좋아요는 남는다 — 리뷰의 좋아요 수가 줄지 않는다(PM). 이전: CASCADE *(FE-2)* | PF-02, ADR-005 |
 | FK | `fk_likes_reviews`: `review_id → reviews(id) ON DELETE CASCADE` | 리뷰가 지워지면 그 리뷰의 좋아요는 의미가 없다. places와 달리 리뷰 삭제는 정상 유스케이스(RV-03)라 RESTRICT를 걸면 삭제 자체가 막힌다 | RV-03 "좋아요는?", ADR-005 |
 | CHECK | 없음 | 두 ID는 FK가, 중복은 PK가 막는다. `created_at`의 UTC는 Domain `TimeGuard`와 Npgsql이 보장한다 | ADR-007 |
 

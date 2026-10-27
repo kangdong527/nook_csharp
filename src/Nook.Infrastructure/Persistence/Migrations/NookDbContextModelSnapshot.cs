@@ -89,23 +89,32 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nook.Domain.Likes.Like", b =>
                 {
-                    b.Property<Guid>("ReviewId")
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("review_id");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                        .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.HasKey("ReviewId", "UserId")
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_id");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
                         .HasName("pk_likes");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_likes_user_id");
+
+                    b.HasIndex("ReviewId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_likes_review_user");
 
                     b.ToTable("likes", (string)null);
                 });
@@ -190,7 +199,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("review_date");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -391,8 +400,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                     b.HasOne("Nook.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_likes_users");
                 });
 
@@ -408,8 +416,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                     b.HasOne("Nook.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_reviews_users");
 
                     b.OwnsMany("Nook.Domain.Reviews.ReviewImage", "Images", b1 =>

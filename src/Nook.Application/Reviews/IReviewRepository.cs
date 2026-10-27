@@ -39,7 +39,8 @@ public interface IReviewRepository
     Task<IReadOnlyList<MyReview>> ListByUserAsync(UserId userId, ReviewCursor? after, int take, CancellationToken ct);
 }
 
-public sealed record PlaceReview(Review Review, string AuthorNickname, string? AuthorAvatarKey, int LikeCount, bool LikedByMe);
+// AuthorNickname·AuthorAvatarKey: 작성자가 탈퇴했으면(Review.UserId null) null.
+public sealed record PlaceReview(Review Review, string? AuthorNickname, string? AuthorAvatarKey, int LikeCount, bool LikedByMe);
 
 public sealed record MyReview(Review Review, string PlaceName, int LikeCount, bool LikedByMe);
 

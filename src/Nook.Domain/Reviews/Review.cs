@@ -15,7 +15,8 @@ public sealed class Review
     private readonly List<ReviewImage> _images = [];
 
     public ReviewId Id { get; }
-    public UserId UserId { get; }
+    // null = 탈퇴한 작성자(PF-02, PM: 리뷰는 자산이라 남긴다 — fk_reviews_users SET NULL). 아무도 수정·삭제할 수 없다(작성자 비교가 항상 다르다).
+    public UserId? UserId { get; }
     public PlaceId PlaceId { get; }
     public ReviewContent Content { get; private set; }
 

@@ -134,14 +134,15 @@ internal sealed class ReviewRepository(NookDbContext db) : IReviewRepository
             .Select(r => new
             {
                 Review = r,
-                Nickname = db.Users.Where(u => u.Id == r.UserId).Select(u => u.Nickname).Single(),
-                AvatarKey = db.Users.Where(u => u.Id == r.UserId).Select(u => u.AvatarKey).Single(),
+                // 탈퇴한 작성자(user_id NULL)면 회원 행이 없다 — FirstOrDefault로 NULL을 받는다(PF-02).
+                Nickname = db.Users.Where(u => u.Id == r.UserId).Select(u => u.Nickname).FirstOrDefault(),
+                AvatarKey = db.Users.Where(u => u.Id == r.UserId).Select(u => u.AvatarKey).FirstOrDefault(),
                 LikeCount = db.Likes.Count(l => l.ReviewId == r.Id),
                 LikedByMe = db.Likes.Any(l => l.ReviewId == r.Id && l.UserId == me),
             })
             .ToListAsync(ct);
 
-        return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname.Value, row.AvatarKey, row.LikeCount, row.LikedByMe))];
+        return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname?.Value, row.AvatarKey, row.LikeCount, row.LikedByMe))];
     }
 
     public async Task<IReadOnlyList<MyReview>> ListByUserAsync(

@@ -18,7 +18,7 @@ public sealed record ReviewPageView(IReadOnlyList<PlaceReviewView> Items, string
 // Version: 수정 화면이 RV-02에 그대로 돌려보낼 불투명 값(ReviewView.Version과 같다).
 public sealed record PlaceReviewView(
     Guid Id,
-    ReviewAuthorView Author,
+    ReviewAuthorView? Author,
     string Content,
     IReadOnlyList<ReviewImageView> Images,
     DateTimeOffset CreatedAt,
@@ -107,7 +107,10 @@ public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepos
 
     private static PlaceReviewView ToView(PlaceReview row, UserId me, IReviewImageUrls urls) => new(
         row.Review.Id.Value,
-        new ReviewAuthorView(row.Review.UserId.Value, row.AuthorNickname, row.AuthorAvatarKey is { } key ? urls.For(key) : null),
+        // 탈퇴한 작성자 = null(FE가 "탈퇴한 사용자"로 표시). ID·닉네임·사진을 하나도 주지 않는다 — 한 탈퇴 회원의 리뷰끼리 이어지면 안 된다(PM).
+        row.Review.UserId is { } authorId
+            ? new ReviewAuthorView(authorId.Value, row.AuthorNickname!, row.AuthorAvatarKey is { } key ? urls.For(key) : null)
+            : null,
         row.Review.Content.Value,
         [.. row.Review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
         row.Review.CreatedAt,

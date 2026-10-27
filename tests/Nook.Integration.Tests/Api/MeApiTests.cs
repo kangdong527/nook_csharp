@@ -281,7 +281,7 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
         Assert.Equal(me.AvatarUrl, (await _client.GetFromJsonAsync<MeView>("/me"))!.AvatarUrl);
 
         var page = await _client.GetFromJsonAsync<ReviewPageView>($"/places/{_both.Id.Value}/reviews");
-        Assert.Equal(me.AvatarUrl, page!.Items.Single().Author.AvatarUrl);
+        Assert.Equal(me.AvatarUrl, page!.Items.Single().Author!.AvatarUrl);
 
         var key = me.AvatarUrl!["/api/nook/images/".Length..];
         Assert.Equal(Png, (await _client.GetByteArrayAsync($"/images/{key}")));
