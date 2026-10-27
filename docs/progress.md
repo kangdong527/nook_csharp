@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-27, FE-2). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 288개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **FE 진행 중** (2026-10-27, FE-2 — 데모 3흐름 연결 완료, 프로필 묶음부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 305개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
@@ -15,10 +15,12 @@
      - ~~백엔드 선행 과제 1·2·3·4~~ ✅ FE-2 — `GET /me`(AU-04) · `GET /reviews/{id}`(RV-04, 작성자만·403) · 이미지 A안 결정 · 토큰 BFF 결정 · `IsBookmarked`(PL-02) · 가입 성별·생일(R-US-04·05)
      - ~~FE 인증 교체(BFF)~~ ✅ FE-2 `47e8ffd` — route handler `/api/auth/{magic-link,consume,signup,logout}`, 쿠키 `nook_at`(1시간)·`nook_signup`(15분), 링크 도착 `/auth/magic-link`(클라이언트가 `#token` 읽음), `GET /me` 기반 3상태 가드, middleware는 쿠키 유무만. 로컬 API·DB로 가입·로그인·링크 재사용 400·로그아웃·가짜 쿠키 13단계 확인
      - ~~BFF 중계 + 지도·별 상태~~ ✅ FE-2 — `/api/nook/[...path]`(허용 목록·헤더 정리·Origin 검사·경로 조작 거절), `lib/api/client.ts` `nookFetch`(401 → /login). `store.ts` `getMySavedPlaces`·`upsertPlace`·`getPlace`·`isBookmarked` → C# API, `toggleBookmark` → `setBookmarked(placeId, on)`(PUT/DELETE 멱등). 13항목 확인(허용 밖 404, Origin 없음·외부 403, `..%2F` 404, 쿠키 없음 401)
-     - **▶ 다음 (여기서 시작)**: 리뷰 흐름 연결 — 먼저 이미지 표시(백로그 🔧-1 A안: 로컬 디스크 `IReviewImageStorage` + 익명 `GET /images/{key}` + 응답 `Url`), 그다음 `store.ts` `getReviewsByPlace`(PL-02 커서 페이지)·`createReview`·`updateReview`(version)·`deleteReview`·`toggleLike`·`getReview`(RV-04)를 중계 허용 목록에 추가하며 교체
-       - 수동 확인 메모: `curl` 체인에서 `grep -c`가 0이면 종료 코드 1 → `&&` 뒤가 안 돈다(FE-2에서 이걸 메일 제한으로 오진했다가 정정). 같은 이메일 링크는 15분에 3개(`MagicLinkPolicy`)
-       - 알려진 빈 곳: 저장한 장소를 지도에서 다시 열면 카테고리·전화가 비어 보인다 — 우리 `places`에 부가 정보 컬럼이 없음(D3-2). 범위 판단은 화면 확인 후
-     - 그다음: 프로필(PF-04·PF-03·PF-01+아바타) → 그룹 → 탈퇴(백로그 순서 5~7), 끝나면 `@supabase/*` 제거
+     - ~~리뷰 흐름 연결~~ ✅ FE-2 — 이미지 표시 A안 `7f93f8f`(로컬 디스크 `App_Data/images`, 익명 `GET /images/{key}`, 응답 `Url` = `/api/nook/images/…`) · 리뷰 6함수 `863cea1`(목록 커서 무한 스크롤, multipart 작성·수정 + version, 좋아요 목표 상태, RV-04 403) · **R-RV-03 하루 기준 UTC → KST 00시** `e663bfb`(사용자 결정, `ReviewDay`). 로컬 API로 11단계 확인. **데모 3흐름(로그인·지도·리뷰) 연결 완료 — 원본 함수 28개 중 15개**
+       - 수동 확인 메모: `curl` 체인에서 `grep -c`가 0이면 종료 코드 1 → `&&` 뒤가 안 돈다. 같은 이메일 링크는 15분에 3개(`MagicLinkPolicy`). Next는 `npm --prefix web run dev`로(루트에서 `npx next`는 next@16을 받아 실행한다)
+       - 알려진 빈 곳: 저장한 장소를 다시 열면 카테고리·전화가 비어 보임(`places` 부가 정보 없음, D3-2), 리뷰 카드 작성자 사진은 기본 이미지(PF-01 때). 로컬 개발 DB의 기존 `review_date`는 UTC 기준 값(운영 데이터 아님)
+       - 브라우저로 직접 눌러 본 적 없음(원본 Supabase 보호) — 카카오 키·`.env.local` 교체 뒤 화면 확인 필요
+     - **▶ 다음 (여기서 시작)**: 프로필 묶음(백로그 순서 5) — PF-04 내 리뷰 피드(`GET /me/reviews`, 키셋 재사용) · PF-03 별 개수(A안: FE가 `GET /me/places`로 센다) · PF-01 닉네임·프로필 사진 수정(`users.avatar_key`, `avatars/` 키 규칙, 가입 직후에도 여기서) · 닉네임 미리 확인(만들지부터 결정) · `deleteAccount`는 PF-02(순서 7)
+     - 그다음: 그룹(색 슬롯·내 그룹 목록·GR-03·GR-05) → 탈퇴(PF-02) → `@supabase/*` 제거·화면 전체 확인
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
      - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
   - **D6 남은 것** (완료, PR #8)
@@ -386,7 +388,10 @@ Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `p
 9. FE 인증 교체(BFF): 로그인·가입 문구 통일 (a) · 성별·생일 백엔드 먼저 · 토큰 60분 유지(사용자 결정). 링크 토큰이 `#` 프래그먼트라 도착 지점은 route handler가 아니라 클라이언트 페이지. 가입 대기 쿠키가 원본 `no_profile` 자리를 대신해 3상태 가드 재사용. 가입 폼 표시용으로 consume `needsNickname` 응답에 이메일 추가
 10. BFF 중계: 사용자 요청 "안전하고 대중적인 방식" → 범용 중계 route handler + 허용 목록 추천·채택(Server Actions는 본문 1MB 기본 제한·읽기 용도에 안 맞음). open proxy 방지 장치 4개. 토글 → 목표 상태 명시(PUT/DELETE)
 11. 수동 확인 중 오진 1건: 401 원인을 "이메일당 메일 제한"으로 설명 → DB 확인 결과 2건뿐이라 틀림 → 실제는 테스트 스크립트(`grep -c` 0 → 종료 코드 1 → `&&` 중단). 측정 전 추측을 원인으로 말하지 않기
-커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · 이 세션 마무리 커밋(BFF 중계·지도) (`feat/fe-connect`, 미푸시)
+12. 이미지 표시 A안: 키 모양 검사(`ReviewImageKeys.IsValid`) + 디스크 root 밖 거절(2겹). 변이로 모양 검사를 지우면 모양 사례 3개만 빨간불 — `..` 사례는 URL 정규화가 먼저 막아 우리 검사를 지키지 않음을 확인하고 테스트 주석에 남김
+13. 리뷰 흐름: `ReviewEditor`가 사진을 고르는 즉시 올리던 것(원본 고아 이미지 원인) → 파일을 들고 있다 저장 때 한 요청으로. 목록이 페이지가 되면서 "내 리뷰가 있나"를 목록으로 판정할 수 없게 됨 → 별은 서버 판정(PL-02 상세)으로. 무한 스크롤 (b)는 사용자 결정
+14. R-RV-03 하루 기준을 KST 00시로(사용자 결정, D2-2 UTC 번복). 화면 문구 "00시 기준"과 서버 실제 기준(KST 09시)이 달랐던 것을 리뷰 연결 중 발견. 비용이 작았던 이유: `review_date`는 앱 계산 컬럼이고 `created_at`과 묶는 CHECK를 D3에서 일부러 두지 않았다. 운영 데이터 전이라 재계산 충돌(UTC 다른 날 → KST 같은 날 = UNIQUE 위반) 위험도 없었다. 테스트 먼저(빨간불 확인) → `ReviewDay` 한 곳
+커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
 Claude가 작성(FE-2, 사용자 요청): web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
 ## 체크리스트
@@ -400,7 +405,7 @@ Claude가 작성(FE-2, 사용자 요청): web/ BFF 전부(route handler·중계�
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
 - [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
-- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — `web/` 가져오기 ✅, 선행 과제 4건 ✅, 백로그 `docs/design/fe-backend-backlog.md` 순서 3(BFF 인증)부터
+- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 선행 과제 4건 ✅, BFF 인증·중계 ✅, 지도·리뷰 ✅(데모 3흐름, 함수 15/28). 남음: 프로필 → 그룹 → 탈퇴 → Supabase 제거·화면 확인
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
