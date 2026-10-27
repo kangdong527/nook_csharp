@@ -27,6 +27,12 @@ public interface IGroupRepository
     // GR-06 내 그룹 목록. 멤버 수·내 슬롯·방장 여부를 쿼리 한 번에(N+1 없음). 합류 순.
     Task<IReadOnlyList<MyGroupView>> ListMineAsync(UserId userId, CancellationToken ct);
 
+    // GR-05 접근 확인. 그룹이 없으면 null, 있으면 회원이 멤버인지.
+    Task<bool?> IsMemberAsync(GroupId groupId, UserId userId, CancellationToken ct);
+
+    // GR-05 그룹 지도. 현재 멤버의 리뷰·북마크를 장소마다 한 행으로 집계한다(SQL 한 문장).
+    Task<IReadOnlyList<GroupPlaceView>> ListPlacesAsync(GroupId groupId, CancellationToken ct);
+
     // erd.md groups Q5. 추적 중인 그룹을 지운다 — RemoveMember가 GroupEmptied를 돌려준 그룹에만(R-GR-09).
     Task DeleteAsync(Group group, CancellationToken ct);
 }

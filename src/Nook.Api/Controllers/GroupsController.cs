@@ -57,6 +57,18 @@ public sealed class GroupsController : ControllerBase
         return result.TryGetValue(out var view, out var error) ? Ok(view) : this.Problem(error);
     }
 
+    // GR-05 그룹 지도. 장소마다 한 행(사실만 — 그리는 규칙은 FE). 멤버 아님 403, 없는 그룹 404.
+    [HttpGet("{groupId:guid}/places")]
+    [ProducesResponseType<IReadOnlyList<GroupPlaceView>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Places(Guid groupId, [FromServices] GetGroupPlacesHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetGroupPlacesQuery(User.GetUserId(), groupId), ct);
+
+        return result.TryGetValue(out var places, out var error) ? Ok(places) : this.Problem(error);
+    }
+
     // GR-04. 멱등 — 멤버가 아니거나 그룹이 없어도 204(R-GR-09, D6-1 사용자 결정). 좋아요·북마크의 DELETE와 같은 모양.
     [HttpDelete("{groupId:guid}/membership")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

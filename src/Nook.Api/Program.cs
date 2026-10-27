@@ -50,6 +50,7 @@ builder.Services.AddScoped<ChangeAvatarHandler>();
 builder.Services.AddScoped<RemoveAvatarHandler>();
 builder.Services.AddScoped<RenameGroupHandler>();
 builder.Services.AddScoped<GetMyGroupsHandler>();
+builder.Services.AddScoped<GetGroupPlacesHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();

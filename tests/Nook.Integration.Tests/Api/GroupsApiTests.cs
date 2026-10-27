@@ -6,7 +6,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Auth;
 using Nook.Application.Groups;
+using Nook.Domain.Bookmarks;
 using Nook.Domain.Groups;
+using Nook.Domain.Places;
+using Nook.Domain.Reviews;
 using Nook.Domain.Users;
 using Nook.Integration.Tests.Infrastructure;
 using Nook.SharedKernel;
@@ -41,6 +44,11 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
     //
     // GR-06 GET /me/groups
     // - MyGroups_ReturnsJoinOrderWithCountsSlotAndOwnerFlag   (멤버 수 한 쿼리, 내 슬롯, 방장 여부, 남의 그룹 제외)
+    //
+    // GR-05 GET /groups/{id}/places (장소마다 한 행 — 사실만, PM 그룹맵 표시 정책)
+    // - Places_AggregatesPerPlace          (리뷰 멤버 수·같은 멤버 여러 날 = 1·첫 리뷰어 슬롯·북마크 수·단독 북마커 슬롯·남의 기록 제외)
+    // - Places_AfterFirstReviewerLeaves_NextReviewerColor   (저장하지 않고 현재 멤버로 계산)
+    // - Places_NotMember_Returns403 / Places_UnknownGroup_Returns404
 
     private const string Code = "ABCDEF";
     private static readonly DateTimeOffset CreatedAt = new(2026, 10, 20, 9, 0, 0, TimeSpan.Zero); // 과거 — 합류 시각(실제 시계)이 그룹 생성보다 앞서면 도메인이 거절한다
@@ -244,14 +252,101 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
         Assert.Equal(HttpStatusCode.OK, (await JoinAsync(Code)).StatusCode);
         await SeedStrangersGroupAsync();                                          // 내가 없는 그룹 — 섞이면 안 된다
 
-        var groups = await _client.GetFromJsonAsync<List<MyGroupView>>("/me/groups");
+        var groups = (await _client.GetFromJsonAsync<List<MyGroupView>>("/me/groups"))!;
 
-        Assert.Equal([own.Id.Value, joined.Id.Value], groups!.Select(g => g.Id));
+        Assert.Equal([own.Id.Value, joined.Id.Value], groups.Select(g => g.Id));
         Assert.Equal((1, true), (groups[0].MemberCount, groups[0].IsOwner));
         Assert.Equal((4, false), (groups[1].MemberCount, groups[1].IsOwner));
         await using var db = Db.CreateContext();
         var mySlot = (await db.Groups.AsNoTracking().SingleAsync(g => g.Id == joined.Id)).Members.Single(m => m.UserId == _user.Id).ColorSlot;
         Assert.Equal(mySlot, groups[1].MyColorSlot);
+    }
+
+    // ── GR-05 ─────────────────────────────────────────────
+
+    // 슬롯 고정: 방장 0, 나 1, 멤버 2(pickSlot _ => 0 = 남은 것 중 가장 작은 슬롯).
+    private sealed record MapFixture(Group Group, User Member, Place Reviewed, Place SoleBookmark, Place TwoBookmarks, Place ReviewAndBookmark);
+
+    private async Task<MapFixture> SeedMapAsync()
+    {
+        var member = User.Create(Nickname.From("멤버"), Email.From("member@example.com"), Gender.None, null);
+        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), Gender.None, null);
+        var group = Group.Create(GroupName.From("지도모임"), _creator.Id, InviteCode.From(Code), CreatedAt, pickSlot: _ => 0);
+        Assert.True(group.AddMember(_user.Id, CreatedAt, pickSlot: _ => 0).IsSuccess);
+        Assert.True(group.AddMember(member.Id, CreatedAt, pickSlot: _ => 0).IsSuccess);
+
+        Place NewPlace(string id) => Place.Create(KakaoPlaceId.From(id), $"장소{id}", "서울", Coordinate.Create(37.5, 127.0).Unwrap()).Unwrap();
+        Review NewReview(User u, Place p, int daysAgo) =>
+            Review.Create(u.Id, p.Id, ReviewContent.From("조용하고 커피가 맛있는 곳"), [], CreatedAt.AddDays(-daysAgo)).Unwrap();
+        var (reviewed, sole, two, both, strangers) = (NewPlace("1"), NewPlace("2"), NewPlace("3"), NewPlace("4"), NewPlace("5"));
+
+        await using var db = Db.CreateContext();
+        db.AddRange(member, stranger, group, reviewed, sole, two, both, strangers);
+        db.AddRange(
+            NewReview(member, reviewed, daysAgo: 3),           // 첫 리뷰어 = 멤버(슬롯 2)
+            NewReview(_creator, reviewed, daysAgo: 2),
+            NewReview(_creator, reviewed, daysAgo: 1),         // 같은 멤버 다른 날 — 리뷰 멤버 수는 그대로 2
+            Bookmark.Create(_creator.Id, sole.Id, CreatedAt),
+            Bookmark.Create(_creator.Id, two.Id, CreatedAt),
+            Bookmark.Create(member.Id, two.Id, CreatedAt),
+            NewReview(_user, both, daysAgo: 1),
+            Bookmark.Create(_creator.Id, both.Id, CreatedAt),
+            NewReview(stranger, strangers, daysAgo: 1),        // 멤버 아님 — 나오면 안 된다
+            Bookmark.Create(stranger.Id, reviewed.Id, CreatedAt));
+        await db.SaveChangesAsync();
+        return new MapFixture(group, member, reviewed, sole, two, both);
+    }
+
+    [Fact]
+    public async Task Places_AggregatesPerPlace()
+    {
+        var map = await SeedMapAsync();
+
+        var places = (await _client.GetFromJsonAsync<List<GroupPlaceView>>($"/groups/{map.Group.Id.Value}/places"))!;
+
+        var byId = places.ToDictionary(p => p.PlaceId, p => (p.ReviewMemberCount, p.FirstReviewerSlot, p.BookmarkCount, p.SoleBookmarkerSlot));
+        Assert.Equal(new Dictionary<Guid, (int, int?, int, int?)>
+        {
+            [map.Reviewed.Id.Value] = (2, 2, 0, null),           // 남의 북마크는 세지 않는다
+            [map.SoleBookmark.Id.Value] = (0, null, 1, 0),
+            [map.TwoBookmarks.Id.Value] = (0, null, 2, null),
+            [map.ReviewAndBookmark.Id.Value] = (1, 1, 1, 0),
+        }, byId);
+    }
+
+    [Fact]
+    public async Task Places_AfterFirstReviewerLeaves_NextReviewerColor()
+    {
+        var map = await SeedMapAsync();
+        using var memberClient = _factory.CreateClient();
+        memberClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", _factory.Services.GetRequiredService<AccessTokenIssuer>().Issue(map.Member.Id.Value));
+        Assert.Equal(HttpStatusCode.NoContent, (await memberClient.DeleteAsync($"/groups/{map.Group.Id.Value}/membership")).StatusCode);
+
+        var places = (await _client.GetFromJsonAsync<List<GroupPlaceView>>($"/groups/{map.Group.Id.Value}/places"))!;
+
+        var reviewed = places.Single(p => p.PlaceId == map.Reviewed.Id.Value);
+        Assert.Equal((1, 0), (reviewed.ReviewMemberCount, reviewed.FirstReviewerSlot));   // 방장(슬롯 0)이 첫 리뷰어가 된다
+        Assert.Equal((1, 0), (places.Single(p => p.PlaceId == map.TwoBookmarks.Id.Value).BookmarkCount,
+                              places.Single(p => p.PlaceId == map.TwoBookmarks.Id.Value).SoleBookmarkerSlot!.Value));
+    }
+
+    [Fact]
+    public async Task Places_NotMember_Returns403()
+    {
+        var group = await SeedGroupAsync(extraMembers: 0);   // 나는 멤버가 아니다
+
+        var response = await _client.GetAsync($"/groups/{group.Id.Value}/places");
+
+        await AssertProblemAsync(response, HttpStatusCode.Forbidden, GroupQueryErrors.NotMember);
+    }
+
+    [Fact]
+    public async Task Places_UnknownGroup_Returns404()
+    {
+        var response = await _client.GetAsync($"/groups/{Guid.CreateVersion7()}/places");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     // 내가 만든 그룹(내가 방장).

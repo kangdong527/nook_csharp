@@ -39,4 +39,10 @@ public static class GroupQueryErrors
         "Group.NotFound",
         "그룹을 찾을 수 없습니다.",
         ErrorType.NotFound);
+
+    // GR-05. 그룹 지도는 멤버만 본다 — 멤버의 장소·리뷰 위치는 그룹 안 정보다.
+    public static readonly Error NotMember = new(
+        "Group.NotMember",
+        "그룹 멤버만 볼 수 있습니다.",
+        ErrorType.Forbidden);
 }
