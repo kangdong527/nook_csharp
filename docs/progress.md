@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-27, FE-2 — 데모 3흐름·프로필·그룹 완료(27/28), 탈퇴 PF-02부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 341개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **FE 진행 중** (2026-10-27, FE-2 — 원본 함수 28/28 연결·Supabase 제거 완료, 브라우저 화면 확인부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
@@ -24,8 +24,11 @@
        - ~~1. 방장 + 색 슬롯~~ ✅ `ed28fbc` — `groups.owner_id`(RESTRICT + 인덱스), 방장이 나가면 가장 먼저 합류한 멤버로, `group_members.color_slot` 0~3 랜덤·UNIQUE. 원자성 테스트는 임시 CHECK로 바꿈(owner FK가 groups INSERT를 먼저 막아서)
        - ~~2. GR-03 이름 변경(방장만, 그룹 행 잠금 안)·GR-06 `GET /me/groups`(SQL 1문장 — 로그로 확인)~~ ✅ `ea94b3f`
        - ~~3. GR-05 그룹 지도~~ ✅ `237d1f8` — 장소마다 1행 사실(리뷰 멤버 수·첫 리뷰어 슬롯·북마크 수·단독 북마커 슬롯), SQL 1문장, 멤버만 403 · FE 그룹 6함수 `403bdd6`(슬롯 → 원본 팔레트 임시 매핑 `slotColor`, PM 별 그리기 `groupStarSvg`, 그룹명 2~6자, 이름 변경 UI 방장만). 로컬 API로 두 회원 흐름 확인(합류·403·방장 넘김)
-     - **원본 함수 27/28 연결.** `store.ts`의 Supabase 사용은 `deleteAccount` 하나
-     - **▶ 다음 (여기서 시작)**: 탈퇴 PF-02(백로그 순서 7, L) — ⓪ (가) users DELETE + `reviews.user_id` `SET NULL` 확정. 남은 PM 질문 2개(탈퇴 철회·재가입 시 리뷰 복구 없음 OK? / 탈퇴 회원이 누른 좋아요 지우나). 설계: nullable `Review.UserId`, RV-02·03 권한(NULL 작성자 거절), PL-02 작성자 "탈퇴한 사용자"(Id·사진 없음), 그룹 멤버십은 `RemoveMember` 경로(방장 넘김, R-GR-11), 북마크 CASCADE, 탈퇴 직후 남은 토큰(①②). 그다음 `@supabase/*` 제거·`dev/auth-probe` 정리·브라우저 화면 확인(카카오 키·`.env.local`)
+     - ~~탈퇴 PF-02~~ ✅ — 스키마 `9d4440e`(reviews·likes `SET NULL`, likes 대리 키 `id` — 복합 PK는 NULL 불가) · `DELETE /me` `33f84cd`(회원 행 FOR UPDATE → 그룹마다 나가기 경로 → 링크 기록 삭제 → DELETE, 커밋 뒤 사진 삭제, 남은 토큰 쓰기 = 자식 쪽 FK 위반만 401) · FE `2683756`(BFF `/api/auth/withdraw`, "탈퇴한 사용자"). PM 답: 복구 없음, 좋아요 유지
+     - ~~Supabase 제거~~ ✅ `795dbb3` — 패키지·어댑터·탐침·환경변수. **원본 함수 28/28 연결, 화면 코드에 Supabase 없음**
+     - **▶ 다음 (여기서 시작)**: 브라우저로 화면 전체 확인 — 사용자 준비: `web/.env.local`에서 `NEXT_PUBLIC_SUPABASE_*` 줄 삭제(더는 안 씀), 카카오 JS 키 확인(`http://localhost:3300` 등록), 필요하면 `NOOK_API_URL`. 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev` → 메일 링크는 API 콘솔 로그. 확인할 것: 가입(성별·생일)·로그인·지도 별·장소 시트(북마크·리뷰 무한 스크롤)·리뷰 작성/수정(사진·충돌)·프로필(피드 더 보기·닉네임·사진)·그룹(생성·합류·이름·그룹 지도 별)·탈퇴
+       - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
+       - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
      - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
   - **D6 남은 것** (완료, PR #8)
@@ -398,8 +401,10 @@ Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `p
 14. R-RV-03 하루 기준을 KST 00시로(사용자 결정, D2-2 UTC 번복). 화면 문구 "00시 기준"과 서버 실제 기준(KST 09시)이 달랐던 것을 리뷰 연결 중 발견. 비용이 작았던 이유: `review_date`는 앱 계산 컬럼이고 `created_at`과 묶는 CHECK를 D3에서 일부러 두지 않았다. 운영 데이터 전이라 재계산 충돌(UTC 다른 날 → KST 같은 날 = UNIQUE 위반) 위험도 없었다. 테스트 먼저(빨간불 확인) → `ReviewDay` 한 곳
 15. 프로필: PF-04 키셋 재사용, PF-03 API 없음, PF-01 닉네임 미리 확인 없음(원본 화면이 직접 안 불렀다)·사진 `avatars/`. 정정 2건: "원본에 사진 삭제 버튼 있다"(없음), 함수 수 15 → 16
 16. 그룹: 방장(PM 허가, ADR-012 — ADR-004 결정 6 번복, 원본 CASCADE 결함 대신 넘기기 + RESTRICT), 색은 슬롯 저장(디자인 미정), N+1 → SQL 1문장(로그로 확인, 비교 측정은 D9), 그룹 지도는 장소마다 1행 사실(사용자 A안). owner FK 때문에 원자성 테스트가 다른 경로를 타게 된 것을 발견 → 임시 CHECK로 원래 상황 재현
-커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · `3a531ad` progress · `b1a6e79` PF-04·03 · `a5a6f0e` PF-01 · `ed28fbc` 방장·슬롯 · `ea94b3f` GR-03·06 · `1f13faa` progress · `237d1f8` GR-05 · `403bdd6` FE 그룹 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
-Claude가 작성(FE-2, 사용자 요청): web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
+17. 탈퇴(PF-02): PM 답 — 복구 없음, 좋아요 유지. 좋아요의 복합 PK `(user_id, review_id)`는 NULL이 될 수 없어 대리 키 + UNIQUE(A안, 사용자 결정) — "규칙이 PK 자체"(D2)의 대가. 남은 토큰은 요청마다 회원 조회 대신 FK 위반을 401로 번역(DB가 최종 판정자). 변이로 발견: 그룹 나가기를 빼먹은 **버그가 401로 가려짐** → 자식 쪽 위반("insert or update")만 401, 부모 쪽은 500. `UseExceptionHandler` 추가로 처리 안 된 예외는 500 ProblemDetails
+18. Supabase 제거: 화면 코드에 참조 0. npm audit은 제거 전후 같음(next critical 1, glob high 3 — dev lint 경유)
+커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · `3a531ad` progress · `b1a6e79` PF-04·03 · `a5a6f0e` PF-01 · `ed28fbc` 방장·슬롯 · `ea94b3f` GR-03·06 · `1f13faa` progress · `237d1f8` GR-05 · `403bdd6` FE 그룹 · `cb31f42` progress · `9d4440e`·`33f84cd`·`2683756` 탈퇴 · `795dbb3` Supabase 제거 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
+Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절차·예외 처리기·FE), 그룹·프로필 전체, web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
 ## 체크리스트
 
@@ -412,7 +417,7 @@ Claude가 작성(FE-2, 사용자 요청): web/ BFF 전부(route handler·중계�
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
 - [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
-- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — BFF 인증·중계 ✅, 지도·리뷰 ✅, 프로필 ✅, 그룹 ✅(ADR-012) — 함수 27/28. 남음: 탈퇴 PF-02 → Supabase 제거·화면 확인
+- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅. 남음: 브라우저 화면 확인 → 푸시·PR
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
