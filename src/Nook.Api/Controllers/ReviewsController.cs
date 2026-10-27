@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Reviews;
-using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
 
@@ -30,7 +30,7 @@ public sealed class ReviewsController : ControllerBase
             var result = await handler.HandleAsync(command, ct);
 
             if (!result.TryGetValue(out var review, out var error))
-                return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+                return this.Problem(error);
 
             return Created($"/reviews/{review.Id}", review);
         }
@@ -61,7 +61,7 @@ public sealed class ReviewsController : ControllerBase
             var result = await handler.HandleAsync(command, ct);
 
             if (!result.TryGetValue(out var review, out var error))
-                return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+                return this.Problem(error);
 
             return Ok(review);
         }
@@ -83,7 +83,7 @@ public sealed class ReviewsController : ControllerBase
         var result = await handler.HandleAsync(new DeleteReviewCommand(User.GetUserId(), id), ct);
 
         if (!result.TryGetValue(out var view, out var error))
-            return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+            return this.Problem(error);
 
         return Ok(view);
     }
@@ -97,15 +97,6 @@ public sealed class ReviewsController : ControllerBase
         foreach (var image in images)
             await image.Content.DisposeAsync();
     }
-
-    private static int StatusCodeOf(Error error) => error.Type switch
-    {
-        ErrorType.Validation => StatusCodes.Status400BadRequest,
-        ErrorType.NotFound => StatusCodes.Status404NotFound,
-        ErrorType.Conflict => StatusCodes.Status409Conflict,
-        ErrorType.Forbidden => StatusCodes.Status403Forbidden,
-        _ => StatusCodes.Status500InternalServerError,
-    };
 }
 
 // multipart 폼. PlaceId는 Guid?+[Required] — 빠지면 Guid.Empty로 바인딩되어 조용히 통과하는 것을 400으로 막는다(PlaceRequest와 같은 이유).

@@ -1,9 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Places;
 using Nook.Application.Reviews;
-using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
 
@@ -22,7 +22,7 @@ public sealed class PlacesController : ControllerBase
 
         return result.TryGetValue(out var view, out var error)
             ? Ok(view)
-            : Problem(statusCode: StatusCodes.Status404NotFound, title: error.Code, detail: error.Description);
+            : this.Problem(error);
     }
 
     // PL-02 리뷰 목록(무한 스크롤). 첫 요청은 cursor 없이, 다음부터는 직전 응답의 nextCursor를 그대로.
@@ -42,8 +42,7 @@ public sealed class PlacesController : ControllerBase
         if (result.TryGetValue(out var page, out var error))
             return Ok(page);
 
-        var status = error.Type == ErrorType.NotFound ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest;
-        return Problem(statusCode: status, title: error.Code, detail: error.Description);
+        return this.Problem(error);
     }
 
     // PL-01. 새로 만들었든 기존 것이든 같은 응답(200) — 호출자는 "확정된 장소"만 필요하고, 몇 번 불러도 결과가 같다.
@@ -62,7 +61,7 @@ public sealed class PlacesController : ControllerBase
         var result = await handler.HandleAsync(command, ct);
 
         if (!result.TryGetValue(out var place, out var error))
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: error.Code, detail: error.Description);
+            return this.Problem(error);
 
         return Ok(place);
     }

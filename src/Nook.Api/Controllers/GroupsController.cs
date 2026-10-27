@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Groups;
-using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
 
@@ -22,7 +22,7 @@ public sealed class GroupsController : ControllerBase
 
         return result.TryGetValue(out var view, out var error)
             ? Created($"/groups/{view.Id}", view)
-            : ProblemOf(error);
+            : this.Problem(error);
     }
 
     // GR-01. 클라이언트는 그룹 ID를 모르고 코드만 안다 → /groups/{id}/membership 모양을 쓸 수 없다.
@@ -37,7 +37,7 @@ public sealed class GroupsController : ControllerBase
     {
         var result = await handler.HandleAsync(new JoinGroupCommand(User.GetUserId(), request.InviteCode), ct);
 
-        return result.TryGetValue(out var view, out var error) ? Ok(view) : ProblemOf(error);
+        return result.TryGetValue(out var view, out var error) ? Ok(view) : this.Problem(error);
     }
 
     // GR-04. 멱등 — 멤버가 아니거나 그룹이 없어도 204(R-GR-09, D6-1 사용자 결정). 좋아요·북마크의 DELETE와 같은 모양.
@@ -47,20 +47,8 @@ public sealed class GroupsController : ControllerBase
     {
         var result = await handler.HandleAsync(new LeaveGroupCommand(User.GetUserId(), groupId), ct);
 
-        return result.IsFailure(out var error) ? ProblemOf(error) : NoContent();
+        return result.IsFailure(out var error) ? this.Problem(error) : NoContent();
     }
-
-    private ObjectResult ProblemOf(Error error) =>
-        Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
-
-    private static int StatusCodeOf(Error error) => error.Type switch
-    {
-        ErrorType.Validation => StatusCodes.Status400BadRequest,
-        ErrorType.NotFound => StatusCodes.Status404NotFound,
-        ErrorType.Conflict => StatusCodes.Status409Conflict,
-        ErrorType.Forbidden => StatusCodes.Status403Forbidden,
-        _ => StatusCodes.Status500InternalServerError,
-    };
 }
 
 // 값 검증(빈 값·길이·형식)은 도메인 값 객체가 한다 — null도 그쪽에서 400(Validation)으로 거절된다.
