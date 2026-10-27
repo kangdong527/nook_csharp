@@ -78,10 +78,18 @@ export interface Review {
   placeId: string;
   placeName: string;
   content: string;
-  images: string[]; // 최대 3장
+  images: ReviewImageRef[]; // 최대 3장, 표시 순서
   likeCount: number;
   likedByMe: boolean;
   createdAt: string; // ISO
+  version: number; // RV-02 에 그대로 돌려보내는 불투명 값(ADR-011)
+  mine: boolean; // 수정·삭제 메뉴 — 서버가 판정(PL-02 Mine)
+}
+
+// 리뷰 이미지. id 는 RV-02 KeepImageIds 로 돌려보내는 식별자, url 은 서버가 만든 표시 주소(FE-2 이미지 A안).
+export interface ReviewImageRef {
+  id: string;
+  url: string;
 }
 
 // ---------- 유틸 ----------

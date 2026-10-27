@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteReview, toggleLike } from "@/lib/store";
+import { deleteReview, setLiked as saveLike } from "@/lib/store";
 import { formatDate, type Review } from "@/lib/types";
 import { useToast } from "./Toast";
 import { Avatar } from "./Avatar";
@@ -28,7 +28,7 @@ export function ReviewCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
 
-  const isMine = myUserId === review.userId;
+  const isMine = review.mine; // 서버 판정(PL-02 Mine)
   if (deleted) return null;
 
   const onLike = async () => {
@@ -38,7 +38,7 @@ export function ReviewCard({
     setLiked(!prevLiked);
     setLikeCount(prevCount + (prevLiked ? -1 : 1));
     try {
-      await toggleLike(myUserId, review.id);
+      await saveLike(review.id, !prevLiked);
     } catch {
       setLiked(prevLiked);
       setLikeCount(prevCount);
@@ -113,7 +113,7 @@ export function ReviewCard({
 
       {review.images.length > 0 && (
         <div className="no-scrollbar mt-2.5 flex gap-2 overflow-x-auto">
-          {review.images.map((url, i) => (
+          {review.images.map(({ url }, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={i}

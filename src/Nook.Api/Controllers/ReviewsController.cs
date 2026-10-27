@@ -11,7 +11,7 @@ namespace Nook.Api.Controllers;
 [Route("reviews")]
 public sealed class ReviewsController : ControllerBase
 {
-    // RV-01. 201 + Location(ADR-009 결정 2). 조회 엔드포인트(GET /reviews/{id})는 아직 없다 — Location은 자원 주소의 약속.
+    // RV-01. 201 + Location(ADR-009 결정 2). Location이 가리키는 GET /reviews/{id}는 RV-04(작성자만).
     [HttpPost]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<ReviewView>(StatusCodes.Status201Created)]

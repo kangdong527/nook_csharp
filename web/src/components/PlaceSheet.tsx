@@ -3,14 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  getMyPlaceState,
   getReviewsByPlace,
-  isBookmarked,
+  isSameUtcDay,
   setBookmarked as saveBookmark,
   upsertPlace,
 } from "@/lib/store";
 import type { KakaoPlace, Place, Review, StarState } from "@/lib/types";
 import { useToast } from "./Toast";
-import { FullSpinner } from "./Spinner";
+import { FullSpinner, Spinner } from "./Spinner";
 import { ReviewCard } from "./ReviewCard";
 import { CloseIcon, StarIcon } from "./icons";
 
@@ -31,20 +32,21 @@ export function PlaceSheet({
   const toast = useToast();
   const [place, setPlace] = useState<Place | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [limitOpen, setLimitOpen] = useState(false);
   const highlightRef = useRef<HTMLDivElement>(null);
 
-  const myReview = reviews.find((r) => r.userId === userId);
-  const star: StarState = myReview ? "fill" : bookmarked ? "gray" : "empty";
+  // 별은 서버 판정(R-STAR)에서 시작해 북마크 토글만 화면에서 반영한다. 리뷰가 있으면 북마크와 무관하게 fill.
+  // 리뷰 목록은 페이지라 "내 리뷰가 있나"를 목록으로 판정할 수 없다(첫 페이지에 없을 수 있다).
+  const star: StarState = hasReview ? "fill" : bookmarked ? "gray" : "empty";
 
-  // 같은 장소 기록은 1일 1회 (00시 기준)
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const reviewedToday = reviews.some(
-    (r) => r.userId === userId && new Date(r.createdAt) >= startOfToday
-  );
+  // 같은 장소 기록은 1일 1회 — 미리 확인(문구용). 기준은 서버와 같은 UTC 날짜, 최종 판정은 서버 409(R-RV-03).
+  const reviewedToday = reviews.some((r) => r.mine && isSameUtcDay(r.createdAt, new Date()));
 
   const onWrite = () => {
     if (!place) return;
@@ -63,13 +65,12 @@ export function PlaceSheet({
         const p = await upsertPlace(kakaoPlace);
         if (!alive) return;
         setPlace(p);
-        const [rv, bm] = await Promise.all([
-          getReviewsByPlace(p.id, userId),
-          isBookmarked(p.id),
-        ]);
+        const [page, state] = await Promise.all([getReviewsByPlace(p.id), getMyPlaceState(p.id)]);
         if (!alive) return;
-        setReviews(rv);
-        setBookmarked(bm);
+        setReviews(page.items);
+        setNextCursor(page.nextCursor);
+        setHasReview(state.star === "fill");
+        setBookmarked(state.isBookmarked);
       } catch {
         if (alive) toast("일시적인 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
       } finally {
@@ -80,6 +81,41 @@ export function PlaceSheet({
       alive = false;
     };
   }, [kakaoPlace, userId, toast]);
+
+  // 무한 스크롤(PL-02 키셋, FE-2 사용자 결정 (b)): 목록 끝의 표지가 보이면 다음 페이지를 이어 붙인다.
+  // 키셋이라 스크롤 중 새 리뷰가 생겨도 앞 페이지 항목이 다시 나오지 않는다 — 그래도 id 로 한 번 더 거른다.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !place || !nextCursor) return;
+    const observer = new IntersectionObserver(async ([entry]) => {
+      if (!entry.isIntersecting || loadingMore) return;
+      setLoadingMore(true);
+      try {
+        const page = await getReviewsByPlace(place.id, nextCursor);
+        setReviews((prev) => {
+          const seen = new Set(prev.map((r) => r.id));
+          return [...prev, ...page.items.filter((r) => !seen.has(r.id))];
+        });
+        setNextCursor(page.nextCursor);
+      } catch {
+        toast("일시적인 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        setLoadingMore(false);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [place, nextCursor, loadingMore, toast]);
+
+  // 내 리뷰 삭제 뒤: 첫 페이지와 별을 서버에서 다시 받는다(RV-03 — 남은 리뷰·북마크에 따라 fill/gray/empty).
+  const reload = async () => {
+    if (!place) return;
+    const [page, state] = await Promise.all([getReviewsByPlace(place.id), getMyPlaceState(place.id)]);
+    setReviews(page.items);
+    setNextCursor(page.nextCursor);
+    setHasReview(state.star === "fill");
+    setBookmarked(state.isBookmarked);
+  };
 
   // 하이라이트된 리뷰(직전에 작성한 리뷰)를 화면 중앙으로 부드럽게 스크롤
   useEffect(() => {
@@ -96,7 +132,7 @@ export function PlaceSheet({
 
   const onToggleStar = async () => {
     if (!place) return;
-    if (myReview) {
+    if (hasReview) {
       toast("리뷰를 작성한 장소예요.");
       return;
     }
@@ -175,13 +211,18 @@ export function PlaceSheet({
                       myUserId={userId}
                       highlight={r.id === highlightReviewId}
                       onChanged={() => {
-                        // 내 리뷰 삭제 시 목록 갱신
-                        if (place) getReviewsByPlace(place.id, userId).then(setReviews);
+                        reload();
                         onChanged?.();
                       }}
                     />
                   </div>
                 ))}
+                {/* 다음 페이지 표지 — 보이면 이어 불러온다 */}
+                {nextCursor && (
+                  <div ref={sentinelRef} className="flex justify-center py-4">
+                    {loadingMore && <Spinner className="text-key" />}
+                  </div>
+                )}
               </div>
             )}
           </div>

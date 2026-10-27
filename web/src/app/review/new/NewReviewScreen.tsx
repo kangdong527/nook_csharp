@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ApiError,
   createReview,
   getPlace,
   hasReviewedPlaceToday,
@@ -12,7 +13,7 @@ import { searchPlaces } from "@/lib/kakao";
 import type { KakaoPlace, Place, User } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { FullSpinner, Spinner } from "@/components/Spinner";
-import { ReviewEditor } from "@/components/ReviewEditor";
+import { ReviewEditor, type EditorImage } from "@/components/ReviewEditor";
 import { ChevronLeftIcon, SearchIcon } from "@/components/icons";
 
 function NewReview({ user }: { user: User }) {
@@ -38,7 +39,7 @@ function NewReview({ user }: { user: User }) {
     return (
       <PlacePicker
         onPick={async (p) => {
-          if (await hasReviewedPlaceToday(user.id, p.id)) {
+          if (await hasReviewedPlaceToday(p.id)) {
             toast("같은 장소에 대한 기록은 1일 1회만 가능해요. (00시 기준)");
             return;
           }
@@ -59,12 +60,17 @@ function NewReview({ user }: { user: User }) {
           : () => setPlace(null) // 검색으로 선택 → '장소 검색'으로 복귀
       }
       onSubmit={async (content, images) => {
-        const reviewId = await createReview({
-          userId: user.id,
-          placeId: place.id,
-          content,
-          images,
-        });
+        let reviewId: string;
+        try {
+          reviewId = await createReview({ placeId: place.id, content, files: newFiles(images) });
+        } catch (e) {
+          // 미리 확인을 통과해도 서버 UNIQUE 가 최종 판정한다(R-RV-03, 동시 작성 포함).
+          if (e instanceof ApiError && e.title === "Review.AlreadyReviewedToday") {
+            toast("같은 장소에 대한 기록은 1일 1회만 가능해요. (00시 기준)");
+            return;
+          }
+          throw e;
+        }
         toast("기록을 발행했어요.");
         router.replace(
           `/map?placeId=${place.id}&reviewId=${reviewId}`
@@ -73,6 +79,10 @@ function NewReview({ user }: { user: User }) {
     />
   );
 }
+
+// 새 리뷰엔 기존 사진이 없다 — 고른 파일만.
+const newFiles = (images: EditorImage[]): File[] =>
+  images.flatMap((i) => (i.kind === "new" ? [i.file] : []));
 
 function PlacePicker({
   onPick,

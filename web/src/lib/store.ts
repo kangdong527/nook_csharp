@@ -12,6 +12,7 @@ import {
   type KakaoPlace,
   type Place,
   type Review,
+  type ReviewImageRef,
   type SavedPlace,
   type StarState,
   type User,
@@ -149,6 +150,64 @@ const toPlace = (v: PlaceApiView): Place => ({
   lng: v.longitude,
 });
 
+/** C# API 실패. title = 오류 코드(예: "Review.AlreadyReviewedToday") — 화면이 문구를 고른다. */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly title: string | null
+  ) {
+    super(`API ${status}${title ? ` ${title}` : ""}`);
+  }
+}
+
+async function problemTitle(res: Response): Promise<string | null> {
+  try {
+    return ((await res.json()) as { title?: string }).title ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// PL-02 리뷰 항목(C# PlaceReviewView).
+type PlaceReviewApiView = {
+  id: string;
+  author: { id: string; nickname: string };
+  content: string;
+  images: { id: string; url: string }[];
+  createdAt: string;
+  version: number;
+  likeCount: number;
+  likedByMe: boolean;
+  mine: boolean;
+};
+
+// 작성자 사진은 아직 API 에 없다(PF-01 때) → 기본 이미지.
+const fromPlaceReview = (v: PlaceReviewApiView, placeId: string): Review => ({
+  id: v.id,
+  userId: v.author.id,
+  authorNickname: v.author.nickname,
+  authorAvatarUrl: null,
+  placeId,
+  placeName: "",
+  content: v.content,
+  images: v.images.map(({ id, url }) => ({ id, url })),
+  likeCount: v.likeCount,
+  likedByMe: v.likedByMe,
+  createdAt: v.createdAt,
+  version: v.version,
+  mine: v.mine,
+});
+
+/** RV-04 수정 화면이 받는 리뷰. */
+export type EditableReview = {
+  id: string;
+  placeId: string;
+  placeName: string;
+  content: string;
+  images: ReviewImageRef[];
+  version: number;
+};
+
 async function getPlaceDetail(placeId: string): Promise<PlaceDetailApiView | null> {
   const res = await nookFetch(`/places/${placeId}`);
   if (res.status === 404) return null;
@@ -184,10 +243,14 @@ export async function getPlace(placeId: string): Promise<Place | null> {
 // =========================================================
 // 북마크 (회색 별)
 // =========================================================
-// PL-02 장소 상세의 IsBookmarked — 별(star)은 리뷰가 있으면 fill 이라 북마크 여부를 따로 받는다.
-// 회원은 토큰이 정한다 — userId 인자를 받지 않는다(남의 북마크를 물을 길이 없다).
-export async function isBookmarked(placeId: string): Promise<boolean> {
-  return (await getPlaceDetail(placeId))?.isBookmarked ?? false;
+// PL-02 장소 상세의 내 상태 — 별(R-STAR, 서버 판정)과 북마크 여부.
+// 별은 리뷰가 있으면 fill 이라 북마크 여부를 따로 받는다. 리뷰 목록은 페이지라 "내 리뷰가 있나"를 목록으로 판정할 수 없다.
+// 회원은 토큰이 정한다 — userId 인자를 받지 않는다(남의 상태를 물을 길이 없다).
+export async function getMyPlaceState(
+  placeId: string
+): Promise<{ star: StarState; isBookmarked: boolean }> {
+  const detail = await getPlaceDetail(placeId);
+  return { star: detail?.star ?? "empty", isBookmarked: detail?.isBookmarked ?? false };
 }
 
 // 북마크 토글 → 최종 북마크 여부 반환
@@ -256,7 +319,7 @@ const mapReview = (r: ReviewRow, myUserId: string | null): Review => {
   const images = (r.review_images ?? [])
     .slice()
     .sort((a, b) => a.order_index - b.order_index)
-    .map((i) => i.url);
+    .map((i) => ({ id: "", url: i.url }));
   const likes = r.likes ?? [];
   return {
     id: r.id,
@@ -270,20 +333,21 @@ const mapReview = (r: ReviewRow, myUserId: string | null): Review => {
     likeCount: likes.length,
     likedByMe: myUserId ? likes.some((l) => l.user_id === myUserId) : false,
     createdAt: r.created_at,
+    version: 0, // Supabase 경로(getMyReviews, 프로필 교체 전까지) — 수정은 RV-04 로 다시 읽으므로 쓰이지 않는다
+    mine: myUserId === r.user_id,
   };
 };
 
+// PL-02 리뷰 목록 — 최신순 키셋 페이지(FE-2 사용자 결정 (b) 무한 스크롤). 첫 요청은 cursor 없이, 다음은 받은 nextCursor 그대로.
 export async function getReviewsByPlace(
   placeId: string,
-  myUserId: string | null
-): Promise<Review[]> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select(REVIEW_SELECT)
-    .eq("place_id", placeId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return ((data ?? []) as unknown as ReviewRow[]).map((r) => mapReview(r, myUserId));
+  cursor: string | null = null
+): Promise<{ items: Review[]; nextCursor: string | null }> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const res = await nookFetch(`/places/${placeId}/reviews${query}`);
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  const page = (await res.json()) as { items: PlaceReviewApiView[]; nextCursor: string | null };
+  return { items: page.items.map((v) => fromPlaceReview(v, placeId)), nextCursor: page.nextCursor };
 }
 
 export async function getMyReviews(userId: string): Promise<Review[]> {
@@ -296,112 +360,83 @@ export async function getMyReviews(userId: string): Promise<Review[]> {
   return ((data ?? []) as unknown as ReviewRow[]).map((r) => mapReview(r, userId));
 }
 
+// RV-04 수정 화면용 단건 — 작성자만. 없으면 "not_found"(404), 남의 것이면 "forbidden"(403).
 export async function getReview(
-  reviewId: string,
-  myUserId: string | null
-): Promise<Review | null> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select(REVIEW_SELECT)
-    .eq("id", reviewId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return mapReview(data as unknown as ReviewRow, myUserId);
+  reviewId: string
+): Promise<EditableReview | "not_found" | "forbidden"> {
+  const res = await nookFetch(`/reviews/${reviewId}`);
+  if (res.status === 404) return "not_found";
+  if (res.status === 403) return "forbidden";
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  const v = (await res.json()) as {
+    id: string;
+    placeId: string;
+    placeName: string;
+    content: string;
+    images: { id: string; url: string }[];
+    version: number;
+  };
+  return { ...v, images: v.images.map(({ id, url }) => ({ id, url })) };
 }
 
-// 같은 장소 기록 1일 1회 제한 (00시 기준) → 오늘 이미 작성했는지
-export async function hasReviewedPlaceToday(
-  userId: string,
-  placeId: string
-): Promise<boolean> {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const { data } = await supabase
-    .from("reviews")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("place_id", placeId)
-    .gte("created_at", start.toISOString())
-    .limit(1);
-  return !!(data && data.length > 0);
+// R-RV-03 미리 확인(문구용). 최종 판정은 서버 409. 기준은 서버와 같은 UTC 날짜(KST 09:00) — 원본의 로컬 00시와 다르다.
+// 내 리뷰는 최신순 첫 페이지에 없을 수도 있다(남의 리뷰가 많을 때) → 미리 확인은 "있으면 막기"만, 없다고 보장하지 않는다.
+export async function hasReviewedPlaceToday(placeId: string): Promise<boolean> {
+  const { items } = await getReviewsByPlace(placeId);
+  return items.some((r) => r.mine && isSameUtcDay(r.createdAt, new Date()));
 }
 
+export function isSameUtcDay(iso: string, now: Date): boolean {
+  return new Date(iso).toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+}
+
+// RV-01. 본문과 이미지 파일을 한 요청으로(multipart) — 서버가 전부 검증한 뒤 올리고 저장한다.
+// 원본은 이미지를 먼저 올려 URL 을 받았다 → 저장이 실패하면 고아 이미지가 남았다.
+// 실패: 409 Review.AlreadyReviewedToday(같은 장소 하루 1개, UTC 기준) 등은 ApiError 로.
 export async function createReview(input: {
-  userId: string;
   placeId: string;
   content: string;
-  images: string[];
+  files: File[];
 }): Promise<string> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .insert({
-      user_id: input.userId,
-      place_id: input.placeId,
-      content: input.content,
-    })
-    .select("id")
-    .single();
-  if (error || !data) throw error ?? new Error("create review failed");
-  const reviewId = data.id as string;
-  await saveReviewImages(reviewId, input.images);
-  return reviewId;
+  const form = new FormData();
+  form.append("PlaceId", input.placeId);
+  form.append("Content", input.content);
+  input.files.forEach((f) => form.append("Images", f));
+
+  const res = await nookFetch("/reviews", { method: "POST", body: form });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  return ((await res.json()) as { id: string }).id;
 }
 
+// RV-02. 최종 상태를 통째로: 남길 기존 이미지 ID(순서대로) + 새 파일 + 화면이 받은 version.
+// 409 Review.EditConflict = 화면을 연 사이 다른 수정이 먼저 저장됨 → 다시 불러와야 한다.
 export async function updateReview(input: {
   reviewId: string;
+  version: number;
   content: string;
-  images: string[];
+  keepImageIds: string[];
+  files: File[];
 }): Promise<void> {
-  const { error } = await supabase
-    .from("reviews")
-    .update({ content: input.content, updated_at: new Date().toISOString() })
-    .eq("id", input.reviewId);
-  if (error) throw error;
-  // 이미지 전체 교체
-  await supabase.from("review_images").delete().eq("review_id", input.reviewId);
-  await saveReviewImages(input.reviewId, input.images);
+  const form = new FormData();
+  form.append("Version", String(input.version));
+  form.append("Content", input.content);
+  input.keepImageIds.forEach((id) => form.append("KeepImageIds", id));
+  input.files.forEach((f) => form.append("Images", f));
+
+  const res = await nookFetch(`/reviews/${input.reviewId}`, { method: "PUT", body: form });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
 }
 
-async function saveReviewImages(reviewId: string, images: string[]) {
-  if (images.length === 0) return;
-  const rows = images.slice(0, 3).map((url, i) => ({
-    review_id: reviewId,
-    url,
-    order_index: i,
-  }));
-  const { error } = await supabase.from("review_images").insert(rows);
-  if (error) throw error;
-}
-
+// RV-03. 멱등 — 이미 지운 리뷰도 성공. 남의 리뷰는 403.
 export async function deleteReview(reviewId: string): Promise<void> {
-  await supabase.from("reviews").delete().eq("id", reviewId);
+  const res = await nookFetch(`/reviews/${reviewId}`, { method: "DELETE" });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
 }
 
-// =========================================================
-// 좋아요
-// =========================================================
-// 토글 → 최종 좋아요 여부 반환
-export async function toggleLike(
-  userId: string,
-  reviewId: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("likes")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("review_id", reviewId)
-    .maybeSingle();
-  if (data) {
-    await supabase
-      .from("likes")
-      .delete()
-      .eq("user_id", userId)
-      .eq("review_id", reviewId);
-    return false;
-  }
-  await supabase.from("likes").insert({ user_id: userId, review_id: reviewId });
-  return true;
+// LK-01. 토글 대신 목표 상태(PUT = 좋아요, DELETE = 취소, 둘 다 멱등) — 북마크와 같은 이유.
+export async function setLiked(reviewId: string, on: boolean): Promise<void> {
+  const res = await nookFetch(`/reviews/${reviewId}/like`, { method: on ? "PUT" : "DELETE" });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
 }
 
 // =========================================================
