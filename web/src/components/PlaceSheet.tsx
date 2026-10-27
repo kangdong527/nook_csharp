@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   getMyPlaceState,
   getReviewsByPlace,
-  isSameUtcDay,
+  isSameKstDay,
   setBookmarked as saveBookmark,
   upsertPlace,
 } from "@/lib/store";
@@ -45,8 +45,8 @@ export function PlaceSheet({
   // 리뷰 목록은 페이지라 "내 리뷰가 있나"를 목록으로 판정할 수 없다(첫 페이지에 없을 수 있다).
   const star: StarState = hasReview ? "fill" : bookmarked ? "gray" : "empty";
 
-  // 같은 장소 기록은 1일 1회 — 미리 확인(문구용). 기준은 서버와 같은 UTC 날짜, 최종 판정은 서버 409(R-RV-03).
-  const reviewedToday = reviews.some((r) => r.mine && isSameUtcDay(r.createdAt, new Date()));
+  // 같은 장소 기록은 1일 1회 — 미리 확인(문구용). 기준은 서버와 같은 KST 날짜(00시), 최종 판정은 서버 409(R-RV-03).
+  const reviewedToday = reviews.some((r) => r.mine && isSameKstDay(r.createdAt, new Date()));
 
   const onWrite = () => {
     if (!place) return;

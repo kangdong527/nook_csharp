@@ -50,7 +50,7 @@ erDiagram
         uuid place_id FK, UK "IX (place_id, created_at DESC)"
         varchar(50) content "trim 후 10~50자"
         timestamptz created_at
-        date review_date UK "created_at의 UTC 날짜"
+        date review_date UK "created_at의 KST 날짜"
     }
 
     review_images {
@@ -239,7 +239,7 @@ erDiagram
 | place_id | `uuid` | NOT NULL | 없음 | 리뷰 대상 장소. `Review.PlaceId`. 수정으로 바뀌지 않는다(RV-02) |
 | content | `varchar(50)` | NOT NULL | 없음 | trim된 본문(`ReviewContent.Value`). 상한은 `ReviewContent.MaxLength`와 같다 |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
-| review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 UTC 날짜로 계산한 `Review.ReviewDate`를 그대로 저장한다 |
+| review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 KST 날짜로 계산한 `Review.ReviewDate`(`ReviewDay`)를 그대로 저장한다 *(FE-2: UTC → KST)* |
 | version | `integer` | NOT NULL | `0` | 낙관적 동시성 토큰(`Review.Version`). `Review.Edit` 성공마다 +1, EF가 `UPDATE … WHERE version = <읽은 값>`으로 저장한다. 동시 수정의 늦은 쪽은 0행 → 409(RV-02 6c). *(2026-10-24 사용자 결정, Claude 작성, incident 002)* API로도 나간다: 응답 `version`(불투명 값) → RV-02 폼 `Version`으로 돌아와 화면을 연 사이의 수정을 409로 거절(RV-02 4d). 그래서 이 값은 `Review.Edit` 성공 말고는 바뀌면 안 된다 — 다른 갱신이 올리면 거짓 충돌 *(2026-10-26, ADR-011)* |
 
 - 수정 시각(`updated_at`)은 두지 않는다. `Review`에 없고, 수정 시각을 쓰는 규칙·화면이 없다(ADR-007 기준)
@@ -257,7 +257,7 @@ erDiagram
 | CHECK | `ck_reviews_content`: `char_length(btrim(content)) >= 10` | 앱을 거치지 않은 쓰기로 10자 미만 본문이 들어오는 것. 상한 50은 `varchar(50)`이 맡는다. `btrim`은 ASCII 공백만 지우는 최소 이중화(users 메모와 같음) | R-RV-01 |
 
 메모
-- `review_date`와 `created_at`이 어긋나지 않게 하는 CHECK(`review_date = (created_at AT TIME ZONE 'UTC')::date`)는 두지 않는다. 표현식 인덱스를 기각한 이유와 같다: 같은 계산이 SQL에도 생겨 규칙이 두 곳이 된다(progress D2 결정)
+- `review_date`와 `created_at`이 어긋나지 않게 하는 CHECK(`review_date = (created_at AT TIME ZONE 'Asia/Seoul')::date`)는 두지 않는다. 표현식 인덱스를 기각한 이유와 같다: 같은 계산이 SQL에도 생겨 규칙이 두 곳이 된다(progress D2 결정)
 - Q3의 정렬·Keyset 페이지네이션용 인덱스(`(user_id, created_at DESC, id)` 등)는 D8에서 `EXPLAIN (ANALYZE, BUFFERS)`로 Before를 재고 정한다
 
 
@@ -534,7 +534,7 @@ erDiagram
 | `users` 시각·프로필 | `created_at`, `gender`, `birth`(`text` 'YY-MM-DD'), `avatar_url` | 없음(`id`·`nickname`·`email`만) | `created_at`: 쓰는 규칙·화면이 없음(ADR-007). 프로필 3개: MVP 범위 밖(D3-2 사용자 확인) |
 | `places` 부가 정보 | `category`, `road_address`, `phone`, `place_url`, `created_at`. `address`는 NULL 허용 | 없음. `address`는 NOT NULL | MVP 범위 밖(D3-2 사용자 확인) |
 | `reviews.updated_at` | 있음 | 없음 | 쓰는 규칙·화면이 없음 — ADR-007 |
-| `reviews.review_date` | 없음 | `date` NOT NULL | R-RV-03 UNIQUE의 기준 날짜(UTC). 표현식 인덱스 대신 컬럼 |
+| `reviews.review_date` | 없음 | `date` NOT NULL | R-RV-03 UNIQUE의 기준 날짜(KST, FE-2에서 UTC → KST). 표현식 인덱스 대신 컬럼 |
 | 리뷰 이미지 값 | `url text` | `storage_key varchar(56)` | URL은 도메인·CDN이 바뀌면 전부 고쳐야 한다. 키만 저장하고 URL 변환은 한 곳(D2). 형식·길이는 §3.1 |
 | 리뷰 이미지 순서 | `order_index int default 0` | `sort_order smallint`, 기본값 없음 | `Review.Create`가 목록 인덱스로 항상 넣는다. 기본값 0이 있으면 값을 빠뜨린 INSERT가 조용히 0번이 된다 |
 | `groups.owner_id` | `owner_id ... on delete cascade` | 없음 | 읽는 유스케이스가 없고, CASCADE가 방장 탈퇴 시 다른 멤버가 남은 그룹까지 지웠다 — ADR-004 결정 6 |

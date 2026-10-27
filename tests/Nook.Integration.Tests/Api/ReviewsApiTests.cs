@@ -30,6 +30,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Create_ThirdImageUnsupported_Returns400AndUploadsNothing           (2c — 검증을 전부 끝낸 뒤에 올린다)
     // - Create_FourImages_Returns400AndUploadsNothing                      (2b)
     // - Create_WhenAlreadyReviewedToday_Returns409AndUploadsNothing        (4a — 사전 확인)
+    // - Create_WhenPreviousReviewIsYesterdayInKstButSameUtcDate_Returns201 (하루 기준 = KST 00:00)
     // - Create_ConcurrentBothPassPreCheck_One201One409AndOneReview         (6a — UNIQUE가 최종 판정, 진 쪽 이미지는 고아)
     //
     // RV-02 — 시작 상태: 이미지 A·B·C가 붙은 리뷰(스토리지 3개)
@@ -125,7 +126,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         await using var db = Db.CreateContext();
         var saved = await db.Reviews.SingleAsync();
-        Assert.Equal(DateOnly.FromDateTime(Now.UtcDateTime), saved.ReviewDate);
+        Assert.Equal(new DateOnly(2026, 10, 23), saved.ReviewDate);   // Now 20:00Z = KST 10-23 05:00 — 작성일은 KST 날짜(R-RV-03)
         // 응답의 이미지 ID가 저장된 ID다 — 클라이언트가 RV-02의 KeepImageIds로 그대로 돌려보낸다(ADR-009 결정 2).
         Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}")));
     }
@@ -160,11 +161,11 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     [Fact]
     public async Task Create_WhenAlreadyReviewedToday_Returns409AndUploadsNothing()
     {
-        // 같은 UTC 날짜의 이른 시각 — 사전 확인이 "지금"과 같은 날을 보는지.
+        // 같은 KST 날짜의 이른 시각(16:00Z = KST 10-23 01:00) — 사전 확인이 "지금"과 같은 날을 보는지.
         await using (var db = Db.CreateContext())
         {
             db.Reviews.Add(Review.Create(
-                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-8)).Unwrap());
+                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-4)).Unwrap());
             await db.SaveChangesAsync();
         }
 
@@ -172,6 +173,22 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         await AssertProblemAsync(response, HttpStatusCode.Conflict, ReviewWriteErrors.AlreadyReviewedToday);
         Assert.Empty(_factory.ImageStorage.Objects);
+    }
+
+    [Fact]
+    public async Task Create_WhenPreviousReviewIsYesterdayInKstButSameUtcDate_Returns201()
+    {
+        // 14:00Z = KST 10-22 23:00. UTC 날짜는 "지금"(20:00Z)과 같은 10-22지만 KST로는 전날 — KST 기준이면 새로 쓸 수 있다.
+        await using (var db = Db.CreateContext())
+        {
+            db.Reviews.Add(Review.Create(
+                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-6)).Unwrap());
+            await db.SaveChangesAsync();
+        }
+
+        var response = await CreateAsync(_place.Id.Value);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
     [Fact]

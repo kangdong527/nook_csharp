@@ -379,20 +379,24 @@ export async function getReview(
   return { ...v, images: v.images.map(({ id, url }) => ({ id, url })) };
 }
 
-// R-RV-03 미리 확인(문구용). 최종 판정은 서버 409. 기준은 서버와 같은 UTC 날짜(KST 09:00) — 원본의 로컬 00시와 다르다.
+// R-RV-03 미리 확인(문구용). 최종 판정은 서버 409. 기준은 서버와 같은 KST 날짜(00시, ReviewDay).
 // 내 리뷰는 최신순 첫 페이지에 없을 수도 있다(남의 리뷰가 많을 때) → 미리 확인은 "있으면 막기"만, 없다고 보장하지 않는다.
 export async function hasReviewedPlaceToday(placeId: string): Promise<boolean> {
   const { items } = await getReviewsByPlace(placeId);
-  return items.some((r) => r.mine && isSameUtcDay(r.createdAt, new Date()));
+  return items.some((r) => r.mine && isSameKstDay(r.createdAt, new Date()));
 }
 
-export function isSameUtcDay(iso: string, now: Date): boolean {
-  return new Date(iso).toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+// KST = UTC+9 고정(서머타임 없음) — 브라우저 시간대와 무관하게 서버(C# ReviewDay)와 같은 날을 본다.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const kstDate = (d: Date) => new Date(d.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
+
+export function isSameKstDay(iso: string, now: Date): boolean {
+  return kstDate(new Date(iso)) === kstDate(now);
 }
 
 // RV-01. 본문과 이미지 파일을 한 요청으로(multipart) — 서버가 전부 검증한 뒤 올리고 저장한다.
 // 원본은 이미지를 먼저 올려 URL 을 받았다 → 저장이 실패하면 고아 이미지가 남았다.
-// 실패: 409 Review.AlreadyReviewedToday(같은 장소 하루 1개, UTC 기준) 등은 ApiError 로.
+// 실패: 409 Review.AlreadyReviewedToday(같은 장소 하루 1개, KST 00시 기준) 등은 ApiError 로.
 export async function createReview(input: {
   placeId: string;
   content: string;

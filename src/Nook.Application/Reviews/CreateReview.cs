@@ -42,9 +42,9 @@ public sealed class CreateReviewHandler(
             return ReviewWriteErrors.PlaceNotFound;
 
         // "지금"은 여기서 한 번만 정한다(ADR-007). 사전 확인 날짜·이미지 키·Review.CreatedAt이 모두 이 값을 쓴다.
-        // 날짜는 Review 생성자(ReviewDate)와 같은 식으로 계산해야 사전 확인과 UNIQUE가 같은 날을 본다. GetLocalNow는 서버 시간대를 탄다.
+        // 날짜는 Review 생성자와 같은 함수(ReviewDay)로 — 사전 확인과 UNIQUE가 같은 날을 본다. GetLocalNow는 서버 시간대를 타므로 쓰지 않는다.
         var now = time.GetUtcNow();
-        var reviewDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var reviewDate = ReviewDay.Of(now);
 
         // 4단계(4a). 업로드 전에 걸러 고아 이미지를 줄이는 용도 — 최종 판정은 6단계의 UNIQUE.
         var userId = UserId.From(command.UserId);

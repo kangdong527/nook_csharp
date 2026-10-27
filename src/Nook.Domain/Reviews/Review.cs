@@ -26,7 +26,7 @@ public sealed class Review
 
     public DateTimeOffset CreatedAt { get; }
 
-    // R-RV-03 기준 날짜(UTC). DB의 (user_id, place_id, review_date) UNIQUE가 하루 1개를 최종 보장한다.
+    // R-RV-03 기준 날짜(KST, ReviewDay). DB의 (user_id, place_id, review_date) UNIQUE가 하루 1개를 최종 보장한다.
     public DateOnly ReviewDate { get; }
 
     // 낙관적 동시성 토큰(incident 002). Edit가 성공할 때마다 1 오른다. 저장은 "읽은 Version과 같을 때만" 반영되므로,
@@ -40,7 +40,7 @@ public sealed class Review
         PlaceId = placeId;
         Content = content;
         CreatedAt = createdAt;
-        ReviewDate = DateOnly.FromDateTime(createdAt.UtcDateTime);
+        ReviewDate = ReviewDay.Of(createdAt);
     }
 
     public static Result<Review> Create(
