@@ -82,4 +82,27 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
 
     public Task SaveAsync(Group group, CancellationToken ct) =>
         db.SaveChangesAsync(ct);
+
+    public async Task<IReadOnlyList<MyGroupView>> ListMineAsync(UserId userId, CancellationToken ct)
+    {
+        // 한 문장: 내 멤버십이 있는 그룹 + 멤버 수·내 슬롯·합류 시각을 상관 하위 쿼리로(행 수 ≤ 3, R-GR-02).
+        // 받는 인덱스(예상): ix_group_members_user_id(내 그룹 찾기), pk_group_members(group_id 앞 — 멤버 수). D9에서 EXPLAIN.
+        var rows = await db.Groups
+            .AsNoTracking()
+            .Where(g => g.Members.Any(m => m.UserId == userId))
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.InviteCode,
+                MemberCount = g.Members.Count,
+                Mine = g.Members.Where(m => m.UserId == userId).Select(m => new { m.ColorSlot, m.JoinedAt }).First(),
+                IsOwner = g.OwnerId == userId,
+            })
+            .ToListAsync(ct);
+
+        return [.. rows
+            .OrderBy(r => r.Mine.JoinedAt)
+            .Select(r => new MyGroupView(r.Id.Value, r.Name.Value, r.InviteCode.Value, r.MemberCount, r.Mine.ColorSlot, r.IsOwner))];
+    }
 }

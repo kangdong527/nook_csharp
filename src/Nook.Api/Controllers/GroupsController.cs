@@ -40,6 +40,23 @@ public sealed class GroupsController : ControllerBase
         return result.TryGetValue(out var view, out var error) ? Ok(view) : this.Problem(error);
     }
 
+    // GR-03. 방장만(R-GR-11) — 다른 회원 403 Group.NotOwner, 없는 그룹 404, 이름 형식 400.
+    [HttpPatch("{groupId:guid}")]
+    [ProducesResponseType<GroupView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Rename(
+        Guid groupId,
+        RenameGroupRequest request,
+        [FromServices] RenameGroupHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new RenameGroupCommand(User.GetUserId(), groupId, request.Name), ct);
+
+        return result.TryGetValue(out var view, out var error) ? Ok(view) : this.Problem(error);
+    }
+
     // GR-04. 멱등 — 멤버가 아니거나 그룹이 없어도 204(R-GR-09, D6-1 사용자 결정). 좋아요·북마크의 DELETE와 같은 모양.
     [HttpDelete("{groupId:guid}/membership")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -60,4 +77,9 @@ public sealed class CreateGroupRequest
 public sealed class JoinGroupRequest
 {
     public string? InviteCode { get; init; }
+}
+
+public sealed class RenameGroupRequest
+{
+    public string? Name { get; init; }
 }

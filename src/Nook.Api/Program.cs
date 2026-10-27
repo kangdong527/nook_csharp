@@ -48,6 +48,8 @@ builder.Services.AddScoped<GetMyReviewsHandler>();
 builder.Services.AddScoped<ChangeNicknameHandler>();
 builder.Services.AddScoped<ChangeAvatarHandler>();
 builder.Services.AddScoped<RemoveAvatarHandler>();
+builder.Services.AddScoped<RenameGroupHandler>();
+builder.Services.AddScoped<GetMyGroupsHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();

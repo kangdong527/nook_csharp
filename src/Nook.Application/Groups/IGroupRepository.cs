@@ -24,6 +24,9 @@ public interface IGroupRepository
     // 추적 중인 그룹의 변경(멤버 추가·제거)을 저장한다. erd.md group_members Q3.
     Task SaveAsync(Group group, CancellationToken ct);
 
+    // GR-06 내 그룹 목록. 멤버 수·내 슬롯·방장 여부를 쿼리 한 번에(N+1 없음). 합류 순.
+    Task<IReadOnlyList<MyGroupView>> ListMineAsync(UserId userId, CancellationToken ct);
+
     // erd.md groups Q5. 추적 중인 그룹을 지운다 — RemoveMember가 GroupEmptied를 돌려준 그룹에만(R-GR-09).
     Task DeleteAsync(Group group, CancellationToken ct);
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
 using Nook.Api.Http;
 using Nook.Application.Bookmarks;
+using Nook.Application.Groups;
 using Nook.Application.Reviews;
 using Nook.Application.Users;
 
@@ -79,6 +80,12 @@ public sealed class MeController : ControllerBase
 
         return result.TryGetValue(out var page, out var error) ? Ok(page) : this.Problem(error);
     }
+
+    // GR-06 내 그룹 목록(합류 순, 최대 3개). 없으면 빈 배열.
+    [HttpGet("groups")]
+    [ProducesResponseType<IReadOnlyList<MyGroupView>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Groups([FromServices] GetMyGroupsHandler handler, CancellationToken ct) =>
+        Ok(await handler.HandleAsync(new GetMyGroupsQuery(User.GetUserId()), ct));
 
     // BM-03. 없으면 빈 배열(200).
     [HttpGet("places")]

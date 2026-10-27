@@ -33,6 +33,14 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
     // GR-04 DELETE /groups/{id}/membership
     // - Leave_Member_Returns204AndRemovesMembership
     // - Leave_NotMember_Returns204                                        (멱등)
+    //
+    // GR-03 PATCH /groups/{id} (방장만, R-GR-11)
+    // - Rename_ByOwner_Returns200AndPersists
+    // - Rename_ByMember_Returns403AndKeepsName
+    // - Rename_UnknownGroup_Returns404 / Rename_InvalidName_Returns400
+    //
+    // GR-06 GET /me/groups
+    // - MyGroups_ReturnsJoinOrderWithCountsSlotAndOwnerFlag   (멤버 수 한 쿼리, 내 슬롯, 방장 여부, 남의 그룹 제외)
 
     private const string Code = "ABCDEF";
     private static readonly DateTimeOffset CreatedAt = new(2026, 10, 20, 9, 0, 0, TimeSpan.Zero); // 과거 — 합류 시각(실제 시계)이 그룹 생성보다 앞서면 도메인이 거절한다
@@ -179,6 +187,91 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
     }
 
     // ── 도우미 ─────────────────────────────────────────────
+
+    // ── GR-03 ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task Rename_ByOwner_Returns200AndPersists()
+    {
+        var group = await SeedOwnGroupAsync("내모임", "QWERTY");
+
+        var response = await _client.PatchAsJsonAsync($"/groups/{group.Id.Value}", new { name = "새모임" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("새모임", (await response.Content.ReadFromJsonAsync<GroupView>())!.Name);
+        await using var db = Db.CreateContext();
+        Assert.Equal("새모임", (await db.Groups.SingleAsync(g => g.Id == group.Id)).Name.Value);
+    }
+
+    [Fact]
+    public async Task Rename_ByMember_Returns403AndKeepsName()
+    {
+        var group = await SeedGroupAsync(extraMembers: 0);   // _creator가 방장
+        Assert.Equal(HttpStatusCode.OK, (await JoinAsync(Code)).StatusCode);
+
+        var response = await _client.PatchAsJsonAsync($"/groups/{group.Id.Value}", new { name = "새모임" });
+
+        await AssertProblemAsync(response, HttpStatusCode.Forbidden, GroupErrors.NotOwner);
+        await using var db = Db.CreateContext();
+        Assert.Equal("산책모임", (await db.Groups.SingleAsync(g => g.Id == group.Id)).Name.Value);
+    }
+
+    [Fact]
+    public async Task Rename_UnknownGroup_Returns404()
+    {
+        var response = await _client.PatchAsJsonAsync($"/groups/{Guid.CreateVersion7()}", new { name = "새모임" });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Rename_InvalidName_Returns400()
+    {
+        var group = await SeedOwnGroupAsync("내모임", "QWERTY");
+
+        var response = await _client.PatchAsJsonAsync($"/groups/{group.Id.Value}", new { name = "a" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── GR-06 ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task MyGroups_ReturnsJoinOrderWithCountsSlotAndOwnerFlag()
+    {
+        var joined = await SeedGroupAsync(extraMembers: 2);                       // _creator + 2명 → 내가 들어가면 4명
+        var own = await SeedOwnGroupAsync("내모임", "QWERTY", CreatedAt.AddDays(-1));   // 내가 방장, 1명 — 먼저 합류
+        Assert.Equal(HttpStatusCode.OK, (await JoinAsync(Code)).StatusCode);
+        await SeedStrangersGroupAsync();                                          // 내가 없는 그룹 — 섞이면 안 된다
+
+        var groups = await _client.GetFromJsonAsync<List<MyGroupView>>("/me/groups");
+
+        Assert.Equal([own.Id.Value, joined.Id.Value], groups!.Select(g => g.Id));
+        Assert.Equal((1, true), (groups[0].MemberCount, groups[0].IsOwner));
+        Assert.Equal((4, false), (groups[1].MemberCount, groups[1].IsOwner));
+        await using var db = Db.CreateContext();
+        var mySlot = (await db.Groups.AsNoTracking().SingleAsync(g => g.Id == joined.Id)).Members.Single(m => m.UserId == _user.Id).ColorSlot;
+        Assert.Equal(mySlot, groups[1].MyColorSlot);
+    }
+
+    // 내가 만든 그룹(내가 방장).
+    private async Task<Group> SeedOwnGroupAsync(string name, string code, DateTimeOffset? createdAt = null)
+    {
+        var group = Group.Create(GroupName.From(name), _user.Id, InviteCode.From(code), createdAt ?? CreatedAt);
+        await using var db = Db.CreateContext();
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        return group;
+    }
+
+    private async Task SeedStrangersGroupAsync()
+    {
+        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), Gender.None, null);
+        var group = Group.Create(GroupName.From("남의모임"), stranger.Id, InviteCode.From("ZXCVBN"), CreatedAt);
+        await using var db = Db.CreateContext();
+        db.AddRange(stranger, group);
+        await db.SaveChangesAsync();
+    }
 
     private Task<HttpResponseMessage> JoinAsync(string code) =>
         _client.PostAsJsonAsync("/groups/join", new { inviteCode = code });
