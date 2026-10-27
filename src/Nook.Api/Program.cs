@@ -43,6 +43,7 @@ builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();
 builder.Services.AddScoped<EditReviewHandler>();
+builder.Services.AddScoped<GetReviewForEditHandler>();
 builder.Services.AddScoped<DeleteReviewHandler>();
 builder.Services.AddScoped<CreateGroupHandler>();
 builder.Services.AddScoped<JoinGroupHandler>();

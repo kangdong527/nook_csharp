@@ -40,6 +40,18 @@ public sealed class ReviewsController : ControllerBase
         }
     }
 
+    // RV-04. 수정 화면 전용 — 작성자만(남의 리뷰 403, 없으면 404).
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<EditableReviewView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetForEdit(Guid id, [FromServices] GetReviewForEditHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetReviewForEditQuery(User.GetUserId(), id), ct);
+
+        return result.TryGetValue(out var review, out var error) ? Ok(review) : this.Problem(error);
+    }
+
     // RV-02. 본문·이미지를 통째로 보낸다(최종 상태) → PUT. 200 + 수정된 리뷰.
     [HttpPut("{id:guid}")]
     [Consumes("multipart/form-data")]

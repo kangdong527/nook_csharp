@@ -57,6 +57,12 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Delete_Concurrent_OneChangedOneUnchanged                           (7, 3c)
     // - Delete_WhenStorageDeleteFails_StillReturns200                      (8)
     // - Delete_ThenCreateSameDay_Returns201                                (9 — R-RV-03 미결의 현재 동작 기록)
+    //
+    // RV-04 — 수정 화면 전용 단건 조회(작성자만)
+    // - GetForEdit_Own_Returns200WithPlaceNameImagesInOrderAndVersion
+    // - GetForEdit_ThenEditWithReturnedVersion_Returns200                  (version 왕복 — RV-02 계약)
+    // - GetForEdit_ByOtherUser_Returns403                                  (RV-02 4b와 같은 오류)
+    // - GetForEdit_UnknownReview_Returns404
 
     // 시계를 고정한다: 사전 확인 날짜·키 날짜·CreatedAt이 이 값 하나에서 나오는지 확인할 수 있다.
     // 20:00Z = KST 다음 날 05:00 — 로컬 날짜와 UTC 날짜가 갈리는 시각이라, 날짜를 로컬로 계산하면 드러난다.
@@ -547,6 +553,58 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     }
 
     // RV-03 공통 시작 상태: 내 리뷰 R(오늘, 이미지 2장) + 다른 회원의 좋아요 1개.
+    [Fact]
+    public async Task GetForEdit_Own_Returns200WithPlaceNameImagesInOrderAndVersion()
+    {
+        var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
+
+        var view = await _client.GetFromJsonAsync<EditableReviewView>($"/reviews/{reviewId}");
+
+        Assert.NotNull(view);
+        Assert.Equal((reviewId, _place.Id.Value, "누크 카페", Content, SeededVersion),
+            (view.Id, view.PlaceId, view.PlaceName, view.Content, view.Version));
+        Assert.Equal(
+            [new(a.Id.Value, a.StorageKey), new(b.Id.Value, b.StorageKey), new(c.Id.Value, c.StorageKey)],
+            view.Images);
+    }
+
+    [Fact]
+    public async Task GetForEdit_ThenEditWithReturnedVersion_Returns200()
+    {
+        var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
+        var view = await _client.GetFromJsonAsync<EditableReviewView>($"/reviews/{reviewId}");
+
+        var response = await EditAsync(reviewId, Ids(a), [], _client, view!.Version);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetForEdit_ByOtherUser_Returns403()
+    {
+        var (reviewId, _, _, _) = await SeedReviewWithThreeImagesAsync();
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        await using (var db = Db.CreateContext())
+        {
+            db.Add(other);
+            await db.SaveChangesAsync();
+        }
+        using var otherClient = _factory.CreateClient();
+        Authorize(otherClient, _factory, other.Id.Value);
+
+        var response = await otherClient.GetAsync($"/reviews/{reviewId}");
+
+        await AssertProblemAsync(response, HttpStatusCode.Forbidden, ReviewWriteErrors.NotReviewAuthor);
+    }
+
+    [Fact]
+    public async Task GetForEdit_UnknownReview_Returns404()
+    {
+        var response = await _client.GetAsync($"/reviews/{Guid.NewGuid()}");
+
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, ReviewWriteErrors.ReviewNotFound);
+    }
+
     private async Task<Guid> SeedReviewToDeleteAsync()
     {
         var (reviewId, _) = await SeedReviewAsync("a.jpg", "b.jpg");
@@ -644,7 +702,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return await db.Reviews.AsNoTracking().SingleAsync(r => r.Id == ReviewId.From(reviewId));
     }
 
-    // 클라이언트가 수정 화면에 들어가는 길 — 단건 GET이 없어 장소별 목록에서 버전을 얻는다.
+    // 장소별 목록(PL-02)에서 버전을 얻는 길. 수정 화면은 RV-04 단건 GET으로도 얻는다.
     private async Task<int> GetPlaceReviewVersionAsync(Guid reviewId)
     {
         var page = await _client.GetFromJsonAsync<ReviewPageView>($"/places/{_place.Id.Value}/reviews");
