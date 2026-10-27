@@ -147,7 +147,7 @@ function MapView({ user }: { user: User }) {
     try {
       const places: MarkerPlace[] = activeGroupId
         ? await getGroupSavedPlaces(activeGroupId)
-        : await getMySavedPlaces(userId);
+        : await getMySavedPlaces();
       renderMarkers(places, window.kakao);
     } catch {
       /* 마커 로드 실패는 조용히 무시 */

@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase, STORAGE_BUCKET } from "./supabase";
+import { nookFetch } from "./api/client";
 import {
   GROUP_COLORS,
   GROUP_MAX_COUNT,
@@ -12,6 +13,7 @@ import {
   type Place,
   type Review,
   type SavedPlace,
+  type StarState,
   type User,
 } from "./types";
 
@@ -121,120 +123,90 @@ const mapPlace = (r: PlaceRow): Place => ({
   lng: r.lng,
 });
 
-// 카카오 장소를 DB 에 저장(있으면 가져오기)
-export async function upsertPlace(p: KakaoPlace): Promise<Place> {
-  const existing = await supabase
-    .from("places")
-    .select("*")
-    .eq("kakao_id", p.kakaoId)
-    .maybeSingle();
-  if (existing.data) return mapPlace(existing.data as PlaceRow);
+// C# API 장소 응답(PlaceView·MyPlaceView·PlaceDetailView 공통 필드). FE-2.
+type PlaceApiView = {
+  id: string;
+  kakaoPlaceId: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
 
-  const { data, error } = await supabase
-    .from("places")
-    .insert({
-      kakao_id: p.kakaoId,
-      name: p.name,
-      category: p.category,
-      address: p.address,
-      road_address: p.roadAddress,
-      phone: p.phone,
-      place_url: p.placeUrl,
-      lat: p.lat,
-      lng: p.lng,
-    })
-    .select("*")
-    .single();
-  if (error || !data) {
-    // 동시 insert 충돌 시 재조회
-    const retry = await supabase
-      .from("places")
-      .select("*")
-      .eq("kakao_id", p.kakaoId)
-      .maybeSingle();
-    if (retry.data) return mapPlace(retry.data as PlaceRow);
-    throw error ?? new Error("upsert place failed");
-  }
-  return mapPlace(data as PlaceRow);
+type PlaceDetailApiView = PlaceApiView & { star: StarState; isBookmarked: boolean };
+
+// 우리 places 에 없는 카카오 부가 정보는 빈 값 — 화면은 이미 빈 값이면 숨긴다(`p.category &&`, `roadAddress || address`).
+const toPlace = (v: PlaceApiView): Place => ({
+  id: v.id,
+  kakaoId: v.kakaoPlaceId,
+  name: v.name,
+  category: "",
+  address: v.address,
+  roadAddress: "",
+  phone: "",
+  placeUrl: "",
+  lat: v.latitude,
+  lng: v.longitude,
+});
+
+async function getPlaceDetail(placeId: string): Promise<PlaceDetailApiView | null> {
+  const res = await nookFetch(`/places/${placeId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`장소 조회 실패: ${res.status}`);
+  return (await res.json()) as PlaceDetailApiView;
 }
 
+// 카카오 장소를 DB 에 저장(있으면 가져오기)
+// PL-01. 카카오 검색 결과를 확정한다 — 새로 만들든 기존 것이든 같은 응답(멱등, 동시 등록은 서버 UNIQUE가 판정).
+// 우리 places 에는 카테고리·전화·URL 이 없다(D3-2) — 화면 표시용으로 카카오 값을 그대로 붙여 돌려준다.
+export async function upsertPlace(p: KakaoPlace): Promise<Place> {
+  const res = await nookFetch("/places", {
+    method: "POST",
+    body: JSON.stringify({
+      kakaoPlaceId: p.kakaoId,
+      name: p.name,
+      address: p.roadAddress || p.address,
+      latitude: p.lat,
+      longitude: p.lng,
+    }),
+  });
+  if (!res.ok) throw new Error(`장소 확정 실패: ${res.status}`);
+  const view = (await res.json()) as PlaceApiView;
+  return { ...p, id: view.id };
+}
+
+// PL-02 장소 상세. 없으면 null(404).
 export async function getPlace(placeId: string): Promise<Place | null> {
-  const { data } = await supabase
-    .from("places")
-    .select("*")
-    .eq("id", placeId)
-    .maybeSingle();
-  return data ? mapPlace(data as PlaceRow) : null;
+  const detail = await getPlaceDetail(placeId);
+  return detail ? toPlace(detail) : null;
 }
 
 // =========================================================
 // 북마크 (회색 별)
 // =========================================================
-export async function isBookmarked(
-  userId: string,
-  placeId: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("bookmarks")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("place_id", placeId)
-    .maybeSingle();
-  return !!data;
+// PL-02 장소 상세의 IsBookmarked — 별(star)은 리뷰가 있으면 fill 이라 북마크 여부를 따로 받는다.
+// 회원은 토큰이 정한다 — userId 인자를 받지 않는다(남의 북마크를 물을 길이 없다).
+export async function isBookmarked(placeId: string): Promise<boolean> {
+  return (await getPlaceDetail(placeId))?.isBookmarked ?? false;
 }
 
 // 북마크 토글 → 최종 북마크 여부 반환
-export async function toggleBookmark(
-  userId: string,
-  placeId: string
-): Promise<boolean> {
-  if (await isBookmarked(userId, placeId)) {
-    await supabase
-      .from("bookmarks")
-      .delete()
-      .eq("user_id", userId)
-      .eq("place_id", placeId);
-    return false;
-  }
-  await supabase.from("bookmarks").insert({ user_id: userId, place_id: placeId });
-  return true;
+// BM-01·02. 토글 대신 원하는 상태를 명시한다(PUT = 저장, DELETE = 해제, 둘 다 멱등).
+// 원본 toggle 은 "조회 → 반대로"라 두 번 누르면 경합했다. 화면이 지금 상태를 알므로 목표 상태를 보낸다.
+export async function setBookmarked(placeId: string, on: boolean): Promise<void> {
+  const res = await nookFetch(`/places/${placeId}/bookmark`, { method: on ? "PUT" : "DELETE" });
+  if (!res.ok) throw new Error(`북마크 ${on ? "저장" : "해제"} 실패: ${res.status}`);
 }
 
 // =========================================================
 // 내가 저장한 장소 (지도 마커)
 // =========================================================
-export async function getMySavedPlaces(userId: string): Promise<SavedPlace[]> {
-  const [bm, rv] = await Promise.all([
-    supabase
-      .from("bookmarks")
-      .select("places(*)")
-      .eq("user_id", userId),
-    supabase
-      .from("reviews")
-      .select("places(*)")
-      .eq("user_id", userId),
-  ]);
-
-  const byId = new Map<string, SavedPlace>();
-
-  const addRows = (
-    rows: { places: PlaceRow | null }[] | null,
-    star: "gray" | "fill"
-  ) => {
-    (rows ?? []).forEach((row) => {
-      const pr = row.places;
-      if (!pr) return;
-      const existing = byId.get(pr.id);
-      // 리뷰(fill)가 북마크(gray)보다 우선
-      if (existing && existing.star === "fill") return;
-      byId.set(pr.id, { ...mapPlace(pr), star });
-    });
-  };
-
-  addRows(bm.data as unknown as { places: PlaceRow | null }[], "gray");
-  addRows(rv.data as unknown as { places: PlaceRow | null }[], "fill");
-
-  return Array.from(byId.values());
+// BM-03 내 지도. 별 판정(gray/fill)은 서버가 한다(R-STAR 한 곳).
+export async function getMySavedPlaces(): Promise<SavedPlace[]> {
+  const res = await nookFetch("/me/places");
+  if (!res.ok) throw new Error(`내 지도 조회 실패: ${res.status}`);
+  const views = (await res.json()) as (PlaceApiView & { star: "gray" | "fill" })[];
+  return views.map((v) => ({ ...toPlace(v), star: v.star }));
 }
 
 // 프로필 별 개수: 빈별(=북마크만) / 채운별(=리뷰 작성 장소)

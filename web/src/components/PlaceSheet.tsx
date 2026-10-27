@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   getReviewsByPlace,
   isBookmarked,
-  toggleBookmark,
+  setBookmarked as saveBookmark,
   upsertPlace,
 } from "@/lib/store";
 import type { KakaoPlace, Place, Review, StarState } from "@/lib/types";
@@ -65,7 +65,7 @@ export function PlaceSheet({
         setPlace(p);
         const [rv, bm] = await Promise.all([
           getReviewsByPlace(p.id, userId),
-          isBookmarked(userId, p.id),
+          isBookmarked(p.id),
         ]);
         if (!alive) return;
         setReviews(rv);
@@ -103,7 +103,7 @@ export function PlaceSheet({
     const prev = bookmarked;
     setBookmarked(!prev);
     try {
-      await toggleBookmark(userId, place.id);
+      await saveBookmark(place.id, !prev);
       onChanged?.();
     } catch {
       setBookmarked(prev);
