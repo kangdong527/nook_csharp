@@ -66,6 +66,17 @@ public sealed class MeController : ControllerBase
         return result.TryGetValue(out var me, out var error) ? Ok(me) : this.Problem(error);
     }
 
+    // PF-02 회원 탈퇴. 204. 이미 탈퇴했으면 401(AU-04와 같다). 리뷰·좋아요는 남는다(PM). 쿠키 삭제는 BFF(/api/auth/withdraw)가 한다.
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Withdraw([FromServices] WithdrawHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(User.GetUserId(), ct);
+
+        return result.IsFailure(out var error) ? this.Problem(error) : NoContent();
+    }
+
     // PF-04. 첫 요청은 cursor 없이, 다음부터는 직전 응답의 nextCursor 그대로. 기본 5개(유스케이스 "5개씩 더 보기").
     [HttpGet("reviews")]
     [ProducesResponseType<MyReviewPageView>(StatusCodes.Status200OK)]

@@ -52,4 +52,10 @@ internal sealed class MagicLinkTokenStore(NookDbContext db) : IMagicLinkTokenSto
             SET consumed_at = {now}
             WHERE lower(email) = lower({email.Value}) AND consumed_at IS NULL
             """, ct);
+
+    public Task DeleteAllAsync(Email email, CancellationToken ct) =>
+        // PF-02. 받는 인덱스: ix_magic_link_tokens_email_lower_created(앞 열 lower(email)).
+        db.Database.ExecuteSqlAsync($"""
+            DELETE FROM magic_link_tokens WHERE lower(email) = lower({email.Value})
+            """, ct);
 }

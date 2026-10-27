@@ -147,4 +147,12 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
             LEFT JOIN bm ON bm.place_id = p.id
             WHERE rv.place_id IS NOT NULL OR bm.place_id IS NOT NULL
             """).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<GroupId>> ListMembershipGroupIdsAsync(UserId userId, CancellationToken ct) =>
+        // erd.md group_members Q2. 받는 인덱스: ix_group_members_user_id.
+        await db.Groups
+            .Where(g => g.Members.Any(m => m.UserId == userId))
+            .OrderBy(g => g.Id)
+            .Select(g => g.Id)
+            .ToListAsync(ct);
 }

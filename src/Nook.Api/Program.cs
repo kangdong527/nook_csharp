@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
 using Nook.Application.Groups;
@@ -51,6 +52,7 @@ builder.Services.AddScoped<RemoveAvatarHandler>();
 builder.Services.AddScoped<RenameGroupHandler>();
 builder.Services.AddScoped<GetMyGroupsHandler>();
 builder.Services.AddScoped<GetGroupPlacesHandler>();
+builder.Services.AddScoped<WithdrawHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();
@@ -95,10 +97,15 @@ builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
 builder.Services.AddControllers();
+// 처리되지 않은 예외 → ProblemDetails. 회원 FK 위반(탈퇴 후 남은 토큰)만 401로 바꾸고 나머지는 500(PF-02).
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<UnknownUserExceptionHandler>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

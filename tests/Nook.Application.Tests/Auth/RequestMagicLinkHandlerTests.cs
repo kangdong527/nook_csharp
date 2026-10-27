@@ -118,6 +118,9 @@ public class RequestMagicLinkHandlerTests
         public Task<Email?> ConsumeAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken ct) =>
             throw new NotSupportedException();
 
+        public Task DeleteAllAsync(Email email, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public Task RevokeRemainingAsync(Email email, DateTimeOffset now, CancellationToken ct) =>
             throw new NotSupportedException();
     }

@@ -15,6 +15,9 @@ public interface IMagicLinkTokenStore
     // null = 없음·만료·이미 사용(구분하지 않는다). 트랜잭션 안에서 부르면 롤백 시 소모도 되돌아간다.
     Task<Email?> ConsumeAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken ct);
 
+    // PF-02. 그 이메일의 링크 기록을 모두 지운다(이메일 = 개인정보). 대소문자 무시.
+    Task DeleteAllAsync(Email email, CancellationToken ct);
+
     // erd.md magic_link_tokens Q3. 로그인 성공 후 같은 이메일의 남은 링크를 모두 소모 처리한다.
     Task RevokeRemainingAsync(Email email, DateTimeOffset now, CancellationToken ct);
 }

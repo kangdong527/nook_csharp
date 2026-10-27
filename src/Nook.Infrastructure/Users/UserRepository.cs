@@ -23,6 +23,25 @@ internal sealed class UserRepository(NookDbContext db) : IUserRepository
         // erd.md users Q1. 추적 쿼리 — 핸들러가 ChangeNickname으로 바꾼 것을 SaveAsync가 그대로 저장한다.
         db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
 
+    public async Task<User?> LockForDeleteAsync(UserId userId, CancellationToken ct)
+    {
+        // 잠금과 로딩을 나눈다(GroupRepository.LockByIdAsync와 같은 이유 — 잠금 대기 뒤 최신을 다시 읽는다).
+        // FOR UPDATE: 지울 행이라 가장 강한 잠금. 합류·생성의 FOR NO KEY UPDATE(LockAsync)와 충돌한다.
+        var locked = await db.Database.SqlQuery<Guid>($"""
+            SELECT id AS "Value" FROM users WHERE id = {userId.Value} FOR UPDATE
+            """).ToListAsync(ct);
+        if (locked is [])
+            return null;
+
+        return await db.Users.SingleAsync(u => u.Id == userId, ct);
+    }
+
+    public async Task DeleteAsync(User user, CancellationToken ct)
+    {
+        db.Users.Remove(user);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<Result> AddAsync(User user, CancellationToken ct)
     {
         db.Users.Add(user);

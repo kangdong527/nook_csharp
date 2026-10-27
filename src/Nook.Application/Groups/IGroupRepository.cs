@@ -27,6 +27,9 @@ public interface IGroupRepository
     // GR-06 내 그룹 목록. 멤버 수·내 슬롯·방장 여부를 쿼리 한 번에(N+1 없음). 합류 순.
     Task<IReadOnlyList<MyGroupView>> ListMineAsync(UserId userId, CancellationToken ct);
 
+    // PF-02. 회원이 속한 그룹 ID들 — 그룹 ID 순(여러 그룹을 잠글 때 순서를 고정해 교착을 피한다). 잠그지 않는다.
+    Task<IReadOnlyList<GroupId>> ListMembershipGroupIdsAsync(UserId userId, CancellationToken ct);
+
     // GR-05 접근 확인. 그룹이 없으면 null, 있으면 회원이 멤버인지.
     Task<bool?> IsMemberAsync(GroupId groupId, UserId userId, CancellationToken ct);
 
