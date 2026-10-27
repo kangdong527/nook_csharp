@@ -1,14 +1,14 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-27, FE-2 — 원본 함수 28/28 연결·Supabase 제거 완료, 브라우저 화면 확인부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **FE 진행 중** (2026-10-28, FE-2 이어서 — 원본 함수 28/28·Supabase 제거 완료, 브라우저 확인 중 **그룹 지도 버그 재현부터**). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **FE** (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
      - 결정(사용자): 같은 리포 `web/`(원본 리포는 Supabase판으로 보존), TypeScript + Next.js 14 그대로, React Native 변환 안 함. 개발 포트 **3300**(카카오 도메인 등록 기준 → CORS도 3300)
      - 연결 구조: 브라우저 → C# API → Docker PostgreSQL. 프론트는 DB를 모른다. 끝나면 `@supabase/*`·`NEXT_PUBLIC_SUPABASE_*` 전부 제거
-     - ⚠️ 지금 `web/.env.local`은 원본 것(실제 Supabase 프로젝트). 교체 전에는 화면 확인만, 로그인·쓰기 금지(원본 DB에 기록됨)
+     - ~~`web/.env.local`은 원본 Supabase 것~~ → FE-2에서 Supabase 제거. `NEXT_PUBLIC_SUPABASE_*` 줄은 쓰이지 않으니 사용자가 지운다(남아도 동작 영향 없음)
      - ~~가져오기 커밋~~ ✅ `73a14db` · 루트 `.env*.local` 무시 `508de04`
      - ~~`npm audit fix`~~ ✅ `48bb561`(lockfile만, `tsc`·`next build` 통과. 남은 것은 next critical 1건 → DEP 전 업그레이드)
      - 백엔드 할 일 전체 목록: **`docs/design/fe-backend-backlog.md`**(원본 함수 28개 대조, 제안 순서 1~7, 결정 기록). 순서·일정은 사용자 결정 — 아래는 그 3번부터
@@ -26,7 +26,13 @@
        - ~~3. GR-05 그룹 지도~~ ✅ `237d1f8` — 장소마다 1행 사실(리뷰 멤버 수·첫 리뷰어 슬롯·북마크 수·단독 북마커 슬롯), SQL 1문장, 멤버만 403 · FE 그룹 6함수 `403bdd6`(슬롯 → 원본 팔레트 임시 매핑 `slotColor`, PM 별 그리기 `groupStarSvg`, 그룹명 2~6자, 이름 변경 UI 방장만). 로컬 API로 두 회원 흐름 확인(합류·403·방장 넘김)
      - ~~탈퇴 PF-02~~ ✅ — 스키마 `9d4440e`(reviews·likes `SET NULL`, likes 대리 키 `id` — 복합 PK는 NULL 불가) · `DELETE /me` `33f84cd`(회원 행 FOR UPDATE → 그룹마다 나가기 경로 → 링크 기록 삭제 → DELETE, 커밋 뒤 사진 삭제, 남은 토큰 쓰기 = 자식 쪽 FK 위반만 401) · FE `2683756`(BFF `/api/auth/withdraw`, "탈퇴한 사용자"). PM 답: 복구 없음, 좋아요 유지
      - ~~Supabase 제거~~ ✅ `795dbb3` — 패키지·어댑터·탐침·환경변수. **원본 함수 28/28 연결, 화면 코드에 Supabase 없음**
-     - **▶ 다음 (여기서 시작)**: 브라우저로 화면 전체 확인 — 사용자 준비: `web/.env.local`에서 `NEXT_PUBLIC_SUPABASE_*` 줄 삭제(더는 안 씀), 카카오 JS 키 확인(`http://localhost:3300` 등록), 필요하면 `NOOK_API_URL`. 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev` → 메일 링크는 API 콘솔 로그. 확인할 것: 가입(성별·생일)·로그인·지도 별·장소 시트(북마크·리뷰 무한 스크롤)·리뷰 작성/수정(사진·충돌)·프로필(피드 더 보기·닉네임·사진)·그룹(생성·합류·이름·그룹 지도 별)·탈퇴
+     - **▶ 다음 (여기서 시작)**: **그룹 지도 버그 재현** (사용자 보고, 2026-10-28) — "다른 그룹원이 **북마크만** 한 장소가 내 그룹 지도에 회색 별로 안 보인다. 그 그룹원이 리뷰를 쓰면 그때 채운 별이 보인다"
+       - 지금까지 판정(systematic-debugging, 원인 미확정): H1 서버가 북마크만 장소를 뺀다 → 가능성 낮음(통합 테스트 `Places_AggregatesPerPlace`가 이 경우를 확인, 로컬 DB로 GR-05 SQL을 직접 돌려도 잡힘) · H2 화면이 안 보이게 그린다 → 가능성 낮음(`groupStarSvg` 북마크 1개 = 회색 + 슬롯 색 외곽선) · **H3 그룹 지도가 다시 불러와지지 않는다 → 가장 유력**(`MapScreen.reloadSaved`는 그룹을 고를 때·내 시트 변경 때만 호출 — 다른 멤버의 변경은 새로 불러오기 전까지 안 보인다)
+       - DB 시각(그룹 "쥑쥑" `01a17de9-a2c1-7a1f-afad-2f4b9cb0766a`, hwi 슬롯 1·jamME 슬롯 2, 장소 "제기동역 1호선"): jamME 북마크 14:25 → 합류 15:10 → 리뷰 15:12(UTC). 15:10~15:12에 hwi가 그룹 지도를 다시 불러왔다면 회색 별이 보였어야 한다 — 다시 불러왔는지는 모름
+       - **재현 순서**: ① jamME가 새 장소를 **북마크만** ② hwi 브라우저로 `http://localhost:3300/api/nook/groups/01a17de9-a2c1-7a1f-afad-2f4b9cb0766a/places` → 그 장소가 `"bookmarkCount":1,"soleBookmarkerSlot":2`인지 ③ hwi 지도에서 다른 그룹(내 지도)으로 바꿨다 다시 "쥑쥑" → 회색 별(초록 외곽선)이 보이는지
+       - 판정: ②에 없음 → H1(SQL 재검토) / ②에 있고 ③에 보임 → H3 확정 → 해결 방식 사용자 결정(탭 복귀 시 다시 불러오기·일정 간격·그룹 지도 진입마다 등) / ②에 있고 ③에도 안 보임 → H2(그리기 코드). 원인 확정 뒤 `incident-log`로 기록
+       - 그 외 브라우저 확인: 로그인·카카오 지도 첫 화면 정상(사용자). 나머지 확인 목록(가입·장소 시트·리뷰 작성/수정·프로필·그룹·탈퇴)은 이 버그 뒤 이어서 — 확인 목록은 FE-2 세션 대화의 A1~9·B10~16
+       - 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev`(루트에서 `npx next` 금지 — next@16을 받아 실행) → 메일 링크는 API 콘솔. 사진은 `src/Nook.Api/App_Data/images/`(git 제외). 로컬 DB에 Supabase 데이터 없음(이관한 적 없음 — 회원 10명: 확인용 `@nook.test` 9 + 사용자 `jam`)
        - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
        - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
@@ -403,6 +409,7 @@ Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `p
 16. 그룹: 방장(PM 허가, ADR-012 — ADR-004 결정 6 번복, 원본 CASCADE 결함 대신 넘기기 + RESTRICT), 색은 슬롯 저장(디자인 미정), N+1 → SQL 1문장(로그로 확인, 비교 측정은 D9), 그룹 지도는 장소마다 1행 사실(사용자 A안). owner FK 때문에 원자성 테스트가 다른 경로를 타게 된 것을 발견 → 임시 CHECK로 원래 상황 재현
 17. 탈퇴(PF-02): PM 답 — 복구 없음, 좋아요 유지. 좋아요의 복합 PK `(user_id, review_id)`는 NULL이 될 수 없어 대리 키 + UNIQUE(A안, 사용자 결정) — "규칙이 PK 자체"(D2)의 대가. 남은 토큰은 요청마다 회원 조회 대신 FK 위반을 401로 번역(DB가 최종 판정자). 변이로 발견: 그룹 나가기를 빼먹은 **버그가 401로 가려짐** → 자식 쪽 위반("insert or update")만 401, 부모 쪽은 500. `UseExceptionHandler` 추가로 처리 안 된 예외는 500 ProblemDetails
 18. Supabase 제거: 화면 코드에 참조 0. npm audit은 제거 전후 같음(next critical 1, glob high 3 — dev lint 경유)
+19. (2026-10-28) 브라우저 확인 시작 — 로그인·지도 정상. 사진 저장 위치 질문(로컬 디스크 `App_Data/images`, DB엔 키만). 로컬 DB에 Supabase 데이터가 넘어오지 않았음을 확인(회원 10명 출처 대조). **버그 보고 1건**(그룹 지도에서 다른 멤버의 북마크만 장소가 안 보임) → 가설 H1~H3, 재현 순서 정리, 원인 미확정 — 다음 세션 재개 지점
 커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · `3a531ad` progress · `b1a6e79` PF-04·03 · `a5a6f0e` PF-01 · `ed28fbc` 방장·슬롯 · `ea94b3f` GR-03·06 · `1f13faa` progress · `237d1f8` GR-05 · `403bdd6` FE 그룹 · `cb31f42` progress · `9d4440e`·`33f84cd`·`2683756` 탈퇴 · `795dbb3` Supabase 제거 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
 Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절차·예외 처리기·FE), 그룹·프로필 전체, web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
