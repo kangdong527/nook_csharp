@@ -20,7 +20,7 @@ public sealed class CreateGroupTests : IntegrationTestBase, IDisposable
     // - Create_WhenUserInMaxGroups_ReturnsTooManyGroupsAndAddsNothing   (R-GR-02)
     //
     // 원자성(R-GR-08)
-    // - Create_WhenMemberInsertFails_LeavesNoGroup                 (없는 회원 → fk_group_members_users)
+    // - Create_WhenMemberInsertFails_LeavesNoGroup                 (groups는 통과, group_members만 임시 CHECK로 실패)
     //
     // 초대 코드 충돌(R-GR-06)
     // - Create_WhenInviteCodeCollides_RetriesWithNextCode
@@ -94,15 +94,25 @@ public sealed class CreateGroupTests : IntegrationTestBase, IDisposable
 
     // groups INSERT는 성공하고 group_members INSERT가 FK로 실패하는 상황. 한 트랜잭션이면 그룹도 남지 않는다.
     [Fact]
+    // FE-2: groups.owner_id FK가 생겨 "없는 회원"으로는 groups INSERT가 먼저 실패한다 — 이 상황을 더는 만들 수 없다.
+    // 대신 group_members에만 걸리는 임시 CHECK(항상 거짓)로 멤버 INSERT만 실패시킨다. 통합 테스트는 한 컬렉션이라 순서대로 돈다.
     public async Task Create_WhenMemberInsertFails_LeavesNoGroup()
     {
-        var missingUser = UserId.New();
+        var creator = await SeedUserAsync(1);
         _codes.Enqueue("ABCDEF");
+        await using var db = Db.CreateContext();
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE group_members ADD CONSTRAINT ck_test_reject_members CHECK (false) NOT VALID");
+        try
+        {
+            var ex = await Assert.ThrowsAsync<DbUpdateException>(() => CreateAsync(creator.Id, "산책모임"));
 
-        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => CreateAsync(missingUser, "산책모임"));
-
-        Assert.Contains("fk_group_members_users", ex.InnerException?.Message);
-        Assert.Equal(0, await Db.CreateContext().Groups.CountAsync());
+            Assert.Contains("ck_test_reject_members", ex.InnerException?.Message);
+            Assert.Equal(0, await Db.CreateContext().Groups.CountAsync());
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE group_members DROP CONSTRAINT ck_test_reject_members");
+        }
     }
 
     // ── 초대 코드 충돌 ────────────────────────────────────

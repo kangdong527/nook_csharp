@@ -15,7 +15,7 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
 {
     // 테스트 목록
     //
-    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 16개, 제약마다 위반 방식 1~3개)
+    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 18개, 제약마다 위반 방식 1~3개)
 
     private static readonly DateTimeOffset CreatedAt = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
@@ -41,6 +41,7 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
         { "groups", "invite_code = 'abcdef'", "ck_groups_invite_code" },                 // 소문자
         { "groups", "name = 'a'", "ck_groups_name" },                                    // 2자 미만
         { "groups", "name = ' 산책 '", "ck_groups_name" },                               // trim 안 된 값
+        { "group_members", "color_slot = 4", "ck_group_members_color_slot" },            // 슬롯 4개(0~3) 밖
         { "magic_link_tokens", "token_hash = decode('ab', 'hex')", "ck_magic_link_tokens_token_hash" },  // 1바이트(해시 아님)
         { "magic_link_tokens", "expires_at = created_at", "ck_magic_link_tokens_expires" },               // 처음부터 만료
         { "magic_link_tokens", "consumed_at = created_at - interval '1 second'", "ck_magic_link_tokens_consumed" }, // 발급 전 소모

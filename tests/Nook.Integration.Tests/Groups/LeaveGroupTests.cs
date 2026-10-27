@@ -17,6 +17,7 @@ public sealed class LeaveGroupTests : IntegrationTestBase, IDisposable
     //
     // 흐름
     // - Leave_AsMember_RemovesOnlyThatMember
+    // - Leave_AsOwner_TransfersOwnershipToEarliestJoined      (R-GR-11)
     // - Leave_AsLastMember_DeletesGroup                                  (R-GR-09)
     // - Leave_WhenNotMember_SucceedsAndChangesNothing                    (멱등)
     // - Leave_WhenGroupMissing_Succeeds                                  (멱등 — 마지막 멤버의 두 번째 요청)
@@ -57,6 +58,26 @@ public sealed class LeaveGroupTests : IntegrationTestBase, IDisposable
 
         Assert.True(result.IsSuccess);
         Assert.Equal([a.Id], await MemberIdsAsync(groupId));
+    }
+
+    // R-GR-11: 방장이 나가면 남은 멤버 중 가장 먼저 합류한 회원이 방장 — 저장까지 확인.
+    [Fact]
+    public async Task Leave_AsOwner_TransfersOwnershipToEarliestJoined()
+    {
+        var (owner, early, late) = (await SeedUserAsync(1), await SeedUserAsync(2), await SeedUserAsync(3));
+        var group = Group.Create(GroupName.From("모임"), owner.Id, InviteCode.From("ABCDEF"), CreatedAt);
+        Assert.True(group.AddMember(late.Id, CreatedAt.AddMinutes(10)).IsSuccess);
+        Assert.True(group.AddMember(early.Id, CreatedAt.AddMinutes(5)).IsSuccess);
+        await using (var db = Db.CreateContext())
+        {
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True((await LeaveAsync(owner.Id, group.Id)).IsSuccess);
+
+        await using var check = Db.CreateContext();
+        Assert.Equal(early.Id, (await check.Groups.SingleAsync(g => g.Id == group.Id)).OwnerId);
     }
 
     [Fact]

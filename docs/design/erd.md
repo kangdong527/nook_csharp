@@ -358,6 +358,7 @@ erDiagram
 | name | `varchar(6)` | NOT NULL | 없음 | NFC·trim된 그룹명(`GroupName.Value`). 상한은 `GroupName.MaxLength`와 같다. 유일하지 않다 |
 | invite_code | `varchar(6)` | NOT NULL | 없음 | 대문자로 정규화된 초대 코드(`InviteCode.Value`). 길이는 `InviteCode.Length` |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007). 첫 멤버의 `joined_at`과 같은 값(R-GR-08) |
+| owner_id | `uuid` | NOT NULL | 없음 | 방장(R-GR-11). 만든 회원, 나가면 가장 먼저 합류한 멤버로 넘어간다 *(FE-2, ADR-012)* |
 
 - 방장(`owner_id`) 컬럼은 두지 않는다. 읽는 유스케이스가 없고, 원본의 `owner_id ... on delete cascade`는 방장 탈퇴 시 다른 멤버가 남은 그룹까지 지웠다(ADR-004 결정 6)
 - 인원 수 컬럼은 두지 않는다. 인원은 group_members 행 수이고, Group 로딩(group_members Q1) 뒤 메모리에서 센다
@@ -368,7 +369,8 @@ erDiagram
 | UNIQUE | `ux_groups_invite_code (invite_code)` | Q1·Q4. 두 그룹이 같은 코드를 갖는 것을 막는다. 생성 경합에서 앱 미리 검사는 TOCTOU라 최종 보장은 이 인덱스, 위반 시 재생성 | R-GR-06 |
 | CHECK | `ck_groups_invite_code`: `invite_code ~ '^[A-HJ-NP-Z2-9]{6}$'` | 소문자, I·O·0·1, 6자가 아닌 코드. `A-H J-N P-Z`가 I·O를 뺀 24자, `2-9`가 8자 | R-GR-05, `InviteCode.Alphabet` |
 | CHECK | `ck_groups_name`: `char_length(name) >= 2 AND name = btrim(name) AND name ~ '^[가-힣A-Za-z0-9 ]+$' AND name IS NFC NORMALIZED` | 하한 2자 미만, 앞뒤 공백, 허용 밖 문자(전각 공백·U+3164 등). 허용 공백이 ASCII 공백뿐이라 `btrim`이 Domain `Trim()`과 같은 결과를 내므로 users·places와 달리 trim까지 완전히 이중화된다. 상한 6은 `varchar(6)`이 맡는다 | R-GR-10 |
-| FK (나가는 것) | 없음 | groups는 다른 테이블을 참조하지 않는다(방장 없음) | ADR-004 |
+| FK (나가는 것) | `fk_groups_owner`: `owner_id → users(id) ON DELETE RESTRICT` | 방장 회원을 지우려면 먼저 그룹에서 나가 방장이 넘어가야 한다. 원본의 CASCADE(방장 탈퇴 = 남은 멤버 그룹 삭제)를 되풀이하지 않는다 *(FE-2)* | ADR-012 |
+| 보조 인덱스 | `ix_groups_owner_id (owner_id)` | 회원 삭제(PF-02) 때 `fk_groups_owner` 검사가 groups 전체를 읽지 않게 한다 | ADR-012, PF-02 |
 | FK (들어오는 것) | group_members `.group_id → groups` — `ON DELETE CASCADE` (group_members FK 행·메모 참고) | 정상 경로(R-GR-09)는 멤버 0명일 때만 삭제하므로 따라 지워지는 행이 없다. 버그로 멤버가 남은 그룹을 지우면 멤버십이 조용히 지워진다 — 애그리거트 경계 표현을 우선하고 앱 테스트(D4)로 막는다 | ADR-004, R-GR-09 |
 
 메모
@@ -394,10 +396,13 @@ erDiagram
 | group_id | `uuid` | NOT NULL | 없음 | 부모 그룹. Domain에는 없는 OwnsMany 섀도 키(D2 결정) |
 | user_id | `uuid` | NOT NULL | 없음 | 멤버 회원. `GroupMember.UserId` |
 | joined_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007). 첫 멤버는 `groups.created_at`과 같다 |
+| color_slot | `smallint` | NOT NULL | 없음 | 그룹 안 고유 색 슬롯 0~3(R-GR-12). 색 값은 FE가 매긴다 *(FE-2, ADR-012)* |
 
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
 |---|---|---|---|
 | PK | `pk_group_members (group_id, user_id)` | Q1·Q3. 같은 (그룹, 회원) 두 번째 행을 막는다. Group 로딩(Q1)이 이 테이블의 주 접근 경로라 `group_id`가 앞이다 | R-GR-07, ADR-005(복합 PK) |
+| UNIQUE | `ux_group_members_group_color_slot (group_id, color_slot)` | 같은 그룹에서 두 멤버가 같은 색. 합류가 그룹 행 잠금 안에서 고르므로(ADR-010) 이중화 | R-GR-12, ADR-012 |
+| CHECK | `ck_group_members_color_slot`: `color_slot BETWEEN 0 AND 3` | 슬롯 4개(= 정원) 밖의 값 | R-GR-12 |
 | 보조 인덱스 | `ix_group_members_user_id (user_id)` | Q2·Q4. PK 순서로는 `user_id` 단독 조건을 범위로 좁힐 수 없다(leftmost prefix) | R-GR-02, PF-02 |
 | FK | `fk_group_members_groups`: `group_id → groups(id) ON DELETE CASCADE` | 내부 엔티티라 루트와 생애가 같다(review_images와 같은 근거). R-GR-09로 그룹이 지워질 때는 이미 멤버가 0명이라 실제로 지워지는 행은 없고, 애그리거트 경계를 스키마에 드러내는 의미다 | ADR-004 |
 | FK | `fk_group_members_users`: `user_id → users(id) ON DELETE RESTRICT` | 멤버십이 남은 회원의 삭제를 거부한다. CASCADE로 두면 탈퇴한 회원이 마지막 멤버였던 그룹이 **멤버 0명으로 남는다**(R-GR-09 위반, 원본의 고아 그룹 결함). 탈퇴(PF-02)는 먼저 참여 그룹마다 `Group.RemoveMember`를 거쳐 `GroupEmptied`면 그룹을 지우고, 그 다음 users 행을 지워야 한다. 이 순서를 빠뜨리면 RESTRICT가 오류로 드러낸다 | R-GR-09, ADR-004, PF-02 |

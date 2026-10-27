@@ -65,12 +65,19 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(6)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.HasKey("Id")
                         .HasName("pk_groups");
 
                     b.HasIndex("InviteCode")
                         .IsUnique()
                         .HasDatabaseName("ux_groups_invite_code");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_groups_owner_id");
 
                     b.ToTable("groups", null, t =>
                         {
@@ -317,6 +324,13 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nook.Domain.Groups.Group", b =>
                 {
+                    b.HasOne("Nook.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_groups_owner");
+
                     b.OwnsMany("Nook.Domain.Groups.GroupMember", "Members", b1 =>
                         {
                             b1.Property<Guid>("GroupId")
@@ -326,6 +340,10 @@ namespace Nook.Infrastructure.Persistence.Migrations
                             b1.Property<Guid>("UserId")
                                 .HasColumnType("uuid")
                                 .HasColumnName("user_id");
+
+                            b1.Property<short>("ColorSlot")
+                                .HasColumnType("smallint")
+                                .HasColumnName("color_slot");
 
                             b1.Property<DateTimeOffset>("JoinedAt")
                                 .HasColumnType("timestamp with time zone")
@@ -337,7 +355,14 @@ namespace Nook.Infrastructure.Persistence.Migrations
                             b1.HasIndex("UserId")
                                 .HasDatabaseName("ix_group_members_user_id");
 
-                            b1.ToTable("group_members", (string)null);
+                            b1.HasIndex("GroupId", "ColorSlot")
+                                .IsUnique()
+                                .HasDatabaseName("ux_group_members_group_color_slot");
+
+                            b1.ToTable("group_members", null, t =>
+                                {
+                                    t.HasCheckConstraint("ck_group_members_color_slot", "color_slot BETWEEN 0 AND 3");
+                                });
 
                             b1.WithOwner()
                                 .HasForeignKey("GroupId")
