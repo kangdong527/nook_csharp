@@ -22,10 +22,8 @@ type Step = "input" | "sent";
  */
 function messageOf(reason: SendLinkFail): string {
   switch (reason) {
-    case "not_registered":
-      return "가입되지 않은 이메일이에요. 회원가입을 진행해 주세요.";
-    case "already_registered":
-      return "이미 가입된 이메일이에요. 로그인해 주세요.";
+    case "invalid_email":
+      return "올바른 이메일 형식으로 입력해 주세요.";
     case "rate_limited":
       return "메일을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.";
     default:
@@ -33,7 +31,8 @@ function messageOf(reason: SendLinkFail): string {
   }
 }
 
-export function EmailAuthFlow({ mode }: { mode: "login" | "signup" }) {
+// 로그인·가입 화면이 같은 흐름을 쓴다 — 가입 여부를 묻지 않으므로(D5) 두 화면의 요청이 같다(FE-2 결정 (a)).
+export function EmailAuthFlow() {
   const router = useRouter();
   const toast = useToast();
   const [step, setStep] = useState<Step>("input");
@@ -65,7 +64,7 @@ export function EmailAuthFlow({ mode }: { mode: "login" | "signup" }) {
     }, 1000);
   };
 
-  // 매직링크 발송. 가입 여부 판정은 데이터 계층이 한다(login 모드는 서버가 판정).
+  // 매직링크 발송. 가입 여부는 알려주지 않는다(D5) — 새 회원인지는 링크를 연 뒤 판단한다.
   const sendMail = async () => {
     if (!valid) {
       toast("올바른 이메일 형식으로 입력해 주세요.");
@@ -73,7 +72,7 @@ export function EmailAuthFlow({ mode }: { mode: "login" | "signup" }) {
     }
     setLoading(true);
     try {
-      const res = await sendMagicLink(email, mode);
+      const res = await sendMagicLink(email);
       if (!res.ok) {
         toast(messageOf(res.reason));
         return;

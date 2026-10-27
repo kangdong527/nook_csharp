@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createProfile, type CreateProfileFail } from "@/lib/data/user";
 import { exhaustive } from "@/lib/result";
-import { uploadImage, MAX_IMAGE_BYTES } from "@/lib/store";
 import {
   GENDER_LABEL,
   isValidNickname,
@@ -16,7 +15,7 @@ import {
 import { useToast } from "@/components/Toast";
 import { Spinner } from "@/components/Spinner";
 import { Avatar } from "@/components/Avatar";
-import { CameraIcon, ChevronLeftIcon } from "@/components/icons";
+import { ChevronLeftIcon } from "@/components/icons";
 
 const GENDERS: Gender[] = ["female", "male", "none"];
 const ONBOARDING_HIDE_KEY = "nook.onboarding.hide.v2";
@@ -29,8 +28,8 @@ function messageOf(reason: CreateProfileFail): string {
   switch (reason) {
     case "no_session":
       return "인증 정보가 만료됐어요. 처음부터 다시 진행해 주세요.";
-    case "already_exists":
-      return "이미 가입이 완료된 계정이에요.";
+    case "invalid_input":
+      return "입력값을 다시 확인해 주세요.";
     case "nickname_taken":
       return "이미 사용 중인 닉네임이에요.";
     default:
@@ -39,44 +38,23 @@ function messageOf(reason: CreateProfileFail): string {
 }
 
 /**
- * `email` 은 폼 입력이 아니라 **서버가 세션에서 읽어 내려준 값**이다.
- * 화면에 보여주기 위한 것이며, 저장되는 이메일은 createProfile() 이
- * 세션에서 다시 읽는다(폼이 준 값을 신뢰하지 않는다).
+ * `email` 은 폼 입력이 아니라 **서버가 가입 대기 쿠키에서 읽어 내려준 값**이다(표시용).
+ * 저장되는 이메일은 매직 링크의 것이다 — 폼이 준 값을 신뢰하지 않는다.
  */
 export function ProfileSetupForm({ email }: { email: string }) {
   const router = useRouter();
   const toast = useToast();
 
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
   const [gender, setGender] = useState<Gender | null>(null);
   const [birth, setBirth] = useState("");
   const [genderOpen, setGenderOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const nicknameOk = isValidNickname(nickname);
   const nickError = nicknameError(nickname);
   const birthErr = birthError(birth);
   const canSubmit = nicknameOk && gender !== null && !birthErr && !submitting;
-
-  const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > MAX_IMAGE_BYTES) {
-      toast("이미지 용량이 너무 커요. 다른 사진을 선택해주세요.");
-      return;
-    }
-    setUploading(true);
-    try {
-      setAvatarUrl(await uploadImage(file));
-    } catch {
-      toast("일시적인 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const submit = async () => {
     if (!nicknameOk) {
@@ -97,7 +75,6 @@ export function ProfileSetupForm({ email }: { email: string }) {
         nickname,
         gender,
         birth: birth.trim() || null,
-        avatarUrl,
       });
       if (!res.ok) {
         toast(messageOf(res.reason));
@@ -126,14 +103,10 @@ export function ProfileSetupForm({ email }: { email: string }) {
       </header>
 
       <div className="flex flex-1 flex-col px-6 pb-8">
-        {/* 프로필 사진 */}
+        {/* 프로필 사진 — 가입 땐 기본 이미지. 업로드는 가입 직후 프로필 수정(PF-01)에서(FE-2 사용자 결정) */}
         <div className="flex flex-col items-center pt-2">
           <div className="relative">
-            <Avatar url={avatarUrl} size={88} />
-            <label className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-line bg-white text-ink shadow-card">
-              {uploading ? <Spinner className="text-key" /> : <CameraIcon className="h-4 w-4" />}
-              <input type="file" accept="image/*" className="hidden" onChange={onPickAvatar} />
-            </label>
+            <Avatar url={null} size={88} />
           </div>
           <p className="mt-3 text-xs text-sub">{email}</p>
         </div>

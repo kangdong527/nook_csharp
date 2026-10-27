@@ -1,97 +1,54 @@
 // =========================================================
 // 계층 ② 데이터 접근 — 프로필 생성 (브라우저)
 //
-// store.ts 의 signUp() 을 대체한다. 차이는 하나이며 그것이 이 파일의 존재 이유다:
-//
-//   store.signUp : insert 시 id 를 주지 않아 gen_random_uuid() 가 새 id 를 만들었다
-//                  → public.users 행과 auth.users 계정이 **남남**이 된다
-//   createProfile: id 를 auth.users.id 로 **고정**한다
-//                  → auth.uid() = users.id 가 성립 → Phase 1-6 RLS 의 전제
-//
-// email 도 클라이언트가 넘긴 값이 아니라 **세션에서 읽는다.** 폼이 보낸 이메일을
-// 그대로 믿으면 타인의 이메일로 프로필을 만들 수 있다.
-//
-// 🚫 이 파일은 브라우저 클라이언트를 쓴다. 서버에서는 user.server.ts 를 쓴다.
+// FE-2: 가입은 C# consume 한 번으로 끝난다(매직 링크 토큰 + 닉네임·성별·생일).
+// 토큰은 브라우저가 모른다 — /api/auth/signup 이 가입 대기 쿠키에서 꺼내 쓴다.
+// 이메일도 폼이 아니라 링크의 것이 쓰인다(폼이 준 값을 신뢰하지 않는다).
+// 아바타는 가입 직후 PF-01 로 따로 올린다(FE-2 사용자 결정).
 // =========================================================
 
-import { createClient } from "../adapters/supabase/client";
 import { err, ok, type Result } from "../result";
-import type { Gender, User } from "../types";
-import { mapUser, USER_SELECT, type UserRow } from "./user-row";
+import type { Gender } from "../types";
 
-/**
- * 프로필 생성 실패 이유.
- * 문구 매핑은 화면의 책임이다(CLAUDE.md 계층 규칙).
- */
+/** 프로필 생성 실패 이유. 문구 매핑은 화면의 책임이다. */
 export type CreateProfileFail =
-  | "no_session" // 인증 세션이 없다 → 매직링크부터 다시
-  | "already_exists" // 이 계정의 프로필이 이미 있다
-  | "nickname_taken";
+  | "no_session" // 가입 대기(15분)가 끝났다 → 매직링크부터 다시
+  | "nickname_taken" // 409 User.NicknameTaken — 동시 가입까지 DB UNIQUE 가 판정
+  | "invalid_input"; // 400 — 화면 검사를 통과했는데 서버가 거절(규칙 불일치)
 
 /**
- * 닉네임 중복 확인.
- *
- * ⚠️ **DB 에 unique 제약이 없다**(`supabase/schema.sql:16`). 즉 이 조회는
- *    유일성을 보장하지 못하는 TOCTOU 검사이고, 동시 가입 시 중복이 통과한다.
- *    제약 추가는 마이그레이션 체계(Phase 2-9) 이후 과제다.
+ * 원본 화면의 생년월일 입력(YY-MM-DD)을 API 형식(YYYY-MM-DD)으로 바꾼다.
+ * 세기 규칙(FE-2 사용자 결정 — 변환은 FE 한 곳): YY 가 올해 끝 두 자리 이하면 2000년대, 크면 1900년대.
+ * 형식 검사는 types.ts birthError 가 먼저 한다. 빈 값은 null(선택 입력).
  */
-async function nicknameTaken(nickname: string): Promise<boolean> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("id")
-    .eq("nickname", nickname.trim())
-    .maybeSingle();
-
-  if (error) throw error; // 조회 실패는 예상 불가능한 실패다
-  return !!data;
+export function toIsoBirthdate(yyMmDd: string, today: Date = new Date()): string | null {
+  const t = yyMmDd.trim();
+  if (t.length === 0) return null;
+  const [yy, mm, dd] = t.split("-");
+  const currentYy = today.getFullYear() % 100;
+  const century = Number(yy) <= currentYy ? 2000 : 1900;
+  return `${century + Number(yy)}-${mm}-${dd}`;
 }
 
-/**
- * 현재 로그인한 계정의 프로필을 만든다. `/signup/profile` 에서만 호출한다.
- *
- * ⚠️ 원자적이지 않다 — 아바타 업로드가 먼저 끝나고 insert 가 실패하면 고아
- *    Storage 객체가 남는다(개발_운영_전략.md §4 P0-4). RPC 원자화는 Phase 1-8.
- *    순서 자체는 규칙을 지킨다: 업로드 → URL 확보 → insert (CLAUDE.md 🚫 #4).
- */
 export async function createProfile(input: {
   nickname: string;
   gender: Gender;
   birth: string | null;
-  avatarUrl: string | null;
-}): Promise<Result<User, CreateProfileFail>> {
-  const supabase = createClient();
-
-  // getSession() 이 아니라 getUser() — 전자는 JWT 서명을 검증하지 않는다.
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError) throw authError;
-  if (!authUser?.email) return err("no_session");
-
-  if (await nicknameTaken(input.nickname)) return err("nickname_taken");
-
-  const { data, error } = await supabase
-    .from("users")
-    .insert({
-      id: authUser.id, // 🔑 이 한 줄이 auth.users 와 public.users 를 잇는다
-      email: authUser.email, // 폼이 준 값이 아니라 세션의 값
+}): Promise<Result<null, CreateProfileFail>> {
+  const res = await fetch("/api/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       nickname: input.nickname.trim(),
       gender: input.gender,
-      birth: input.birth,
-      avatar_url: input.avatarUrl,
-    })
-    .select(USER_SELECT)
-    .single();
+      birthdate: input.birth ? toIsoBirthdate(input.birth) : null,
+    }),
+  });
 
-  if (error) {
-    // 23505 = unique_violation. id(PK) 또는 email 중복이므로 프로필이 이미 있다.
-    // 새로고침·이중 클릭으로 실제로 발생하는 경로이니 사용자에게 알려준다.
-    if (error.code === "23505") return err("already_exists");
-    throw error; // 그 외는 정체불명 → Sentry 에 남겨야 한다
-  }
+  if (res.ok) return ok(null);
+  if (res.status === 401) return err("no_session");
+  if (res.status === 409) return err("nickname_taken");
+  if (res.status === 400) return err("invalid_input");
 
-  return ok(mapUser(data as UserRow));
+  throw new Error(`signup 실패: ${res.status}`);
 }

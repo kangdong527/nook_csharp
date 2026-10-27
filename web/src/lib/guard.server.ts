@@ -42,13 +42,10 @@ export async function requireProfile(): Promise<User> {
  *   signed_out → /login  (매직링크부터 다시)
  *   ready      → /map    (이미 프로필이 있다 → 폼을 다시 보여줄 이유가 없다)
  */
-export async function requireProfileSetup(): Promise<{
-  authId: string;
-  email: string;
-}> {
+export async function requireProfileSetup(): Promise<{ email: string }> {
   const current = await getCurrentUser();
 
   if (current.status === "signed_out") redirect("/login");
   if (current.status === "ready") redirect("/map");
-  return { authId: current.authId, email: current.email };
+  return { email: current.email };
 }
