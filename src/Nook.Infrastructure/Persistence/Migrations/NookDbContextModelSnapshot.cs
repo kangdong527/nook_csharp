@@ -217,6 +217,11 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AvatarKey")
+                        .HasMaxLength(56)
+                        .HasColumnType("character varying(56)")
+                        .HasColumnName("avatar_key");
+
                     b.Property<DateOnly?>("Birthdate")
                         .HasColumnType("date")
                         .HasColumnName("birthdate");
@@ -244,6 +249,8 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
                     b.ToTable("users", null, t =>
                         {
+                            t.HasCheckConstraint("ck_users_avatar_key", "btrim(avatar_key) <> ''");
+
                             t.HasCheckConstraint("ck_users_birthdate", "birthdate >= DATE '1900-01-01'");
 
                             t.HasCheckConstraint("ck_users_email", "email ~ '^[^@[:space:]]+@[^@[:space:]]+$'");

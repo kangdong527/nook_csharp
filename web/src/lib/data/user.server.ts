@@ -26,7 +26,7 @@ export type CurrentUser =
   | { status: "no_profile"; email: string }
   | { status: "ready"; user: User };
 
-type MeResponse = { id: string; email: string; nickname: string };
+type MeResponse = { id: string; email: string; nickname: string; avatarUrl: string | null };
 
 /**
  * ⚠️ 요청마다 C# 왕복 1회다. 한 요청에서 여러 번 부르지 말고
@@ -47,7 +47,7 @@ export async function getCurrentUser(): Promise<CurrentUser> {
   return { status: "signed_out" };
 }
 
-// /me 는 아직 성별·생일·아바타를 주지 않는다 — 화면이 필요해지면 MeView 에 더한다(PF-01 때).
+// /me 는 성별·생일을 주지 않는다 — 그 값을 읽는 화면이 없다. 사진은 서버가 만든 주소(null = 기본 이미지).
 function toUser(me: MeResponse): User {
-  return { id: me.id, email: me.email, nickname: me.nickname, gender: null, birth: null, avatarUrl: null };
+  return { id: me.id, email: me.email, nickname: me.nickname, gender: null, birth: null, avatarUrl: me.avatarUrl };
 }

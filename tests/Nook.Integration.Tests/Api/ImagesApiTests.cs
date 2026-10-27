@@ -54,7 +54,7 @@ public sealed class ImagesApiTests : IntegrationTestBase, IDisposable
     [InlineData("reviews/2026/10/27/%2e%2e%2f%2e%2e%2fsecret.png")]
     [InlineData("reviews/2026/10/27/0123456789ABCDEF0123456789ABCDEF.png")]   // 대문자 hex — 우리가 만들지 않는 모양
     [InlineData("reviews/2026/10/27/0123456789abcdef0123456789abcdef.gif")]
-    [InlineData("avatars/2026/10/27/0123456789abcdef0123456789abcdef.png")]   // 아직 없는 prefix
+    [InlineData("photos/2026/10/27/0123456789abcdef0123456789abcdef.png")]    // 우리가 쓰지 않는 prefix(reviews·avatars만)
     public async Task Get_KeyNotOurShape_Returns404WithoutTouchingStorage(string key)
     {
         // 같은 이름의 객체가 메모리에 있어도 모양 검사에서 먼저 막혀야 한다.

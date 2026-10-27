@@ -135,12 +135,13 @@ internal sealed class ReviewRepository(NookDbContext db) : IReviewRepository
             {
                 Review = r,
                 Nickname = db.Users.Where(u => u.Id == r.UserId).Select(u => u.Nickname).Single(),
+                AvatarKey = db.Users.Where(u => u.Id == r.UserId).Select(u => u.AvatarKey).Single(),
                 LikeCount = db.Likes.Count(l => l.ReviewId == r.Id),
                 LikedByMe = db.Likes.Any(l => l.ReviewId == r.Id && l.UserId == me),
             })
             .ToListAsync(ct);
 
-        return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname.Value, row.LikeCount, row.LikedByMe))];
+        return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname.Value, row.AvatarKey, row.LikeCount, row.LikedByMe))];
     }
 
     public async Task<IReadOnlyList<MyReview>> ListByUserAsync(

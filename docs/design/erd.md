@@ -27,6 +27,7 @@ erDiagram
         varchar(254) email UK "lower() 식 UNIQUE"
         varchar(6) gender "female·male·none"
         date birthdate "NULL 허용"
+        varchar(56) avatar_key "NULL = 기본 이미지"
     }
 
     places {
@@ -126,6 +127,7 @@ erDiagram
 | nickname | `varchar(12)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-02). PostgreSQL `varchar(n)`은 글자(코드 포인트) 단위라 `Nickname.MaxLength`(rune 수)와 단위가 같다 |
 | email | `varchar(254)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-03). `Email.MaxLength`와 같은 상한 |
 | gender | `varchar(6)` | NOT NULL | 없음 | `female`·`male`·`none`(R-US-04). 가입 폼 필수. 추가 마이그레이션(`AddUserGenderBirthdate`)이 기존 행을 `'none'`으로 채운 뒤 기본값을 지운다 *(FE-1 Claude 작성)* |
+| avatar_key | `varchar(56)` | NULL | 없음 | 프로필 사진 스토리지 키(PF-01). NULL = 기본 이미지(FE 몫). 키 규칙은 review_images.storage_key와 같은 모양에 prefix `avatars/`(§3.1) *(FE-2 Claude 작성)* |
 | birthdate | `date` | NULL | 없음 | 선택 입력(R-US-05). 원본 `text 'YY-MM-DD'` → `date`(세기 모호 제거, FE-1 사용자 결정) |
 
 - 시각 컬럼(`created_at`)은 두지 않는다. 가입일을 쓰는 규칙·화면이 없다(ADR-007 "결과", `User` 주석)
@@ -139,6 +141,7 @@ erDiagram
 | UNIQUE (식) | `ux_users_email_lower ON users (lower(email))` | Q4. 대소문자만 다른 이메일 중복 가입을 막는다 | R-US-03 |
 | CHECK | `ck_users_nickname`: `char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED` | 앱을 거치지 않은 쓰기(SQL 직접 수정, 시드 스크립트)로 형식이 깨진 닉네임. 공백을 허용하지 않으므로 trim도 함께 보장된다. 상한 12는 `varchar(12)`가 맡는다 | R-US-01, CLAUDE.md "DB CHECK로 이중화" |
 | CHECK | `ck_users_email`: `email ~ '^[^@[:space:]]+@[^@[:space:]]+$'` | 빈 문자열, `@` 0개·2개 이상, `@` 앞뒤가 빔, 공백 포함 | R-US-03 |
+| CHECK | `ck_users_avatar_key`: `btrim(avatar_key) <> ''` | 빈 문자열 키. NULL은 통과(기본 이미지) — `ck_review_images_storage_key`와 같은 최소 이중화 | PF-01 |
 | CHECK | `ck_users_gender`: `gender IN ('female', 'male', 'none')` | 3값 밖의 표기(대문자 포함) | R-US-04 |
 | CHECK | `ck_users_birthdate`: `birthdate >= DATE '1900-01-01'` | 하한 아래. 상한(오늘)은 넣지 않는다 — `current_date`는 비결정적이라 CHECK에 쓰면 재검증 시점마다 결과가 달라질 수 있다. 상한은 `Birthdate.Create`가 가입 시점에 검사 | R-US-05 |
 | FK (나가는 것) | 없음 | users는 다른 테이블을 참조하지 않는다 | |

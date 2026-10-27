@@ -27,7 +27,8 @@ public sealed record PlaceReviewView(
     bool LikedByMe,
     bool Mine);
 
-public sealed record ReviewAuthorView(Guid Id, string Nickname);
+// AvatarUrl: null = 기본 이미지(FE-2 PF-01).
+public sealed record ReviewAuthorView(Guid Id, string Nickname, string? AvatarUrl);
 
 public static class ReviewQueryErrors
 {
@@ -106,7 +107,7 @@ public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepos
 
     private static PlaceReviewView ToView(PlaceReview row, UserId me, IReviewImageUrls urls) => new(
         row.Review.Id.Value,
-        new ReviewAuthorView(row.Review.UserId.Value, row.AuthorNickname),
+        new ReviewAuthorView(row.Review.UserId.Value, row.AuthorNickname, row.AuthorAvatarKey is { } key ? urls.For(key) : null),
         row.Review.Content.Value,
         [.. row.Review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
         row.Review.CreatedAt,

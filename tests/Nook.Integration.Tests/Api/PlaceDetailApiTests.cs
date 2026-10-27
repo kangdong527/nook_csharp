@@ -106,7 +106,7 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
             first =>
             {
                 Assert.Equal(others.Id.Value, first.Id);
-                Assert.Equal(new ReviewAuthorView(other.Id.Value, "회원1"), first.Author);
+                Assert.Equal(new ReviewAuthorView(other.Id.Value, "회원1", AvatarUrl: null), first.Author);
                 Assert.Equal((2, true, false), (first.LikeCount, first.LikedByMe, first.Mine));
             },
             second =>

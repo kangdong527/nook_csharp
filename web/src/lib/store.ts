@@ -1,12 +1,11 @@
 "use client";
 
-import { supabase, STORAGE_BUCKET } from "./supabase";
+import { supabase } from "./supabase";
 import { nookFetch } from "./api/client";
 import {
   GROUP_COLORS,
   GROUP_MAX_COUNT,
   GROUP_MEMBER_MAX,
-  type Gender,
   type Group,
   type GroupSavedPlace,
   type KakaoPlace,
@@ -15,7 +14,6 @@ import {
   type ReviewImageRef,
   type SavedPlace,
   type StarState,
-  type User,
 } from "./types";
 
 // =========================================================
@@ -36,55 +34,28 @@ import {
 //    Phase 1-6 에서 어댑터를 adapters/supabase/client.ts 로 교체해야 한다.
 // =========================================================
 
-// =========================================================
-// 사용자 매핑
-// =========================================================
-type UserRow = {
-  id: string;
-  email: string;
-  nickname: string;
-  gender: string | null;
-  birth: string | null;
-  avatar_url: string | null;
-};
-
-const mapUser = (r: UserRow): User => ({
-  id: r.id,
-  email: r.email,
-  nickname: r.nickname,
-  gender: (r.gender as Gender | null) ?? null,
-  birth: r.birth,
-  avatarUrl: r.avatar_url,
-});
-
-const USER_SELECT = "id, email, nickname, gender, birth, avatar_url";
-
-export async function nicknameExists(
-  nickname: string,
-  excludeUserId?: string
-): Promise<boolean> {
-  let query = supabase.from("users").select("id").eq("nickname", nickname.trim());
-  if (excludeUserId) query = query.neq("id", excludeUserId);
-  const { data } = await query.maybeSingle();
-  return !!data;
+// PF-01 닉네임 — 미리 확인 없이 저장 때 서버가 판정한다(409 User.NicknameTaken, 동시 변경 포함).
+export async function updateNickname(
+  nickname: string
+): Promise<{ ok: true; user: MeUser } | { ok: false; reason: "nickname_taken" | "invalid" }> {
+  const res = await nookFetch("/me", { method: "PATCH", body: JSON.stringify({ nickname: nickname.trim() }) });
+  if (res.status === 409) return { ok: false, reason: "nickname_taken" };
+  if (res.status === 400) return { ok: false, reason: "invalid" };
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  return { ok: true, user: (await res.json()) as MeUser };
 }
 
-export async function updateProfile(
-  userId: string,
-  input: { nickname: string; avatarUrl: string | null }
-): Promise<{ ok: true; user: User } | { ok: false; reason: "nickname" | "error" }> {
-  if (await nicknameExists(input.nickname, userId)) {
-    return { ok: false, reason: "nickname" };
-  }
-  const { data, error } = await supabase
-    .from("users")
-    .update({ nickname: input.nickname.trim(), avatar_url: input.avatarUrl })
-    .eq("id", userId)
-    .select(USER_SELECT)
-    .single();
-  if (error || !data) return { ok: false, reason: "error" };
-  return { ok: true, user: mapUser(data as UserRow) };
+// PF-01 프로필 사진 교체 — 파일 한 장(multipart). 이전 사진은 서버가 커밋 뒤 지운다.
+export async function changeAvatar(file: File): Promise<MeUser> {
+  const form = new FormData();
+  form.append("Image", file);
+  const res = await nookFetch("/me/avatar", { method: "PUT", body: form });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  return (await res.json()) as MeUser;
 }
+
+/** C# MeView — avatarUrl null = 기본 이미지. */
+export type MeUser = { id: string; email: string; nickname: string; avatarUrl: string | null };
 
 /**
  * ⚠️ `public.users` 만 지운다 → `auth.users` 계정은 남는다(Phase 1-8 과제).
@@ -426,16 +397,6 @@ export async function setLiked(reviewId: string, on: boolean): Promise<void> {
 // =========================================================
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
-export async function uploadImage(file: File): Promise<string> {
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, file, { cacheControl: "3600", upsert: false });
-  if (error) throw error;
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
-}
 
 // =========================================================
 // 그룹 (공유 지도)

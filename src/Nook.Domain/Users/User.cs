@@ -13,6 +13,9 @@ public sealed class User
     public Gender Gender { get; }
     public Birthdate? Birthdate { get; }
 
+    // 프로필 사진의 스토리지 키(PF-01, FE-2). null = 기본 이미지(FE 몫). 키 규칙은 리뷰 이미지와 같은 모양에 prefix만 avatars/.
+    public string? AvatarKey { get; private set; }
+
     private User(UserId id, Nickname nickname, Email email, Gender gender, Birthdate? birthdate)
     {
         Id = id;
@@ -32,6 +35,21 @@ public sealed class User
             throw new ArgumentOutOfRangeException(nameof(gender), gender, null);
 
         return new User(UserId.New(), nickname, email, gender, birthdate);
+    }
+
+    // PF-01 프로필 사진 교체·삭제(null). 이전 키를 돌려준다 — 호출 쪽이 DB 커밋 뒤 스토리지에서 지운다(리뷰 이미지와 같은 규칙).
+    // 키는 서버가 만드는 값이라 규칙 위반(빈 값·상한 초과)은 생성 코드의 버그 → 예외(ReviewImage와 같은 기준).
+    public string? ReplaceAvatar(string? newKey)
+    {
+        if (newKey is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(newKey);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(newKey.Length, Reviews.ReviewImage.StorageKeyMaxLength, nameof(newKey));
+        }
+
+        var previous = AvatarKey;
+        AvatarKey = newKey;
+        return previous == newKey ? null : previous;
     }
 
     // PF-01. 표기까지 같으면 아무것도 바꾸지 않는다(멱등, R-US-02). 대소문자만 다른 표기는 바꾼다.

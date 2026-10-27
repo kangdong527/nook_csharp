@@ -12,6 +12,12 @@ public interface IUserRepository
     // erd.md users Q1(PK). 읽기 전용 — 추적하지 않는다(AU-04).
     Task<User?> FindByIdAsync(UserId userId, CancellationToken ct);
 
+    // PF-01. 바꿀 회원을 추적 상태로 읽는다. 없으면 null. 받는 인덱스: pk_users.
+    Task<User?> FindForUpdateAsync(UserId userId, CancellationToken ct);
+
+    // FindForUpdateAsync로 읽어 바꾼 회원을 저장한다. 닉네임 UNIQUE 위반은 실패(UserErrors.NicknameTaken) — AddAsync와 같다.
+    Task<Result> SaveAsync(User user, CancellationToken ct);
+
     // INSERT 후 저장까지 한다. 닉네임 UNIQUE 위반은 실패(UserErrors.NicknameTaken)로 돌려준다 — 예상 가능한 실패.
     // 위반이 나면 PostgreSQL 트랜잭션은 중단 상태가 된다. 호출한 쪽은 더 쓰지 말고 돌아가야 한다(Dispose = 롤백).
     Task<Result> AddAsync(User user, CancellationToken ct);

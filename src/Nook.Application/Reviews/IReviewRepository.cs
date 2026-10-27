@@ -39,7 +39,7 @@ public interface IReviewRepository
     Task<IReadOnlyList<MyReview>> ListByUserAsync(UserId userId, ReviewCursor? after, int take, CancellationToken ct);
 }
 
-public sealed record PlaceReview(Review Review, string AuthorNickname, int LikeCount, bool LikedByMe);
+public sealed record PlaceReview(Review Review, string AuthorNickname, string? AuthorAvatarKey, int LikeCount, bool LikedByMe);
 
 public sealed record MyReview(Review Review, string PlaceName, int LikeCount, bool LikedByMe);
 

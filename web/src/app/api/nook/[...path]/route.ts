@@ -25,8 +25,10 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // 지도·별 상태 (BM-03, PL-01, PL-02 장소 상세, BM-01·02)
   { method: "GET", path: /^\/me\/places$/ },
 
-  // 프로필 (PF-04 내 리뷰 피드)
+  // 프로필 (PF-04 내 리뷰 피드, PF-01 닉네임·사진)
   { method: "GET", path: /^\/me\/reviews$/ },
+  { method: "PATCH", path: /^\/me$/ },
+  { method: "PUT", path: /^\/me\/avatar$/ },
   { method: "POST", path: /^\/places$/ },
   { method: "GET", path: new RegExp(`^/places/${GUID}$`) },
   { method: "PUT", path: new RegExp(`^/places/${GUID}/bookmark$`) },
@@ -41,8 +43,8 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "PUT", path: new RegExp(`^/reviews/${GUID}/like$`) },
   { method: "DELETE", path: new RegExp(`^/reviews/${GUID}/like$`) },
 
-  // 리뷰 이미지(<img src>). C# 은 익명 허용이고 키 모양을 다시 검사한다 — 여기서도 같은 모양만 넘긴다.
-  { method: "GET", path: /^\/images\/reviews\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/[0-9a-f]{32}\.(jpg|png|webp)$/ },
+  // 리뷰 이미지·프로필 사진(<img src>). C# 은 익명 허용이고 키 모양을 다시 검사한다 — 여기서도 같은 모양만 넘긴다.
+  { method: "GET", path: /^\/images\/(reviews|avatars)\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/[0-9a-f]{32}\.(jpg|png|webp)$/ },
 ];
 
 type Context = { params: { path: string[] } };
