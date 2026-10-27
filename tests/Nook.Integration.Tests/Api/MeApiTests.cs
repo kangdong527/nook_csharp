@@ -5,8 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Nook.Application.Bookmarks;
+using Nook.Application.Reviews;
 using Nook.Application.Users;
 using Nook.Domain.Bookmarks;
+using Nook.Domain.Likes;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
 using Nook.Domain.Users;
@@ -27,6 +29,10 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
     // - Get_ReturnsMyIdEmailNickname
     // - Get_WhenUserRowMissing_Returns401UnknownUser   (서명 유효 + 회원 행 없음 → 핸들러 401, title로 구분)
     // - Get_WithoutToken_Returns401WithoutErrorCode    (미들웨어 401 — 핸들러까지 오지 않는다)
+    //
+    // PF-04 GET /me/reviews
+    // - Reviews_PagesNewestFirstFiveAtATime_OnlyMine     (6개 → 5 + 1, 겹침·빠짐 없음, 장소 이름·좋아요, 남의 리뷰 제외)
+    // - Reviews_InvalidCursor_Returns400
 
     private static readonly DateTimeOffset Now = new(2026, 10, 22, 9, 0, 0, TimeSpan.Zero);
 
@@ -144,6 +150,42 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.DoesNotContain("Auth.UnknownUser", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Reviews_PagesNewestFirstFiveAtATime_OnlyMine()
+    {
+        // 내 리뷰 6개: 장소 4곳 × 서로 다른 날(R-RV-03 UNIQUE를 피한다). i가 작을수록 최신.
+        Place[] places = [_bookmarkedOnly, _reviewedOnly, _both, _othersOnly];
+        var mine = Enumerable.Range(0, 6).Select(i => Review(_me, places[i % 4], Now.AddDays(-i))).ToList();
+        await using (var db = Db.CreateContext())
+        {
+            db.AddRange(mine);
+            db.Add(Review(_other, _both, Now.AddHours(1)));                 // 남의 리뷰 — 가장 최신이어도 섞이면 안 된다
+            db.Add(Like.Create(_me.Id, mine[0].Id, Now));                   // 내 리뷰에 내 좋아요
+            db.Add(Like.Create(_other.Id, mine[0].Id, Now));
+            await db.SaveChangesAsync();
+        }
+
+        var first = await _client.GetFromJsonAsync<MyReviewPageView>("/me/reviews");
+        var second = await _client.GetFromJsonAsync<MyReviewPageView>($"/me/reviews?cursor={Uri.EscapeDataString(first!.NextCursor!)}");
+
+        Assert.Equal(mine.Take(5).Select(r => r.Id.Value), first.Items.Select(r => r.Id));
+        Assert.Equal([mine[5].Id.Value], second!.Items.Select(r => r.Id));
+        Assert.Null(second.NextCursor);
+
+        var newest = first.Items[0];
+        Assert.Equal(("저장만 한 곳", 2, true), (newest.PlaceName, newest.LikeCount, newest.LikedByMe));
+    }
+
+    [Fact]
+    public async Task Reviews_InvalidCursor_Returns400()
+    {
+        var response = await _client.GetAsync("/me/reviews?cursor=not-a-cursor");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Equal("Review.InvalidCursor", problem!.Title);
     }
 
     private static Place NewPlace(string kakaoId, string name) =>

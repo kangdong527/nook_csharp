@@ -272,72 +272,18 @@ export async function getMySavedPlaces(): Promise<SavedPlace[]> {
   return views.map((v) => ({ ...toPlace(v), star: v.star }));
 }
 
-// 프로필 별 개수: 빈별(=북마크만) / 채운별(=리뷰 작성 장소)
-// 리뷰를 작성한 장소는 채운 별로 집계하고 빈 별에서는 제외한다.
-export async function getStarCounts(
-  userId: string
-): Promise<{ bookmark: number; review: number }> {
-  const [bm, rv] = await Promise.all([
-    supabase.from("bookmarks").select("place_id").eq("user_id", userId),
-    supabase.from("reviews").select("place_id").eq("user_id", userId),
-  ]);
-  const reviewPlaces = new Set(
-    ((rv.data ?? []) as { place_id: string }[]).map((r) => r.place_id)
-  );
-  const bookmarkOnly = new Set(
-    ((bm.data ?? []) as { place_id: string }[])
-      .map((b) => b.place_id)
-      .filter((pid) => !reviewPlaces.has(pid))
-  );
-  return { bookmark: bookmarkOnly.size, review: reviewPlaces.size };
+// PF-03 내 별 개수 — 새 API 없이 내 지도(BM-03)의 별을 센다(FE-2 사용자 결정). 별 판정은 서버(R-STAR).
+export async function getStarCounts(): Promise<{ bookmark: number; review: number }> {
+  const places = await getMySavedPlaces();
+  return {
+    bookmark: places.filter((p) => p.star === "gray").length,
+    review: places.filter((p) => p.star === "fill").length,
+  };
 }
 
 // =========================================================
 // 리뷰
 // =========================================================
-type ReviewRow = {
-  id: string;
-  user_id: string;
-  place_id: string;
-  content: string;
-  created_at: string;
-  users: { nickname: string; avatar_url: string | null } | null;
-  places: { name: string } | null;
-  review_images: { url: string; order_index: number }[] | null;
-  likes: { user_id: string }[] | null;
-};
-
-const REVIEW_SELECT = `
-  id, user_id, place_id, content, created_at,
-  users:user_id ( nickname, avatar_url ),
-  places:place_id ( name ),
-  review_images ( url, order_index ),
-  likes ( user_id )
-`;
-
-const mapReview = (r: ReviewRow, myUserId: string | null): Review => {
-  const images = (r.review_images ?? [])
-    .slice()
-    .sort((a, b) => a.order_index - b.order_index)
-    .map((i) => ({ id: "", url: i.url }));
-  const likes = r.likes ?? [];
-  return {
-    id: r.id,
-    userId: r.user_id,
-    authorNickname: r.users?.nickname ?? "user",
-    authorAvatarUrl: r.users?.avatar_url ?? null,
-    placeId: r.place_id,
-    placeName: r.places?.name ?? "",
-    content: r.content,
-    images,
-    likeCount: likes.length,
-    likedByMe: myUserId ? likes.some((l) => l.user_id === myUserId) : false,
-    createdAt: r.created_at,
-    version: 0, // Supabase 경로(getMyReviews, 프로필 교체 전까지) — 수정은 RV-04 로 다시 읽으므로 쓰이지 않는다
-    mine: myUserId === r.user_id,
-  };
-};
-
 // PL-02 리뷰 목록 — 최신순 키셋 페이지(FE-2 사용자 결정 (b) 무한 스크롤). 첫 요청은 cursor 없이, 다음은 받은 nextCursor 그대로.
 export async function getReviewsByPlace(
   placeId: string,
@@ -350,14 +296,46 @@ export async function getReviewsByPlace(
   return { items: page.items.map((v) => fromPlaceReview(v, placeId)), nextCursor: page.nextCursor };
 }
 
-export async function getMyReviews(userId: string): Promise<Review[]> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select(REVIEW_SELECT)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return ((data ?? []) as unknown as ReviewRow[]).map((r) => mapReview(r, userId));
+// PF-04 내 리뷰 피드 — 최신순 키셋, 기본 5개("더 보기"). 첫 요청은 cursor 없이.
+export async function getMyReviews(
+  cursor: string | null = null
+): Promise<{ items: Review[]; nextCursor: string | null }> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const res = await nookFetch(`/me/reviews${query}`);
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  const page = (await res.json()) as {
+    items: {
+      id: string;
+      placeId: string;
+      placeName: string;
+      content: string;
+      images: { id: string; url: string }[];
+      createdAt: string;
+      version: number;
+      likeCount: number;
+      likedByMe: boolean;
+    }[];
+    nextCursor: string | null;
+  };
+  return {
+    // 작성자는 나 — 닉네임·사진은 화면이 가진 user 로 충분해 비워 둔다(카드는 showPlaceName 으로 장소를 보인다).
+    items: page.items.map((v) => ({
+      id: v.id,
+      userId: "",
+      authorNickname: "",
+      authorAvatarUrl: null,
+      placeId: v.placeId,
+      placeName: v.placeName,
+      content: v.content,
+      images: v.images.map(({ id, url }) => ({ id, url })),
+      likeCount: v.likeCount,
+      likedByMe: v.likedByMe,
+      createdAt: v.createdAt,
+      version: v.version,
+      mine: true,
+    })),
+    nextCursor: page.nextCursor,
+  };
 }
 
 // RV-04 수정 화면용 단건 — 작성자만. 없으면 "not_found"(404), 남의 것이면 "forbidden"(403).

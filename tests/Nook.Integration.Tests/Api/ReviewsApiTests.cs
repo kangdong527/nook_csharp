@@ -892,5 +892,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         public Task<IReadOnlyList<PlaceReview>> ListByPlaceAsync(
             PlaceId placeId, UserId me, ReviewCursor? after, int take, CancellationToken ct) =>
             inner.ListByPlaceAsync(placeId, me, after, take, ct);
+
+        public Task<IReadOnlyList<MyReview>> ListByUserAsync(
+            UserId userId, ReviewCursor? after, int take, CancellationToken ct) =>
+            inner.ListByUserAsync(userId, after, take, ct);
     }
 }

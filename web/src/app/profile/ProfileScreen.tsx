@@ -11,26 +11,50 @@ import { ProfileEditModal } from "@/components/ProfileEditModal";
 import { FullSpinner } from "@/components/Spinner";
 import { SettingsIcon, StarIcon } from "@/components/icons";
 
-const PAGE = 5;
-
 export function ProfileScreen({ initialUser }: { initialUser: User }) {
   // 서버가 내려준 값이 시작점이고, 프로필 수정 결과를 즉시 반영하기 위해
   // 로컬 상태로 들고 있는다(수정 후 서버 재요청 없이 화면이 갱신된다).
   const [user, setUser] = useState<User>(initialUser);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [counts, setCounts] = useState({ bookmark: 0, review: 0 });
-  const [visible, setVisible] = useState(PAGE);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
 
   const userId = user.id;
 
+  // 내 리뷰 응답엔 작성자가 없다(나) — 카드 머리에 보일 닉네임·사진은 화면의 user 로 채운다.
+  const asMine = useCallback(
+    (items: Review[]) =>
+      items.map((r) => ({ ...r, userId, authorNickname: user.nickname, authorAvatarUrl: user.avatarUrl })),
+    [userId, user.nickname, user.avatarUrl]
+  );
+
+  // 첫 페이지(PF-04 기본 5개)와 별 개수(PF-03). 삭제 뒤에도 이걸로 처음부터 다시 받는다.
   const load = useCallback(async () => {
-    const [rv, c] = await Promise.all([getMyReviews(userId), getStarCounts(userId)]);
-    setReviews(rv);
+    const [page, c] = await Promise.all([getMyReviews(), getStarCounts()]);
+    setReviews(asMine(page.items));
+    setNextCursor(page.nextCursor);
     setCounts(c);
     setLoading(false);
-  }, [userId]);
+  }, [asMine]);
+
+  // "리뷰 더 보기" — 서버 키셋 다음 페이지(원본은 전부 받아 화면에서 5개씩 잘랐다).
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await getMyReviews(nextCursor);
+      setReviews((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...asMine(page.items).filter((r) => !seen.has(r.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -78,7 +102,7 @@ export function ProfileScreen({ initialUser }: { initialUser: User }) {
           ) : (
             <>
               <div className="mt-3 space-y-4">
-                {reviews.slice(0, visible).map((r) => (
+                {reviews.map((r) => (
                   <ReviewCard
                     key={r.id}
                     review={r}
@@ -88,9 +112,10 @@ export function ProfileScreen({ initialUser }: { initialUser: User }) {
                   />
                 ))}
               </div>
-              {visible < reviews.length && (
+              {nextCursor && (
                 <button
-                  onClick={() => setVisible((v) => v + PAGE)}
+                  onClick={loadMore}
+                  disabled={loadingMore}
                   className="mt-4 w-full rounded-2xl bg-field py-3 text-sm font-semibold text-sub"
                 >
                   리뷰 더 보기

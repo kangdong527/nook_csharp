@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
 using Nook.Api.Http;
 using Nook.Application.Bookmarks;
+using Nook.Application.Reviews;
 using Nook.Application.Users;
 
 namespace Nook.Api.Controllers;
@@ -23,6 +24,21 @@ public sealed class MeController : ControllerBase
         return result.TryGetValue(out var me, out var error)
             ? Ok(me)
             : this.Problem(error);
+    }
+
+    // PF-04. 첫 요청은 cursor 없이, 다음부터는 직전 응답의 nextCursor 그대로. 기본 5개(유스케이스 "5개씩 더 보기").
+    [HttpGet("reviews")]
+    [ProducesResponseType<MyReviewPageView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Reviews(
+        [FromQuery] string? cursor,
+        [FromQuery] int? limit,
+        [FromServices] GetMyReviewsHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetMyReviewsQuery(User.GetUserId(), cursor, limit), ct);
+
+        return result.TryGetValue(out var page, out var error) ? Ok(page) : this.Problem(error);
     }
 
     // BM-03. 없으면 빈 배열(200).

@@ -44,6 +44,7 @@ builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<GetMyPlacesHandler>();
 builder.Services.AddScoped<GetMeHandler>();
+builder.Services.AddScoped<GetMyReviewsHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();

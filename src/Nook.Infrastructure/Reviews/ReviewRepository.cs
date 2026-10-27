@@ -143,6 +143,35 @@ internal sealed class ReviewRepository(NookDbContext db) : IReviewRepository
         return [.. rows.Select(row => new PlaceReview(row.Review, row.Nickname.Value, row.LikeCount, row.LikedByMe))];
     }
 
+    public async Task<IReadOnlyList<MyReview>> ListByUserAsync(
+        UserId userId, ReviewCursor? after, int take, CancellationToken ct)
+    {
+        // ListByPlaceAsync와 같은 키셋. 받는 인덱스(예상): ux_reviews_user_place_date의 앞 컬럼 user_id로 범위를 좁힌 뒤
+        // created_at 정렬은 인덱스 밖(한 회원의 리뷰 수만큼). 정렬 인덱스는 erd.md에서 보류한 것 — D8에서 EXPLAIN 후 결정.
+        var source = after is null
+            ? db.Reviews.Where(r => r.UserId == userId)
+            : db.Reviews.FromSql($"""
+                SELECT * FROM reviews
+                WHERE user_id = {userId.Value} AND (created_at, id) < ({after.CreatedAt}, {after.Id})
+                """);
+
+        var rows = await source
+            .AsNoTracking()
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(take)
+            .Select(r => new
+            {
+                Review = r,
+                PlaceName = db.Places.Where(p => p.Id == r.PlaceId).Select(p => p.Name).Single(),
+                LikeCount = db.Likes.Count(l => l.ReviewId == r.Id),
+                LikedByMe = db.Likes.Any(l => l.ReviewId == r.Id && l.UserId == userId),
+            })
+            .ToListAsync(ct);
+
+        return [.. rows.Select(row => new MyReview(row.Review, row.PlaceName, row.LikeCount, row.LikedByMe))];
+    }
+
     private sealed class DeletedReviewRow
     {
         public Guid PlaceId { get; init; }

@@ -24,6 +24,9 @@ const GUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
 const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // 지도·별 상태 (BM-03, PL-01, PL-02 장소 상세, BM-01·02)
   { method: "GET", path: /^\/me\/places$/ },
+
+  // 프로필 (PF-04 내 리뷰 피드)
+  { method: "GET", path: /^\/me\/reviews$/ },
   { method: "POST", path: /^\/places$/ },
   { method: "GET", path: new RegExp(`^/places/${GUID}$`) },
   { method: "PUT", path: new RegExp(`^/places/${GUID}/bookmark$`) },
