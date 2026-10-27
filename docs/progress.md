@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-27, FE-2 — 데모 3흐름 연결 완료, 프로필 묶음부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 305개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **FE 진행 중** (2026-10-27, FE-2 — 데모 3흐름·프로필 완료, 그룹 묶음 3단계부터). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 337개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
@@ -19,8 +19,12 @@
        - 수동 확인 메모: `curl` 체인에서 `grep -c`가 0이면 종료 코드 1 → `&&` 뒤가 안 돈다. 같은 이메일 링크는 15분에 3개(`MagicLinkPolicy`). Next는 `npm --prefix web run dev`로(루트에서 `npx next`는 next@16을 받아 실행한다)
        - 알려진 빈 곳: 저장한 장소를 다시 열면 카테고리·전화가 비어 보임(`places` 부가 정보 없음, D3-2), 리뷰 카드 작성자 사진은 기본 이미지(PF-01 때). 로컬 개발 DB의 기존 `review_date`는 UTC 기준 값(운영 데이터 아님)
        - 브라우저로 직접 눌러 본 적 없음(원본 Supabase 보호) — 카카오 키·`.env.local` 교체 뒤 화면 확인 필요
-     - **▶ 다음 (여기서 시작)**: 프로필 묶음(백로그 순서 5) — PF-04 내 리뷰 피드(`GET /me/reviews`, 키셋 재사용) · PF-03 별 개수(A안: FE가 `GET /me/places`로 센다) · PF-01 닉네임·프로필 사진 수정(`users.avatar_key`, `avatars/` 키 규칙, 가입 직후에도 여기서) · 닉네임 미리 확인(만들지부터 결정) · `deleteAccount`는 PF-02(순서 7)
-     - 그다음: 그룹(색 슬롯·내 그룹 목록·GR-03·GR-05) → 탈퇴(PF-02) → `@supabase/*` 제거·화면 전체 확인
+     - ~~프로필 묶음~~ ✅ FE-2 — PF-04 `GET /me/reviews`(키셋 5개)·PF-03 FE가 `/me/places`로 셈 `b1a6e79` · PF-01 `PATCH /me`(닉네임, 미리 확인 없음 — DB UNIQUE)·`PUT/DELETE /me/avatar`(`users.avatar_key`, `avatars/` 키) `a5a6f0e`. 원본 모달엔 사진 삭제 버튼이 없어 DELETE는 미사용(정정)
+     - 그룹 묶음 (PM 허가: 만든 사람이 방장 — ADR-012, ADR-004 결정 6 번복)
+       - ~~1. 방장 + 색 슬롯~~ ✅ `ed28fbc` — `groups.owner_id`(RESTRICT + 인덱스), 방장이 나가면 가장 먼저 합류한 멤버로, `group_members.color_slot` 0~3 랜덤·UNIQUE. 원자성 테스트는 임시 CHECK로 바꿈(owner FK가 groups INSERT를 먼저 막아서)
+       - ~~2. GR-03 이름 변경(방장만, 그룹 행 잠금 안)·GR-06 `GET /me/groups`(SQL 1문장 — 로그로 확인)~~ ✅ `ea94b3f`
+       - **▶ 다음 (여기서 시작)**: 3. GR-05 그룹 지도 `GET /groups/{id}/places` — 장소마다 1행, 사실만(리뷰한 멤버 수 `COUNT(DISTINCT user_id)`·첫 리뷰어 슬롯(현재 멤버 중 created_at 가장 이른)·북마크 수·단독 북마커 슬롯), 멤버만(403/404), 가입 전 리뷰 포함, 탈퇴 회원 리뷰 제외. 그다음 FE 그룹 화면(`getMyGroups`·create/join/leave/rename·`getGroupSavedPlaces` 교체, 슬롯→색 임시 매핑)
+     - 그다음: 탈퇴(PF-02, PM 질문 2개 남음) → `@supabase/*` 제거·화면 전체 확인
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
      - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
   - **D6 남은 것** (완료, PR #8)
