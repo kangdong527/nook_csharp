@@ -24,4 +24,21 @@ public static class UserErrors
         "User.EmailFormat",
         $"이메일 형식이 올바르지 않습니다. 이메일 형식은 공백 없이 '@'를 하나 포함해 최대 {Email.MaxLength}자 입니다.",
         ErrorType.Validation);
+
+    // R-US-04. 없음도 같은 오류 — 가입 폼에서 필수다.
+    public static readonly Error GenderInvalid = new(
+        "User.GenderInvalid",
+        "성별은 female, male, none 중 하나여야 합니다.",
+        ErrorType.Validation);
+
+    // R-US-05
+    public static readonly Error BirthdateFormat = new(
+        "User.BirthdateFormat",
+        "생년월일은 YYYY-MM-DD 형식이어야 합니다.",
+        ErrorType.Validation);
+
+    public static readonly Error BirthdateOutOfRange = new(
+        "User.BirthdateOutOfRange",
+        $"생년월일은 {Birthdate.MinValue:yyyy-MM-dd}부터 오늘까지여야 합니다.",
+        ErrorType.Validation);
 }

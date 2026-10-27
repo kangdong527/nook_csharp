@@ -8,7 +8,8 @@ namespace Nook.Application.Auth;
 // AU-02 흐름 3: 매직 링크 소모(erd.md magic_link_tokens "흐름" 3). 가입·로그인 공통.
 // 한 트랜잭션: Q1 소모 → 회원 찾기(users Q4) → 없으면 가입 → Q3 남은 링크 무효화 → 커밋.
 // 결과: 로그인(UserId) · 닉네임 필요 · 실패(InvalidLink 400 · 닉네임 형식 400 · NicknameTaken 409).
-public sealed record ConsumeMagicLinkCommand(string? Token, string? Nickname);
+// Gender·Birthdate는 가입(회원 없음)일 때만 본다 — 닉네임과 같은 규칙(D5-3). Birthdate는 선택, YYYY-MM-DD.
+public sealed record ConsumeMagicLinkCommand(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
 
 // Application 공개 결과는 Domain 타입을 노출하지 않는다(D5 결정) — UserId 대신 Guid.
 public sealed record ConsumeMagicLinkOutcome(Guid? SignedInUserId)
@@ -52,7 +53,18 @@ public sealed class ConsumeMagicLinkHandler(
             if (!Nickname.Create(command.Nickname).TryGetValue(out var nickname, out var nicknameError))
                 return nicknameError;
 
-            user = User.Create(nickname, email);
+            if (!GenderCode.Parse(command.Gender).TryGetValue(out var gender, out var genderError))
+                return genderError;
+
+            Birthdate? birthdate = null;
+            if (!string.IsNullOrEmpty(command.Birthdate))
+            {
+                if (!Birthdate.Create(command.Birthdate, DateOnly.FromDateTime(now.UtcDateTime)).TryGetValue(out var parsed, out var birthError))
+                    return birthError;
+                birthdate = parsed;
+            }
+
+            user = User.Create(nickname, email, gender, birthdate);
             if ((await users.AddAsync(user, ct)).IsFailure(out var addError))
                 return addError;
         }

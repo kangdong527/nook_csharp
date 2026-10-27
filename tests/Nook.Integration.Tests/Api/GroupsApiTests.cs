@@ -39,8 +39,8 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
 
     private readonly NookApiFactory _factory;
     private readonly HttpClient _client;
-    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"));
-    private readonly User _creator = User.Create(Nickname.From("방장"), Email.From("creator@example.com"));
+    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
+    private readonly User _creator = User.Create(Nickname.From("방장"), Email.From("creator@example.com"), Gender.None, null);
 
     public GroupsApiTests(PostgresFixture fixture) : base(fixture)
     {
@@ -190,7 +190,7 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
         var others = new List<User>();
         for (var i = 1; i <= extraMembers; i++)
         {
-            var member = User.Create(Nickname.From($"멤버{i}"), Email.From($"member{i}@example.com"));
+            var member = User.Create(Nickname.From($"멤버{i}"), Email.From($"member{i}@example.com"), Gender.None, null);
             others.Add(member);
             Assert.True(group.AddMember(member.Id, CreatedAt).IsSuccess);
         }

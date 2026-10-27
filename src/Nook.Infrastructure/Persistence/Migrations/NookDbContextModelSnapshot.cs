@@ -217,11 +217,21 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateOnly?>("Birthdate")
+                        .HasColumnType("date")
+                        .HasColumnName("birthdate");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)")
                         .HasColumnName("email");
+
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("gender");
 
                     b.Property<string>("Nickname")
                         .IsRequired()
@@ -234,7 +244,11 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
                     b.ToTable("users", null, t =>
                         {
+                            t.HasCheckConstraint("ck_users_birthdate", "birthdate >= DATE '1900-01-01'");
+
                             t.HasCheckConstraint("ck_users_email", "email ~ '^[^@[:space:]]+@[^@[:space:]]+$'");
+
+                            t.HasCheckConstraint("ck_users_gender", "gender IN ('female', 'male', 'none')");
 
                             t.HasCheckConstraint("ck_users_nickname", "char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED");
                         });

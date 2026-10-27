@@ -25,6 +25,8 @@ erDiagram
         uuid id PK "UUID v7, 앱 발급"
         varchar(12) nickname UK "lower() 식 UNIQUE"
         varchar(254) email UK "lower() 식 UNIQUE"
+        varchar(6) gender "female·male·none"
+        date birthdate "NULL 허용"
     }
 
     places {
@@ -105,7 +107,7 @@ erDiagram
 
 ### users
 
-관련 규칙: R-US-01 · R-US-02 · R-US-03 · R-GR-04
+관련 규칙: R-US-01 · R-US-02 · R-US-03 · R-US-04 · R-US-05 · R-GR-04
 
 [이 테이블을 읽는 쿼리]
 
@@ -123,6 +125,8 @@ erDiagram
 | id | `uuid` | NOT NULL | 없음 | 앱이 `UserId.New()`(UUID v7)로 발급(ADR-006). DB 기본값을 두면 발급 주체가 둘이 된다 |
 | nickname | `varchar(12)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-02). PostgreSQL `varchar(n)`은 글자(코드 포인트) 단위라 `Nickname.MaxLength`(rune 수)와 단위가 같다 |
 | email | `varchar(254)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-03). `Email.MaxLength`와 같은 상한 |
+| gender | `varchar(6)` | NOT NULL | 없음 | `female`·`male`·`none`(R-US-04). 가입 폼 필수. 추가 마이그레이션(`AddUserGenderBirthdate`)이 기존 행을 `'none'`으로 채운 뒤 기본값을 지운다 *(FE-1 Claude 작성)* |
+| birthdate | `date` | NULL | 없음 | 선택 입력(R-US-05). 원본 `text 'YY-MM-DD'` → `date`(세기 모호 제거, FE-1 사용자 결정) |
 
 - 시각 컬럼(`created_at`)은 두지 않는다. 가입일을 쓰는 규칙·화면이 없다(ADR-007 "결과", `User` 주석)
 - 인증 관련 컬럼은 두지 않는다. 인증 방식이 매직 링크로 정해졌고(D5) 링크는 `magic_link_tokens`가 맡는다. 가입자는 링크를 요청할 때 닉네임이 없어 users 행을 만들 수 없기 때문이다
@@ -135,6 +139,8 @@ erDiagram
 | UNIQUE (식) | `ux_users_email_lower ON users (lower(email))` | Q4. 대소문자만 다른 이메일 중복 가입을 막는다 | R-US-03 |
 | CHECK | `ck_users_nickname`: `char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED` | 앱을 거치지 않은 쓰기(SQL 직접 수정, 시드 스크립트)로 형식이 깨진 닉네임. 공백을 허용하지 않으므로 trim도 함께 보장된다. 상한 12는 `varchar(12)`가 맡는다 | R-US-01, CLAUDE.md "DB CHECK로 이중화" |
 | CHECK | `ck_users_email`: `email ~ '^[^@[:space:]]+@[^@[:space:]]+$'` | 빈 문자열, `@` 0개·2개 이상, `@` 앞뒤가 빔, 공백 포함 | R-US-03 |
+| CHECK | `ck_users_gender`: `gender IN ('female', 'male', 'none')` | 3값 밖의 표기(대문자 포함) | R-US-04 |
+| CHECK | `ck_users_birthdate`: `birthdate >= DATE '1900-01-01'` | 하한 아래. 상한(오늘)은 넣지 않는다 — `current_date`는 비결정적이라 CHECK에 쓰면 재검증 시점마다 결과가 달라질 수 있다. 상한은 `Birthdate.Create`가 가입 시점에 검사 | R-US-05 |
 | FK (나가는 것) | 없음 | users는 다른 테이블을 참조하지 않는다 | |
 | FK (들어오는 것) | bookmarks·reviews·likes·group_members `.user_id → users` — `ON DELETE`는 **각 자식 테이블에서** 정한다 | 탈퇴(PF-02) 때 users 행 DELETE가 자식마다 FK 검사를 한다. PostgreSQL은 FK 쪽 인덱스를 자동으로 만들지 않으므로 자식 테이블마다 `user_id`로 시작하는 인덱스(PK 포함)가 있는지 확인한다 | ADR-005, PF-02 |
 

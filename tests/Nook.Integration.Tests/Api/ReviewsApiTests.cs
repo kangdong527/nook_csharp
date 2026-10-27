@@ -77,9 +77,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     private const string EditedContent = "다시 가 보니 디저트도 맛있는 곳";
 
     private readonly PostgresFixture _fixture;
-    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"));
+    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
     // RV-03: R에 좋아요를 누른 다른 회원 — 남의 리뷰 삭제(403)의 요청자도 겸한다. SeedReviewToDeleteAsync가 저장한다.
-    private readonly User _liker = User.Create(Nickname.From("좋아요"), Email.From("liker@example.com"));
+    private readonly User _liker = User.Create(Nickname.From("좋아요"), Email.From("liker@example.com"), Gender.None, null);
     private readonly Place _place = Place.Create(
         KakaoPlaceId.From("8130394"), "누크 카페", "서울", Coordinate.Create(37.5665, 126.978).Unwrap()).Unwrap();
 
@@ -250,7 +250,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     public async Task Edit_ByOtherUser_Returns403AndUploadsNothing()
     {
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
-        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
         await using (var db = Db.CreateContext())
         {
             db.Add(other);
@@ -583,7 +583,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     public async Task GetForEdit_ByOtherUser_Returns403()
     {
         var (reviewId, _, _, _) = await SeedReviewWithThreeImagesAsync();
-        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
         await using (var db = Db.CreateContext())
         {
             db.Add(other);
@@ -688,7 +688,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // 다른 회원의 리뷰 이미지. 스토리지에는 넣지 않는다 — 단언하는 개수는 이 테스트 리뷰의 것만.
     private async Task<ReviewImage> SeedOtherUsersReviewImageAsync()
     {
-        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
         var review = Review.Create(other.Id, _place.Id, ReviewContent.From(Content), ["reviews/seed/z.jpg"], Now).Unwrap();
         await using var db = Db.CreateContext();
         db.AddRange(other, review);

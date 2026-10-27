@@ -42,7 +42,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] AccessTokenIssuer issuer,
         CancellationToken ct)
     {
-        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(request.Token, request.Nickname), ct);
+        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(request.Token, request.Nickname, request.Gender, request.Birthdate), ct);
 
         if (!result.TryGetValue(out var outcome, out var error))
             return this.Problem(error);
@@ -56,6 +56,7 @@ public sealed class AuthController : ControllerBase
 
 public sealed record MagicLinkRequest(string? Email);
 
-public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname);
+// Gender: female|male|none, Birthdate: YYYY-MM-DD(선택). 둘 다 가입일 때만 쓴다.
+public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
 
 public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname);

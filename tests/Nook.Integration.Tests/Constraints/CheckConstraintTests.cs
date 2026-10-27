@@ -15,7 +15,7 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
 {
     // 테스트 목록
     //
-    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 14개, 제약마다 위반 방식 1~3개)
+    // - Update_WhenValueViolatesCheck_ThrowsCheckViolation   (CHECK 16개, 제약마다 위반 방식 1~3개)
 
     private static readonly DateTimeOffset CreatedAt = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
@@ -26,6 +26,8 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
         { "users", "nickname = 'a'", "ck_users_nickname" },                             // 2자 미만
         { "users", "nickname = 'nook!'", "ck_users_nickname" },                         // 허용 문자 밖
         { "users", "email = 'nook.example.com'", "ck_users_email" },                    // @ 없음
+        { "users", "gender = 'other'", "ck_users_gender" },                             // 3값 밖
+        { "users", "birthdate = DATE '1899-12-31'", "ck_users_birthdate" },             // 하한 바로 아래
         { "places", "kakao_place_id = '   '", "ck_places_kakao_place_id" },              // 공백만
         { "places", "name = '   '", "ck_places_name" },                                  // 공백만
         { "places", "latitude = 90.5", "ck_places_latitude" },                           // 범위 밖
@@ -63,7 +65,7 @@ public sealed class CheckConstraintTests(PostgresFixture fixture) : IntegrationT
     // 도메인 경로로 만든 정상 행 — CHECK를 전부 통과하는 기준선. 여기서 실패하면 Arrange 문제다.
     private async Task SeedOneRowPerTableAsync()
     {
-        var user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"));
+        var user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
         var place = Place.Create(
             KakaoPlaceId.From("12345"), "누크 카페", "서울 중구", Coordinate.Create(37.5665, 126.9780).Unwrap()).Unwrap();
         var review = Review.Create(

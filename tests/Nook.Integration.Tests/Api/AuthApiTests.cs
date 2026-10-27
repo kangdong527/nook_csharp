@@ -121,7 +121,7 @@ public sealed class AuthApiTests : IntegrationTestBase, IDisposable
     }
 
     private Task<HttpResponseMessage> PostConsumeAsync(string token, string? nickname) =>
-        _client.PostAsJsonAsync("/auth/magic-link/consume", new ConsumeMagicLinkRequest(token, nickname));
+        _client.PostAsJsonAsync("/auth/magic-link/consume", new ConsumeMagicLinkRequest(token, nickname, Gender: "none"));
 
     private async Task<ConsumeMagicLinkResponse> ConsumeOkAsync(string token, string? nickname)
     {

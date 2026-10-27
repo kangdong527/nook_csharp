@@ -16,6 +16,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                 "char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED");
             table.HasCheckConstraint("ck_users_email",
                 "email ~ '^[^@[:space:]]+@[^@[:space:]]+$'");
+            table.HasCheckConstraint("ck_users_gender",
+                "gender IN ('female', 'male', 'none')");
+            // 상한(오늘)은 넣지 않는다 — current_date는 비결정적이라 CHECK에 쓰지 않는다(Birthdate 주석).
+            table.HasCheckConstraint("ck_users_birthdate",
+                "birthdate >= DATE '1900-01-01'");
         });
 
         // 받는 쿼리: erd.md users Q1·Q2·Q5
@@ -35,5 +40,14 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("email")
             .HasMaxLength(Email.MaxLength)
             .HasConversion(e => e.Value, value => Email.From(value));
+
+        builder.Property(u => u.Gender)
+            .HasColumnName("gender")
+            .HasMaxLength(6)
+            .HasConversion(g => GenderCode.ToCode(g), code => GenderCode.From(code));
+
+        builder.Property(u => u.Birthdate)
+            .HasColumnName("birthdate")
+            .HasConversion(b => b!.Value, value => Birthdate.From(value));
     }
 }
