@@ -13,14 +13,12 @@
      - ~~`npm audit fix`~~ ✅ `48bb561`(lockfile만, `tsc`·`next build` 통과. 남은 것은 next critical 1건 → DEP 전 업그레이드)
      - 백엔드 할 일 전체 목록: **`docs/design/fe-backend-backlog.md`**(원본 함수 28개 대조, 제안 순서 1~7, 결정 기록). 순서·일정은 사용자 결정 — 아래는 그 3번부터
      - ~~백엔드 선행 과제 1·2·3·4~~ ✅ FE-2 — `GET /me`(AU-04) · `GET /reviews/{id}`(RV-04, 작성자만·403) · 이미지 A안 결정 · 토큰 BFF 결정 · `IsBookmarked`(PL-02) · 가입 성별·생일(R-US-04·05)
-     - **▶ 다음 (여기서 시작)**: 백로그 순서 3 — FE 인증 교체(BFF)
-       0. 로컬 개발 DB에 `dotnet ef database update --project src/Nook.Infrastructure --startup-project src/Nook.Api`(마이그레이션 `AddUserGenderBirthdate` 미적용)
-       1. 메일 링크 `http://localhost:3300/auth/magic-link#token=…` → **클라이언트 페이지**가 `#token`을 읽어(프래그먼트는 서버로 안 감) `POST /api/auth/consume`(Next route handler)
-       2. route handler: C# consume → 기존 회원이면 `nook_at` 쿠키(httpOnly·SameSite=Lax·1시간) → `/map` / 새 회원(`needsNickname`)이면 원래 토큰을 `nook_signup` 쿠키(httpOnly·15분)에 보관 → `/signup/profile`
-       3. 프로필 폼 → `POST /api/auth/signup`(닉네임·`gender`·`birthdate` `YYYY-MM-DD` — FE가 `YY-MM-DD` 세기 변환) → C# consume(토큰+필드) → `nook_at`, `nook_signup` 삭제. 아바타는 가입 직후 PF-01로 따로
-       4. `api.server.ts`(쿠키 토큰 → Bearer로 C# 호출, 401 → 로그인으로), middleware(보호 경로에 `nook_at` 없으면 `/login`), 로그아웃 route handler(쿠키 삭제), `POST /api/auth/magic-link` 중계
-       5. 로그인·가입 화면 문구: "미가입/이미 가입" 안내 제거 → "메일을 보냈어요"로 통일(사용자 결정 (a) — 백엔드는 가입 여부를 노출하지 않음, D5). **명세서 :81·:148과 다름 → PM에 알림**
-       6. 그다음: 흐름별 `store.ts` 교체(지도·별 상태 → 리뷰 → 프로필 → 그룹), 끝나면 `@supabase/*` 제거
+     - ~~FE 인증 교체(BFF)~~ ✅ FE-2 `47e8ffd` — route handler `/api/auth/{magic-link,consume,signup,logout}`, 쿠키 `nook_at`(1시간)·`nook_signup`(15분), 링크 도착 `/auth/magic-link`(클라이언트가 `#token` 읽음), `GET /me` 기반 3상태 가드, middleware는 쿠키 유무만. 로컬 API·DB로 가입·로그인·링크 재사용 400·로그아웃·가짜 쿠키 13단계 확인
+     - ~~BFF 중계 + 지도·별 상태~~ ✅ FE-2 — `/api/nook/[...path]`(허용 목록·헤더 정리·Origin 검사·경로 조작 거절), `lib/api/client.ts` `nookFetch`(401 → /login). `store.ts` `getMySavedPlaces`·`upsertPlace`·`getPlace`·`isBookmarked` → C# API, `toggleBookmark` → `setBookmarked(placeId, on)`(PUT/DELETE 멱등). 13항목 확인(허용 밖 404, Origin 없음·외부 403, `..%2F` 404, 쿠키 없음 401)
+     - **▶ 다음 (여기서 시작)**: 리뷰 흐름 연결 — 먼저 이미지 표시(백로그 🔧-1 A안: 로컬 디스크 `IReviewImageStorage` + 익명 `GET /images/{key}` + 응답 `Url`), 그다음 `store.ts` `getReviewsByPlace`(PL-02 커서 페이지)·`createReview`·`updateReview`(version)·`deleteReview`·`toggleLike`·`getReview`(RV-04)를 중계 허용 목록에 추가하며 교체
+       - 수동 확인 메모: `curl` 체인에서 `grep -c`가 0이면 종료 코드 1 → `&&` 뒤가 안 돈다(FE-2에서 이걸 메일 제한으로 오진했다가 정정). 같은 이메일 링크는 15분에 3개(`MagicLinkPolicy`)
+       - 알려진 빈 곳: 저장한 장소를 지도에서 다시 열면 카테고리·전화가 비어 보인다 — 우리 `places`에 부가 정보 컬럼이 없음(D3-2). 범위 판단은 화면 확인 후
+     - 그다음: 프로필(PF-04·PF-03·PF-01+아바타) → 그룹 → 탈퇴(백로그 순서 5~7), 끝나면 `@supabase/*` 제거
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
      - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
   - **D6 남은 것** (완료, PR #8)
@@ -385,8 +383,11 @@ Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `p
 7. `IsBookmarked`(PL-02): 별은 리뷰가 있으면 fill이라 북마크 상태가 가려짐(정보 손실). 이미 조회하던 값을 응답에 추가, 쿼리 수 그대로
 8. 가입 성별·생일(R-US-04·05): `Gender` enum 1부터(default 차단), `Birthdate`(1900-01-01~오늘 UTC), 새 회원만 검사, 마이그레이션은 기존 행 `'none'` 채운 뒤 기본값 삭제, CHECK에 `current_date` 안 씀(비결정적). 변이(상한 제거) → 도메인·통합 각 1개 빨간불
 
-커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 (`feat/fe-connect`, 미푸시)
-Claude가 작성(FE-2, 사용자 요청): AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
+9. FE 인증 교체(BFF): 로그인·가입 문구 통일 (a) · 성별·생일 백엔드 먼저 · 토큰 60분 유지(사용자 결정). 링크 토큰이 `#` 프래그먼트라 도착 지점은 route handler가 아니라 클라이언트 페이지. 가입 대기 쿠키가 원본 `no_profile` 자리를 대신해 3상태 가드 재사용. 가입 폼 표시용으로 consume `needsNickname` 응답에 이메일 추가
+10. BFF 중계: 사용자 요청 "안전하고 대중적인 방식" → 범용 중계 route handler + 허용 목록 추천·채택(Server Actions는 본문 1MB 기본 제한·읽기 용도에 안 맞음). open proxy 방지 장치 4개. 토글 → 목표 상태 명시(PUT/DELETE)
+11. 수동 확인 중 오진 1건: 401 원인을 "이메일당 메일 제한"으로 설명 → DB 확인 결과 2건뿐이라 틀림 → 실제는 테스트 스크립트(`grep -c` 0 → 종료 코드 1 → `&&` 중단). 측정 전 추측을 원인으로 말하지 않기
+커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · 이 세션 마무리 커밋(BFF 중계·지도) (`feat/fe-connect`, 미푸시)
+Claude가 작성(FE-2, 사용자 요청): web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
 ## 체크리스트
 
