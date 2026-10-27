@@ -127,7 +127,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var saved = await db.Reviews.SingleAsync();
         Assert.Equal(DateOnly.FromDateTime(Now.UtcDateTime), saved.ReviewDate);
         // 응답의 이미지 ID가 저장된 ID다 — 클라이언트가 RV-02의 KeepImageIds로 그대로 돌려보낸다(ADR-009 결정 2).
-        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}")));
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var saved = await ReloadAsync(reviewId);
         Assert.Equal(EditedContent, saved.Content.Value);
         Assert.Equal([c.Id.Value, a.Id.Value, view.Images[2].Id], saved.Images.Select(i => i.Id.Value));
-        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}")));
 
         // B만 지워지고 새 이미지가 올라간다: 3 - 1 + 1.
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -564,7 +564,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         Assert.Equal((reviewId, _place.Id.Value, "누크 카페", Content, SeededVersion),
             (view.Id, view.PlaceId, view.PlaceName, view.Content, view.Version));
         Assert.Equal(
-            [new(a.Id.Value, a.StorageKey), new(b.Id.Value, b.StorageKey), new(c.Id.Value, c.StorageKey)],
+            [Image(a), Image(b), Image(c)],
             view.Images);
     }
 
@@ -709,6 +709,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return page!.Items.Single(r => r.Id == reviewId).Version;
     }
 
+    // 응답 이미지 — Url은 기본 기준 주소(BFF 중계, Program.cs)로 만든다.
+    private static ReviewImageView Image(ReviewImage i) => new(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}");
+
     private static Guid[] Ids(params ReviewImage[] images) => [.. images.Select(i => i.Id.Value)];
 
     private Task<HttpResponseMessage> EditAsync(Guid reviewId, Guid[] keep, params byte[][] images) =>
@@ -801,6 +804,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 랑데부 뒤 heldContentType 업로드만 붙잡는다 — 다른 요청이 커밋까지 끝낸 다음 테스트가 release로 풀어 준다.
@@ -820,6 +825,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 커밋 후 정리가 실패하는 스토리지. 업로드는 그대로.
@@ -830,6 +837,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) =>
             throw new IOException("스토리지 삭제 실패(테스트)");
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 업로드 직전에 끼어든다 — 핸들러의 조회와 저장 사이에 다른 트랜잭션을 커밋시키는 지점.
@@ -842,6 +851,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // DELETE 직전에서 두 요청이 서로를 기다린다. 나머지는 원래 리포지토리 그대로.

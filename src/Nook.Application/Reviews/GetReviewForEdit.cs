@@ -18,7 +18,7 @@ public sealed record EditableReviewView(
     IReadOnlyList<ReviewImageView> Images,
     int Version);
 
-public sealed class GetReviewForEditHandler(IReviewRepository reviews, IPlaceRepository places)
+public sealed class GetReviewForEditHandler(IReviewRepository reviews, IPlaceRepository places, IReviewImageUrls urls)
 {
     public async Task<Result<EditableReviewView>> HandleAsync(GetReviewForEditQuery query, CancellationToken ct)
     {
@@ -39,7 +39,7 @@ public sealed class GetReviewForEditHandler(IReviewRepository reviews, IPlaceRep
             review.PlaceId.Value,
             place.Name,
             review.Content.Value,
-            [.. review.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey))],
+            [.. review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
             review.Version);
     }
 }

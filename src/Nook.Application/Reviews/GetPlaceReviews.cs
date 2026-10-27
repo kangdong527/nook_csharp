@@ -72,7 +72,7 @@ public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
     }
 }
 
-public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepository reviews)
+public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepository reviews, IReviewImageUrls urls)
 {
     public const int DefaultLimit = 10;
     public const int MaxLimit = 30;
@@ -101,14 +101,14 @@ public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepos
             ? new ReviewCursor(page[^1].Review.CreatedAt, page[^1].Review.Id.Value).Encode()
             : null;
 
-        return new ReviewPageView([.. page.Select(row => ToView(row, me))], nextCursor);
+        return new ReviewPageView([.. page.Select(row => ToView(row, me, urls))], nextCursor);
     }
 
-    private static PlaceReviewView ToView(PlaceReview row, UserId me) => new(
+    private static PlaceReviewView ToView(PlaceReview row, UserId me, IReviewImageUrls urls) => new(
         row.Review.Id.Value,
         new ReviewAuthorView(row.Review.UserId.Value, row.AuthorNickname),
         row.Review.Content.Value,
-        [.. row.Review.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey))],
+        [.. row.Review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
         row.Review.CreatedAt,
         row.Review.Version,
         row.LikeCount,

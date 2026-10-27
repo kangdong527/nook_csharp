@@ -7,6 +7,9 @@
 cs_trainning/
 CLAUDE.local.md
 
+# 개발용 로컬 이미지 저장소(LocalDiskReviewImageStorage)
+App_Data/
+
 # dotenv files
 .env
 .env*.local

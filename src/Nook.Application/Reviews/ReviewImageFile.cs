@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Nook.Application.Reviews;
 
@@ -48,6 +49,22 @@ public sealed record ReviewImageFormat(string Extension, string ContentType)
 // erd.md §3.1 키 규칙: reviews/{yyyy}/{MM}/{dd}/{32자 hex}.{jpg|png|webp}. 최대 56자 = ReviewImage.StorageKeyMaxLength.
 public static class ReviewImageKeys
 {
+    // GET /images/{key}의 키는 불신 입력이다 — 우리가 만드는 모양과 정확히 같을 때만 스토리지에 넘긴다(경로 조작 방어의 1차).
+    private static readonly Regex Shape = new(
+        @"^reviews/[0-9]{4}/[0-9]{2}/[0-9]{2}/[0-9a-f]{32}\.(jpg|png|webp)$",
+        RegexOptions.CultureInvariant);
+
+    public static bool IsValid(string? key) => key is not null && Shape.IsMatch(key);
+
+    // 확장자 → Content-Type. 확장자는 서버가 매직 바이트로 정해 키에 넣은 것이라 믿을 수 있다(IsValid를 통과한 키만).
+    public static string ContentTypeOf(string key) => Path.GetExtension(key) switch
+    {
+        ".jpg" => ReviewImageFormat.Jpeg.ContentType,
+        ".png" => ReviewImageFormat.Png.ContentType,
+        ".webp" => ReviewImageFormat.Webp.ContentType,
+        _ => throw new ArgumentException($"알 수 없는 이미지 확장자입니다: {key}", nameof(key)),
+    };
+
     // 날짜는 업로드 시각의 UTC 날짜(TimeProvider가 정한 값, ADR-007). 식별자는 v4 — 추측하기 어려울수록 좋다.
     // InvariantCulture: 사용자 지정 날짜 형식의 '/'는 문화권 구분자로 바뀔 수 있다.
     public static string New(DateTimeOffset uploadedAt, ReviewImageFormat format) =>

@@ -24,6 +24,7 @@ public sealed record EditReviewCommand(
 public sealed class EditReviewHandler(
     IReviewRepository reviews,
     IReviewImageStorage storage,
+    IReviewImageUrls urls,
     TimeProvider time,
     ILogger<EditReviewHandler> logger)
 {
@@ -69,7 +70,7 @@ public sealed class EditReviewHandler(
             case SaveReviewOutcome.Saved:
                 await ReviewImageCleanup.DeleteAfterCommitAsync(storage, removedKeys, logger);
                 // 7단계. 리뷰가 있으니 R-STAR는 fill(RV-01 7단계와 같은 이유).
-                return ReviewView.From(review, StarRule.Evaluate(isBookmarked: false, hasReview: true));
+                return ReviewView.From(review, urls, StarRule.Evaluate(isBookmarked: false, hasReview: true));
 
             // 6b. 지워진 리뷰라 removedKeys는 RV-03이 이미 맡았고, 방금 올린 newKeys는 고아 — 배치가 정리한다(ADR-009).
             case SaveReviewOutcome.ReviewGone:

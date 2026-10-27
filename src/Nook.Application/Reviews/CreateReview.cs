@@ -21,6 +21,7 @@ public sealed class CreateReviewHandler(
     IPlaceRepository places,
     IReviewRepository reviews,
     IReviewImageStorage storage,
+    IReviewImageUrls urls,
     TimeProvider time)
 {
     public async Task<Result<ReviewView>> HandleAsync(CreateReviewCommand command, CancellationToken ct)
@@ -63,7 +64,7 @@ public sealed class CreateReviewHandler(
         return outcome switch
         {
             // 7단계. 방금 쓴 리뷰가 있으니 R-STAR는 북마크와 무관하게 fill — 북마크를 조회하지 않는다.
-            AddReviewOutcome.Added => ReviewView.From(review, StarRule.Evaluate(isBookmarked: false, hasReview: true)),
+            AddReviewOutcome.Added => ReviewView.From(review, urls, StarRule.Evaluate(isBookmarked: false, hasReview: true)),
             // 6a. 진 쪽 이미지는 고아로 남고 배치가 정리한다(ADR-009).
             AddReviewOutcome.AlreadyReviewedToday => ReviewWriteErrors.AlreadyReviewedToday,
             _ => throw new UnreachableException($"처리하지 않은 {nameof(AddReviewOutcome)}: {outcome}"),

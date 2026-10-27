@@ -28,6 +28,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: new RegExp(`^/places/${GUID}$`) },
   { method: "PUT", path: new RegExp(`^/places/${GUID}/bookmark$`) },
   { method: "DELETE", path: new RegExp(`^/places/${GUID}/bookmark$`) },
+
+  // 리뷰 이미지(<img src>). C# 은 익명 허용이고 키 모양을 다시 검사한다 — 여기서도 같은 모양만 넘긴다.
+  { method: "GET", path: /^\/images\/reviews\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/[0-9a-f]{32}\.(jpg|png|webp)$/ },
 ];
 
 type Context = { params: { path: string[] } };
@@ -58,10 +61,12 @@ async function relay(request: NextRequest, { params }: Context): Promise<NextRes
     body: method === "GET" || method === "DELETE" ? undefined : await request.arrayBuffer(),
   });
 
-  // 본문과 Content-Type 만 넘긴다(Set-Cookie 등 API 헤더는 넘기지 않는다).
+  // 넘기는 헤더는 이것만(Set-Cookie 등 API 헤더는 넘기지 않는다): 본문 해석·이미지 캐시(immutable)·nosniff.
   const out = new Headers();
-  const outType = res.headers.get("content-type");
-  if (outType) out.set("Content-Type", outType);
+  for (const name of ["content-type", "cache-control", "x-content-type-options"]) {
+    const value = res.headers.get(name);
+    if (value) out.set(name, value);
+  }
   const location = res.headers.get("location");
   if (location) out.set("Location", location.replace(/^https?:\/\/[^/]+/, "/api/nook"));
   return new NextResponse(res.status === 204 ? null : res.body, { status: res.status, headers: out });

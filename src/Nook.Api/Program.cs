@@ -24,8 +24,13 @@ builder.Services.AddInfrastructure(connectionString);
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddConsoleEmailTransport();
-    builder.Services.AddInMemoryReviewImageStorage();
+    // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남아 화면 확인에 쓴다. 통합 테스트(Testing)는 메모리 구현을 따로 등록한다.
+    builder.Services.AddLocalDiskReviewImageStorage(
+        builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
 }
+
+// 키 → URL 기준 주소. 기본값은 BFF 중계 경로(브라우저는 Next를 거친다). DEP에서 S3·CDN 주소로 바꾼다.
+builder.Services.AddReviewImageUrls(builder.Configuration["ImageStorage:PublicBaseUrl"] ?? "/api/nook/images/");
 
 builder.Services.AddSingleton(TimeProvider.System);
 
