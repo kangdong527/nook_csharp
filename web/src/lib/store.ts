@@ -3,9 +3,7 @@
 import { supabase } from "./supabase";
 import { nookFetch } from "./api/client";
 import {
-  GROUP_COLORS,
-  GROUP_MAX_COUNT,
-  GROUP_MEMBER_MAX,
+  slotColor,
   type Group,
   type GroupSavedPlace,
   type KakaoPlace,
@@ -69,32 +67,6 @@ export async function deleteAccount(userId: string): Promise<void> {
 // =========================================================
 // 장소 매핑 / upsert
 // =========================================================
-type PlaceRow = {
-  id: string;
-  kakao_id: string;
-  name: string;
-  category: string | null;
-  address: string | null;
-  road_address: string | null;
-  phone: string | null;
-  place_url: string | null;
-  lat: number;
-  lng: number;
-};
-
-const mapPlace = (r: PlaceRow): Place => ({
-  id: r.id,
-  kakaoId: r.kakao_id,
-  name: r.name,
-  category: r.category ?? "",
-  address: r.address ?? "",
-  roadAddress: r.road_address ?? "",
-  phone: r.phone ?? "",
-  placeUrl: r.place_url ?? "",
-  lat: r.lat,
-  lng: r.lng,
-});
-
 // C# API 장소 응답(PlaceView·MyPlaceView·PlaceDetailView 공통 필드). FE-2.
 type PlaceApiView = {
   id: string;
@@ -401,261 +373,97 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 // =========================================================
 // 그룹 (공유 지도)
 // =========================================================
-type GroupRow = {
-  id: string;
-  name: string;
-  invite_code: string;
-  owner_id: string;
-};
-
-const GROUP_SELECT = "id, name, invite_code, owner_id";
-
-// 헷갈리기 쉬운 0/O, 1/I 는 제외한 초대 코드 (6자)
-function genInviteCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 6; i++) {
-    s += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return s;
+// GR-06 내 그룹 목록 — 합류 순, 멤버 수·내 슬롯·방장 여부를 서버가 한 쿼리로(원본 N+1 해소).
+export async function getMyGroups(): Promise<Group[]> {
+  const res = await nookFetch("/me/groups");
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  const views = (await res.json()) as {
+    id: string;
+    name: string;
+    inviteCode: string;
+    memberCount: number;
+    myColorSlot: number;
+    isOwner: boolean;
+  }[];
+  return views.map((v) => ({
+    id: v.id,
+    name: v.name,
+    inviteCode: v.inviteCode,
+    isOwner: v.isOwner,
+    memberCount: v.memberCount,
+    myColor: slotColor(v.myColorSlot),
+  }));
 }
 
-async function memberCount(groupId: string): Promise<number> {
-  const { count } = await supabase
-    .from("group_members")
-    .select("id", { count: "exact", head: true })
-    .eq("group_id", groupId);
-  return count ?? 0;
+// 생성·합류 응답(GroupView)엔 멤버 수·내 슬롯이 없다 → 목록을 다시 받아 그 그룹을 꺼낸다(최대 3개라 싸다).
+async function myGroup(groupId: string): Promise<Group> {
+  const group = (await getMyGroups()).find((g) => g.id === groupId);
+  if (!group) throw new Error(`방금 들어간 그룹이 목록에 없습니다: ${groupId}`);
+  return group;
 }
 
-// 그룹의 다음 멤버 색상 (이미 쓰인 색은 건너뜀)
-async function nextGroupColor(groupId: string): Promise<string> {
-  const { data } = await supabase
-    .from("group_members")
-    .select("color")
-    .eq("group_id", groupId);
-  const used = new Set(((data ?? []) as { color: string }[]).map((m) => m.color));
-  const free = GROUP_COLORS.find((c) => !used.has(c));
-  return free ?? GROUP_COLORS[(data?.length ?? 0) % GROUP_COLORS.length];
-}
-
-// 내가 속한 그룹 목록
-export async function getMyGroups(userId: string): Promise<Group[]> {
-  const { data, error } = await supabase
-    .from("group_members")
-    .select("color, joined_at, groups:group_id ( id, name, invite_code, owner_id )")
-    .eq("user_id", userId)
-    .order("joined_at", { ascending: true });
-  if (error || !data) return [];
-
-  const rows = (data as unknown as {
-    color: string;
-    groups: GroupRow | null;
-  }[]).filter((r) => r.groups);
-
-  return Promise.all(
-    rows.map(async (r) => {
-      const g = r.groups as GroupRow;
-      return {
-        id: g.id,
-        name: g.name,
-        inviteCode: g.invite_code,
-        ownerId: g.owner_id,
-        memberCount: await memberCount(g.id),
-        myColor: r.color,
-      } satisfies Group;
-    })
-  );
-}
-
-// 그룹 만들기 (생성자가 첫 멤버로 합류)
+// GR-02. 그룹명 2~6자(SSoT — 원본 화면의 1~16자와 다르다). 409 Group.TooManyGroups(R-GR-02).
 export async function createGroup(
-  userId: string,
   name: string
-): Promise<
-  | { ok: true; group: Group }
-  | { ok: false; reason: "setup" | "user_missing" | "too_many_groups" | "error" }
-> {
-  const trimmedName = name.trim();
-  const { count: myGroupCount } = await supabase
-    .from("group_members")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if ((myGroupCount ?? 0) >= GROUP_MAX_COUNT) {
-    return { ok: false, reason: "too_many_groups" };
-  }
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = genInviteCode();
-    const { data, error } = await supabase
-      .from("groups")
-      .insert({ name: trimmedName, invite_code: code, owner_id: userId })
-      .select(GROUP_SELECT)
-      .single();
-    if (error || !data) {
-      const code = (error as { code?: string } | null)?.code;
-      if (code === "23505") continue; // 초대 코드 충돌 → 재시도
-      if (code === "42P01") return { ok: false, reason: "setup" }; // 테이블 없음
-      if (code === "23503") return { ok: false, reason: "user_missing" }; // FK 오류
-      console.error("[createGroup] groups insert failed", error);
-      return { ok: false, reason: "error" };
-    }
-    const g = data as GroupRow;
-    const color = GROUP_COLORS[0];
-    const { error: mErr } = await supabase
-      .from("group_members")
-      .insert({ group_id: g.id, user_id: userId, color });
-    if (mErr) {
-      const mCode = (mErr as { code?: string } | null)?.code;
-      await supabase.from("groups").delete().eq("id", g.id);
-      if (mCode === "42P01") return { ok: false, reason: "setup" };
-      if (mCode === "23503") return { ok: false, reason: "user_missing" };
-      console.error("[createGroup] group_members insert failed", mErr);
-      return { ok: false, reason: "error" };
-    }
-    return {
-      ok: true,
-      group: {
-        id: g.id,
-        name: g.name,
-        inviteCode: g.invite_code,
-        ownerId: g.owner_id,
-        memberCount: 1,
-        myColor: color,
-      },
-    };
-  }
-  return { ok: false, reason: "error" };
+): Promise<{ ok: true; group: Group } | { ok: false; reason: "invalid_name" | "too_many_groups" }> {
+  const res = await nookFetch("/groups", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
+  if (res.status === 400) return { ok: false, reason: "invalid_name" };
+  if (res.status === 409) return { ok: false, reason: "too_many_groups" };
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  return { ok: true, group: await myGroup(((await res.json()) as { id: string }).id) };
 }
 
-// 초대 코드로 그룹 합류
+// GR-01. 실패는 오류 코드(title)로 가른다 — 409 가 세 가지라 상태 코드만으로는 모른다.
 export async function joinByInviteCode(
-  userId: string,
   code: string
 ): Promise<
-  | { ok: true; group: Group }
-  | { ok: false; reason: "not_found" | "already" | "too_many_groups" | "full" | "error" }
+  { ok: true; group: Group } | { ok: false; reason: "not_found" | "already" | "too_many_groups" | "full" }
 > {
-  const c = code.trim().toUpperCase();
-  if (!c) return { ok: false, reason: "not_found" };
+  const res = await nookFetch("/groups/join", { method: "POST", body: JSON.stringify({ inviteCode: code.trim() }) });
+  if (res.ok) return { ok: true, group: await myGroup(((await res.json()) as { id: string }).id) };
 
-  const { count: myGroupCount } = await supabase
-    .from("group_members")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if ((myGroupCount ?? 0) >= GROUP_MAX_COUNT) {
-    return { ok: false, reason: "too_many_groups" };
-  }
-
-  const { data: g } = await supabase
-    .from("groups")
-    .select(GROUP_SELECT)
-    .eq("invite_code", c)
-    .maybeSingle();
-  if (!g) return { ok: false, reason: "not_found" };
-  const group = g as GroupRow;
-
-  const { data: existing } = await supabase
-    .from("group_members")
-    .select("id")
-    .eq("group_id", group.id)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (existing) return { ok: false, reason: "already" };
-  if ((await memberCount(group.id)) >= GROUP_MEMBER_MAX) {
-    return { ok: false, reason: "full" };
-  }
-
-  const color = await nextGroupColor(group.id);
-  const { error } = await supabase
-    .from("group_members")
-    .insert({ group_id: group.id, user_id: userId, color });
-  if (error) return { ok: false, reason: "error" };
-
-  return {
-    ok: true,
-    group: {
-      id: group.id,
-      name: group.name,
-      inviteCode: group.invite_code,
-      ownerId: group.owner_id,
-      memberCount: await memberCount(group.id),
-      myColor: color,
-    },
-  };
+  const title = await problemTitle(res);
+  if (res.status === 400 || title === "Group.NotFound") return { ok: false, reason: "not_found" };
+  if (title === "Group.AlreadyMember") return { ok: false, reason: "already" };
+  if (title === "Group.TooManyGroups") return { ok: false, reason: "too_many_groups" };
+  if (title === "Group.GroupFull") return { ok: false, reason: "full" };
+  throw new ApiError(res.status, title);
 }
 
+// GR-03. 방장만(403 Group.NotOwner). 그룹명 2~6자.
 export async function renameGroup(
   groupId: string,
   name: string
-): Promise<boolean> {
-  const { error } = await supabase
-    .from("groups")
-    .update({ name: name.trim() })
-    .eq("id", groupId);
-  return !error;
+): Promise<{ ok: true } | { ok: false; reason: "invalid_name" | "not_owner" }> {
+  const res = await nookFetch(`/groups/${groupId}`, { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
+  if (res.ok) return { ok: true };
+  if (res.status === 400) return { ok: false, reason: "invalid_name" };
+  if (res.status === 403) return { ok: false, reason: "not_owner" };
+  throw new ApiError(res.status, await problemTitle(res));
 }
 
-// 그룹 나가기 → 멤버가 0명이면 그룹 자체 삭제
-export async function leaveGroup(
-  groupId: string,
-  userId: string
-): Promise<void> {
-  await supabase
-    .from("group_members")
-    .delete()
-    .eq("group_id", groupId)
-    .eq("user_id", userId);
-  if ((await memberCount(groupId)) === 0) {
-    await supabase.from("groups").delete().eq("id", groupId);
-  }
+// GR-04. 멱등(204). 방장이 나가면 서버가 가장 먼저 합류한 멤버에게 넘긴다(R-GR-11).
+export async function leaveGroup(groupId: string): Promise<void> {
+  const res = await nookFetch(`/groups/${groupId}/membership`, { method: "DELETE" });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
 }
 
-// 그룹 전체 멤버가 저장한 장소 (멤버 색상으로)
-export async function getGroupSavedPlaces(
-  groupId: string
-): Promise<GroupSavedPlace[]> {
-  const { data: members } = await supabase
-    .from("group_members")
-    .select("user_id, color")
-    .eq("group_id", groupId);
-  if (!members || members.length === 0) return [];
-
-  const colorByUser = new Map<string, string>();
-  (members as { user_id: string; color: string }[]).forEach((m) =>
-    colorByUser.set(m.user_id, m.color)
-  );
-  const userIds = Array.from(colorByUser.keys());
-
-  const [bm, rv] = await Promise.all([
-    supabase.from("bookmarks").select("user_id, places(*)").in("user_id", userIds),
-    supabase.from("reviews").select("user_id, places(*)").in("user_id", userIds),
-  ]);
-
-  const byKey = new Map<string, GroupSavedPlace>();
-  const addRows = (
-    rows: { user_id: string; places: PlaceRow | null }[] | null,
-    star: "gray" | "fill"
-  ) => {
-    (rows ?? []).forEach((row) => {
-      const pr = row.places;
-      if (!pr) return;
-      const color = colorByUser.get(row.user_id) ?? GROUP_COLORS[0];
-      const key = `${pr.id}|${row.user_id}`;
-      const existing = byKey.get(key);
-      if (existing && existing.star === "fill") return; // 리뷰 우선
-      byKey.set(key, { ...mapPlace(pr), star, color });
-    });
-  };
-
-  addRows(
-    bm.data as unknown as { user_id: string; places: PlaceRow | null }[],
-    "gray"
-  );
-  addRows(
-    rv.data as unknown as { user_id: string; places: PlaceRow | null }[],
-    "fill"
-  );
-
-  return Array.from(byKey.values());
+// GR-05 그룹 지도 — 장소마다 한 행(사실). 멤버 아님 403 은 nookFetch 가 401 이 아니므로 그대로 ApiError.
+export async function getGroupSavedPlaces(groupId: string): Promise<GroupSavedPlace[]> {
+  const res = await nookFetch(`/groups/${groupId}/places`);
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
+  const views = (await res.json()) as (PlaceApiView & {
+    placeId: string;
+    reviewMemberCount: number;
+    firstReviewerSlot: number | null;
+    bookmarkCount: number;
+    soleBookmarkerSlot: number | null;
+  })[];
+  return views.map((v) => ({
+    ...toPlace({ ...v, id: v.placeId }),
+    reviewMemberCount: v.reviewMemberCount,
+    firstReviewerSlot: v.firstReviewerSlot,
+    bookmarkCount: v.bookmarkCount,
+    soleBookmarkerSlot: v.soleBookmarkerSlot,
+  }));
 }

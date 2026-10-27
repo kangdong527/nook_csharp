@@ -43,6 +43,14 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "PUT", path: new RegExp(`^/reviews/${GUID}/like$`) },
   { method: "DELETE", path: new RegExp(`^/reviews/${GUID}/like$`) },
 
+  // 그룹 (GR-01~06)
+  { method: "GET", path: /^\/me\/groups$/ },
+  { method: "POST", path: /^\/groups$/ },
+  { method: "POST", path: /^\/groups\/join$/ },
+  { method: "PATCH", path: new RegExp(`^/groups/${GUID}$`) },
+  { method: "DELETE", path: new RegExp(`^/groups/${GUID}/membership$`) },
+  { method: "GET", path: new RegExp(`^/groups/${GUID}/places$`) },
+
   // 리뷰 이미지·프로필 사진(<img src>). C# 은 익명 허용이고 키 모양을 다시 검사한다 — 여기서도 같은 모양만 넘긴다.
   { method: "GET", path: /^\/images\/(reviews|avatars)\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/[0-9a-f]{32}\.(jpg|png|webp)$/ },
 ];

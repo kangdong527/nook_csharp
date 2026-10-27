@@ -22,6 +22,7 @@ import type {
   SavedPlace,
   User,
 } from "@/lib/types";
+import { slotColor } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { BottomNav } from "@/components/BottomNav";
 import { PlaceSheet } from "@/components/PlaceSheet";
@@ -120,11 +121,10 @@ function MapView({ user }: { user: User }) {
       overlaysRef.current = [];
 
       places.forEach((p) => {
-        const color = "color" in p ? p.color : undefined;
         const el = document.createElement("div");
         el.style.cursor = "pointer";
         el.style.transform = "translateY(-50%)";
-        el.innerHTML = starSvg(p.star, color);
+        el.innerHTML = "reviewMemberCount" in p ? groupStarSvg(p) : starSvg(p.star);
         el.addEventListener("click", () => {
           setResults(null);
           setSelected(p);
@@ -180,7 +180,7 @@ function MapView({ user }: { user: User }) {
 
   // 내 그룹 목록 로드 + 저장된 활성 그룹 복원
   const reloadGroups = useCallback(async () => {
-    setGroups(await getMyGroups(userId));
+    setGroups(await getMyGroups());
   }, [userId]);
 
   useEffect(() => {
@@ -373,7 +373,6 @@ function MapView({ user }: { user: User }) {
         {/* 그룹 (공유 지도) */}
         {configured && (
           <GroupControl
-            userId={userId}
             groups={groups}
             activeGroupId={activeGroupId}
             onSelect={selectGroup}
@@ -435,12 +434,28 @@ function pinSvg(): string {
   </svg>`;
 }
 
-// 마커용 별 SVG (color 지정 시 멤버 색상으로 표시 = 그룹 모드)
-function starSvg(star: "gray" | "fill", color?: string): string {
+// 그룹 지도의 별 하나(PM 그룹맵 표시 정책, 서버가 장소마다 집계한 사실로 그린다 — GR-05):
+//   리뷰 있음      → 가장 먼저 리뷰한 멤버의 색, 리뷰한 멤버가 2명 이상이면 안쪽에 숫자(리뷰 + 북마크도 리뷰 규칙)
+//   북마크만 2개+  → 진한 회색(#4A4A4A) + 숫자
+//   북마크만 1개   → 기존 회색 별 + 그 멤버 색 외곽선
+function groupStarSvg(p: GroupSavedPlace): string {
+  if (p.reviewMemberCount > 0) {
+    return starSvg("fill", slotColor(p.firstReviewerSlot ?? 0), p.reviewMemberCount > 1 ? p.reviewMemberCount : undefined);
+  }
+  if (p.bookmarkCount > 1) return starSvg("fill", "#4A4A4A", p.bookmarkCount);
+  return starSvg("gray", undefined, undefined, slotColor(p.soleBookmarkerSlot ?? 0));
+}
+
+// 마커용 별 SVG (color 지정 시 멤버 색상으로 표시 = 그룹 모드). count: 안쪽 숫자, outline: 외곽선 색.
+function starSvg(star: "gray" | "fill", color?: string, count?: number, outline?: string): string {
+  const label =
+    count === undefined
+      ? ""
+      : `<text x="12" y="15.2" text-anchor="middle" font-size="7.5" font-weight="700" fill="#ffffff">${count}</text>`;
   if (star === "gray") {
     return `<svg width="30" height="30" viewBox="0 0 24 24" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3))">
     <path d="M12 2.6l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.05 1.1-6.46-4.69-4.58 6.49-.94L12 2.6z"
-      fill="#9aa0a6" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
+      fill="#9aa0a6" stroke="${outline ?? "#ffffff"}" stroke-width="${outline ? 2 : 1.4}" stroke-linejoin="round"/>
   </svg>`;
   }
   const normalized = (color ?? "").toLowerCase();
@@ -451,6 +466,6 @@ function starSvg(star: "gray" | "fill", color?: string): string {
       : color ?? "#ffc83d";
   return `<svg width="30" height="30" viewBox="0 0 24 24" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3))">
     <path d="M12 2.6l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.05 1.1-6.46-4.69-4.58 6.49-.94L12 2.6z"
-      fill="${fill}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
+      fill="${fill}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>${label}
   </svg>`;
 }

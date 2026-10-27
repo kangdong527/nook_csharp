@@ -41,23 +41,31 @@ export interface SavedPlace extends Place {
 // ---------- 그룹 (공유 지도) ----------
 export const GROUP_MAX_COUNT = 3;
 export const GROUP_MEMBER_MAX = 4;
+// 그룹명 2~6자(SSoT, R-GR-10 — 원본 화면의 1~16자와 다르다). 서버 GroupName·DB CHECK와 같은 값
+export const GROUP_NAME_MIN = 2;
+export const GROUP_NAME_MAX = 6;
 
 export interface Group {
   id: string;
   name: string;
   inviteCode: string;
-  ownerId: string;
+  isOwner: boolean; // 이름 변경은 방장만(R-GR-11) — 서버 판정
   memberCount: number;
-  myColor: string;
+  myColor: string; // 내 색 슬롯 → 색(slotColor)
 }
 
-// 그룹 멤버의 저장 장소 (멤버 색상으로 표시)
+// 그룹 지도의 장소 하나 = 별 하나(GR-05, 서버가 장소마다 한 행으로 집계한 "사실"). 그리는 규칙은 groupStar.
 export interface GroupSavedPlace extends Place {
-  star: "gray" | "fill";
-  color: string; // 멤버 색상
+  reviewMemberCount: number;
+  firstReviewerSlot: number | null;
+  bookmarkCount: number;
+  soleBookmarkerSlot: number | null;
 }
 
-// 그룹 멤버에게 순서대로 배정되는 마커 색상 팔레트
+// 색 슬롯(0~3, R-GR-12) → 색. ⚠️ 임시 팔레트 — 디자인 확정 뒤 이 한 곳만 바꾼다(서버는 슬롯만 저장, ADR-012).
+export const slotColor = (slot: number): string => GROUP_COLORS[slot] ?? GROUP_COLORS[0];
+
+// 슬롯 순서대로의 마커 색상 팔레트(원본 값 — 임시)
 export const GROUP_COLORS = [
   "#000000", // 나(오너) 닉네임
   "#E99938", // 멤버1

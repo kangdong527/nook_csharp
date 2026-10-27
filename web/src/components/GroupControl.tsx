@@ -7,7 +7,7 @@ import {
   leaveGroup,
   renameGroup,
 } from "@/lib/store";
-import { GROUP_MAX_COUNT, type Group } from "@/lib/types";
+import { GROUP_MAX_COUNT, GROUP_NAME_MAX, GROUP_NAME_MIN, type Group } from "@/lib/types";
 import { useToast } from "./Toast";
 import { Spinner } from "./Spinner";
 import {
@@ -19,13 +19,11 @@ import {
 } from "./icons";
 
 export function GroupControl({
-  userId,
   groups,
   activeGroupId,
   onSelect,
   onChanged,
 }: {
-  userId: string;
   groups: Group[];
   activeGroupId: string | null;
   onSelect: (groupId: string | null) => void;
@@ -143,13 +141,11 @@ export function GroupControl({
             setCreateOpen(false);
             toast(`'${group.name}' 그룹을 만들었어요.`);
           }}
-          userId={userId}
         />
       )}
 
       {joinOpen && (
         <JoinGroupModal
-          userId={userId}
           onClose={() => setJoinOpen(false)}
           onJoined={async (group) => {
             await onChanged();
@@ -163,7 +159,6 @@ export function GroupControl({
       {editGroup && (
         <EditGroupModal
           group={editGroup}
-          userId={userId}
           onClose={() => setEditGroup(null)}
           onSaved={async () => {
             await onChanged();
@@ -307,11 +302,9 @@ function DarkPopup({
 }
 
 function CreateGroupModal({
-  userId,
   onClose,
   onCreated,
 }: {
-  userId: string;
   onClose: () => void;
   onCreated: (group: Group) => void;
 }) {
@@ -321,33 +314,34 @@ function CreateGroupModal({
 
   const submit = async () => {
     const n = name.trim();
-    if (n.length < 1 || n.length > 16) {
-      toast("그룹 이름은 1~16자까지 입력할 수 있어요.");
+    if (n.length < GROUP_NAME_MIN || n.length > GROUP_NAME_MAX) {
+      toast(`그룹 이름은 ${GROUP_NAME_MIN}~${GROUP_NAME_MAX}자까지 입력할 수 있어요.`);
       return;
     }
     setLoading(true);
-    const res = await createGroup(userId, n);
-    setLoading(false);
-    if (!res.ok) {
-      toast(
-        res.reason === "setup"
-          ? "Supabase에 groups.sql이 적용되지 않았어요. DB 스키마를 먼저 적용해 주세요."
-          : res.reason === "user_missing"
-          ? "세션이 만료되었어요. 다시 로그인한 뒤 시도해 주세요."
-          : res.reason === "too_many_groups"
-          ? `그룹은 최대 ${GROUP_MAX_COUNT}개까지 만들 수 있어요.`
-          : "그룹 생성에 실패했어요. 잠시 후 다시 시도해 주세요."
-      );
-      return;
+    try {
+      const res = await createGroup(n);
+      if (!res.ok) {
+        toast(
+          res.reason === "too_many_groups"
+            ? `그룹은 최대 ${GROUP_MAX_COUNT}개까지 만들 수 있어요.`
+            : "그룹 이름은 한글·영문·숫자로 입력해 주세요."
+        );
+        return;
+      }
+      onCreated(res.group);
+    } catch {
+      toast("그룹 생성에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
     }
-    onCreated(res.group);
   };
 
   return (
     <DarkPopup
       title="그룹 만들기"
       value={name}
-      onChange={(v) => setName(v.slice(0, 16))}
+      onChange={(v) => setName(v.slice(0, GROUP_NAME_MAX))}
       placeholder="그룹 이름 입력"
       onClose={onClose}
       onConfirm={submit}
@@ -358,11 +352,9 @@ function CreateGroupModal({
 }
 
 function JoinGroupModal({
-  userId,
   onClose,
   onJoined,
 }: {
-  userId: string;
   onClose: () => void;
   onJoined: (group: Group) => void;
 }) {
@@ -372,8 +364,15 @@ function JoinGroupModal({
 
   const submit = async () => {
     setLoading(true);
-    const res = await joinByInviteCode(userId, code);
-    setLoading(false);
+    let res: Awaited<ReturnType<typeof joinByInviteCode>>;
+    try {
+      res = await joinByInviteCode(code);
+    } catch {
+      toast("합류에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      return;
+    } finally {
+      setLoading(false);
+    }
     if (res.ok) {
       onJoined(res.group);
       return;
@@ -407,13 +406,11 @@ function JoinGroupModal({
 
 function EditGroupModal({
   group,
-  userId,
   onClose,
   onSaved,
   onLeft,
 }: {
   group: Group;
-  userId: string;
   onClose: () => void;
   onSaved: () => void;
   onLeft: () => void;
@@ -426,18 +423,23 @@ function EditGroupModal({
 
   const save = async () => {
     const n = name.trim();
-    if (n.length < 1 || n.length > 16) {
-      toast("그룹 이름은 1~16자까지 입력할 수 있어요.");
+    if (n.length < GROUP_NAME_MIN || n.length > GROUP_NAME_MAX) {
+      toast(`그룹 이름은 ${GROUP_NAME_MIN}~${GROUP_NAME_MAX}자까지 입력할 수 있어요.`);
       return;
     }
     setSaving(true);
-    const ok = await renameGroup(group.id, n);
-    setSaving(false);
-    if (!ok) {
+    try {
+      const res = await renameGroup(group.id, n);
+      if (!res.ok) {
+        toast(res.reason === "not_owner" ? "그룹 이름은 방장만 바꿀 수 있어요." : "그룹 이름은 한글·영문·숫자로 입력해 주세요.");
+        return;
+      }
+      onSaved();
+    } catch {
       toast("저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
-      return;
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   };
 
   const copyCode = async () => {
@@ -452,9 +454,14 @@ function EditGroupModal({
 
   const leave = async () => {
     setLeaving(true);
-    await leaveGroup(group.id, userId);
-    setLeaving(false);
-    onLeft();
+    try {
+      await leaveGroup(group.id);
+      onLeft();
+    } catch {
+      toast("일시적인 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setLeaving(false);
+    }
   };
 
   return (
@@ -470,9 +477,11 @@ function EditGroupModal({
             <CloseIcon className="h-5 w-5" />
           </button>
           <h2 className="text-base font-semibold">그룹 수정</h2>
+          {/* 이름 변경은 방장만(R-GR-11) — 멤버에겐 저장 버튼을 숨기고 입력을 잠근다. 최종 판정은 서버 403 */}
           <button
             onClick={save}
             disabled={saving || name.trim().length === 0}
+            hidden={!group.isOwner}
             aria-label="저장"
             className="flex h-8 w-8 items-center justify-center rounded-full bg-field text-ink disabled:opacity-40"
           >
@@ -483,7 +492,8 @@ function EditGroupModal({
         <label className="mt-5 block text-xs font-medium text-sub">그룹 이름</label>
         <input
           value={name}
-          onChange={(e) => setName(e.target.value.slice(0, 16))}
+          onChange={(e) => setName(e.target.value.slice(0, GROUP_NAME_MAX))}
+          readOnly={!group.isOwner}
           placeholder="그룹 이름 입력"
           className="mt-2 w-full border-b border-line bg-transparent pb-2 text-lg outline-none placeholder:text-disabled focus:border-key"
         />
