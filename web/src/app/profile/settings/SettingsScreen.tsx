@@ -4,12 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/lib/data/auth";
 import { deleteAccount } from "@/lib/store";
-import type { User } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { Spinner } from "@/components/Spinner";
 import { ChevronLeftIcon } from "@/components/icons";
 
-export function SettingsScreen({ user }: { user: User }) {
+export function SettingsScreen() {
   const router = useRouter();
   const toast = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -33,12 +32,8 @@ export function SettingsScreen({ user }: { user: User }) {
   const withdraw = async () => {
     setWorking(true);
     try {
-      await deleteAccount(user.id);
-      // ⚠️ deleteAccount 는 public.users 만 지운다 → auth.users 계정은 남는다.
-      //    세션까지 끊지 않으면 "탈퇴했는데 로그인 상태"이고, 가드가
-      //    /signup/profile 로 보내 프로필을 다시 만들라고 요구한다.
-      //    auth.users 삭제(admin.deleteUser)는 Phase 1-8 과제다.
-      await signOut();
+      // 회원 행 삭제 + 쿠키 삭제를 BFF 가 한 번에(PF-02). 원본처럼 따로 signOut 할 필요가 없다.
+      await deleteAccount();
       router.replace("/login");
       router.refresh();
     } catch {

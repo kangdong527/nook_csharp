@@ -1,6 +1,5 @@
 "use client";
 
-import { supabase } from "./supabase";
 import { nookFetch } from "./api/client";
 import {
   slotColor,
@@ -15,21 +14,8 @@ import {
 } from "./types";
 
 // =========================================================
-// 🗑️ 폐기된 것 (Phase 1-5, 2026-08-04)
-//
-//   getSession / setSession / clearSession  → 쿠키 세션으로 대체됨
-//       읽기: lib/data/user.server.ts getCurrentUser()  (서버)
-//       종료: lib/data/auth.ts signOut()                (브라우저)
-//   signIn / emailExists  → lib/data/auth.ts sendMagicLink() (실제 인증)
-//   signUp                → lib/data/user.ts createProfile()
-//
-// signUp 을 남겨두지 않은 이유: insert 시 id 를 주지 않아 gen_random_uuid() 가
-// 새 id 를 만들었다 → auth.users 와 어긋난 프로필 행이 생긴다. 호출되는 순간
-// 정리 대상 데이터가 되므로 "미사용 코드"가 아니라 **함정**이었다.
-//
-// ⚠️ 이 파일의 나머지 함수는 여전히 lib/supabase.ts(`persistSession: false`)를
-//    쓴다 → 쿠키 세션을 태우지 않으므로 요청이 anon 으로 나간다. RLS 를 거는
-//    Phase 1-6 에서 어댑터를 adapters/supabase/client.ts 로 교체해야 한다.
+// 화면이 부르는 데이터 함수 — 모두 C# API(BFF 중계 /api/nook, lib/api/client.ts)를 부른다(FE-2).
+// 원본은 Supabase 를 브라우저에서 직접 불렀다. 함수 이름·모양은 화면을 덜 고치려고 대부분 그대로 두었다.
 // =========================================================
 
 // PF-01 닉네임 — 미리 확인 없이 저장 때 서버가 판정한다(409 User.NicknameTaken, 동시 변경 포함).
@@ -60,8 +46,10 @@ export type MeUser = { id: string; email: string; nickname: string; avatarUrl: s
  *    호출한 화면이 이어서 signOut() 을 해야 "탈퇴했는데 로그인 상태"가 되지
  *    않는다(app/profile/settings/SettingsScreen.tsx 참조).
  */
-export async function deleteAccount(userId: string): Promise<void> {
-  await supabase.from("users").delete().eq("id", userId);
+// PF-02 회원 탈퇴 — BFF 가 C# DELETE /me 를 부르고 쿠키를 지운다. 리뷰·좋아요는 남는다(PM), 복구 없음.
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch("/api/auth/withdraw", { method: "POST" });
+  if (!res.ok) throw new ApiError(res.status, await problemTitle(res));
 }
 
 // =========================================================
@@ -114,7 +102,7 @@ async function problemTitle(res: Response): Promise<string | null> {
 // PL-02 리뷰 항목(C# PlaceReviewView).
 type PlaceReviewApiView = {
   id: string;
-  author: { id: string; nickname: string };
+  author: { id: string; nickname: string; avatarUrl: string | null } | null;
   content: string;
   images: { id: string; url: string }[];
   createdAt: string;
@@ -124,12 +112,13 @@ type PlaceReviewApiView = {
   mine: boolean;
 };
 
-// 작성자 사진은 아직 API 에 없다(PF-01 때) → 기본 이미지.
+// 탈퇴한 작성자는 author 가 null(PF-02) — "탈퇴한 사용자", 기본 이미지. 서버가 ID·닉네임·사진을 주지 않아 리뷰끼리 이어지지 않는다.
+const WITHDRAWN_AUTHOR = "탈퇴한 사용자";
 const fromPlaceReview = (v: PlaceReviewApiView, placeId: string): Review => ({
   id: v.id,
-  userId: v.author.id,
-  authorNickname: v.author.nickname,
-  authorAvatarUrl: null,
+  userId: v.author?.id ?? "",
+  authorNickname: v.author?.nickname ?? WITHDRAWN_AUTHOR,
+  authorAvatarUrl: v.author?.avatarUrl ?? null,
   placeId,
   placeName: "",
   content: v.content,
