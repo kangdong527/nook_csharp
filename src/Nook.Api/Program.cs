@@ -10,6 +10,7 @@ using Nook.Application.Groups;
 using Nook.Application.Likes;
 using Nook.Application.Places;
 using Nook.Application.Reviews;
+using Nook.Application.Users;
 using Nook.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +38,7 @@ builder.Services.AddScoped<GetPlaceReviewsHandler>();
 builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<GetMyPlacesHandler>();
+builder.Services.AddScoped<GetMeHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();

@@ -15,6 +15,10 @@ internal sealed class UserRepository(NookDbContext db) : IUserRepository
             .FromSql($"SELECT * FROM users WHERE lower(email) = lower({email.Value})")
             .SingleOrDefaultAsync(ct);
 
+    public Task<User?> FindByIdAsync(UserId userId, CancellationToken ct) =>
+        // erd.md users Q1. 받는 인덱스: pk_users.
+        db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct);
+
     public async Task<Result> AddAsync(User user, CancellationToken ct)
     {
         db.Users.Add(user);

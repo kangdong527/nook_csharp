@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Auth;
+using Microsoft.AspNetCore.Mvc;
 using Nook.Application.Bookmarks;
+using Nook.Application.Users;
 using Nook.Domain.Bookmarks;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
@@ -20,6 +22,11 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
     // - Places_WhenNothingSaved_ReturnsEmpty
     // - Places_ReturnsUnionOncePerPlaceWithStar   (저장만 → gray, 리뷰만 → fill, 둘 다 + 리뷰 2개 → fill 1행, 남의 기록 → 없음)
     // - Places_WithoutToken_Returns401
+    //
+    // AU-04 GET /me
+    // - Get_ReturnsMyIdEmailNickname
+    // - Get_WhenUserRowMissing_Returns401UnknownUser   (서명 유효 + 회원 행 없음 → 핸들러 401, title로 구분)
+    // - Get_WithoutToken_Returns401WithoutErrorCode    (미들웨어 401 — 핸들러까지 오지 않는다)
 
     private static readonly DateTimeOffset Now = new(2026, 10, 22, 9, 0, 0, TimeSpan.Zero);
 
@@ -103,6 +110,40 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
         var response = await anonymous.GetAsync("/me/places");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_ReturnsMyIdEmailNickname()
+    {
+        var me = await _client.GetFromJsonAsync<MeView>("/me");
+
+        Assert.Equal(new MeView(_me.Id.Value, "nook@example.com", "누크"), me);
+    }
+
+    [Fact]
+    public async Task Get_WhenUserRowMissing_Returns401UnknownUser()
+    {
+        // 서명은 진짜(같은 발급기)지만 DB에 없는 회원 — 탈퇴 후 남은 토큰, DB 초기화와 같은 상황.
+        using var ghost = _factory.CreateClient();
+        var token = _factory.Services.GetRequiredService<AccessTokenIssuer>().Issue(Guid.CreateVersion7());
+        ghost.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await ghost.GetAsync("/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Equal("Auth.UnknownUser", problem!.Title);
+    }
+
+    [Fact]
+    public async Task Get_WithoutToken_Returns401WithoutErrorCode()
+    {
+        using var anonymous = _factory.CreateClient();
+
+        var response = await anonymous.GetAsync("/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.DoesNotContain("Auth.UnknownUser", await response.Content.ReadAsStringAsync());
     }
 
     private static Place NewPlace(string kakaoId, string name) =>
