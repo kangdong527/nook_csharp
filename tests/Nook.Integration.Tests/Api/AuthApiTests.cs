@@ -72,6 +72,7 @@ public sealed class AuthApiTests : IntegrationTestBase, IDisposable
         var body = await ConsumeOkAsync(token, nickname: null);
 
         Assert.True(body.NeedsNickname);
+        Assert.Equal(NewEmail, body.Email);   // 가입 폼 표시용 — 링크의 이메일
         Assert.Null(body.AccessToken);
     }
 

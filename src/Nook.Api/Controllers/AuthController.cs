@@ -50,7 +50,7 @@ public sealed class AuthController : ControllerBase
         // 토큰 발급은 커밋 뒤, AccessTokenIssuer 한 곳에서(D5 결정)
         return outcome.SignedInUserId is { } userId
             ? Ok(new ConsumeMagicLinkResponse(issuer.Issue(userId), NeedsNickname: false))
-            : Ok(new ConsumeMagicLinkResponse(AccessToken: null, NeedsNickname: true));
+            : Ok(new ConsumeMagicLinkResponse(AccessToken: null, NeedsNickname: true, outcome.SignupEmail));
     }
 }
 
@@ -59,4 +59,5 @@ public sealed record MagicLinkRequest(string? Email);
 // Gender: female|male|none, Birthdate: YYYY-MM-DD(선택). 둘 다 가입일 때만 쓴다.
 public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
 
-public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname);
+// Email: needsNickname일 때만 — 가입 폼 표시용(FE-2).
+public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname, string? Email = null);

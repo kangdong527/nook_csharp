@@ -12,7 +12,8 @@ namespace Nook.Application.Auth;
 public sealed record ConsumeMagicLinkCommand(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
 
 // Application 공개 결과는 Domain 타입을 노출하지 않는다(D5 결정) — UserId 대신 Guid.
-public sealed record ConsumeMagicLinkOutcome(Guid? SignedInUserId)
+// SignupEmail: 닉네임 필요일 때 이 링크의 이메일 — 가입 폼이 보여 준다. 토큰을 가진 사람만 받으므로 가입 여부 노출이 아니다.
+public sealed record ConsumeMagicLinkOutcome(Guid? SignedInUserId, string? SignupEmail = null)
 {
     public bool NeedsNickname => SignedInUserId is null;
 
@@ -20,7 +21,7 @@ public sealed record ConsumeMagicLinkOutcome(Guid? SignedInUserId)
     internal static ConsumeMagicLinkOutcome SignedIn(UserId userId) => new(userId.Value);
 
     // 회원이 없고 닉네임도 없다. 롤백했으므로 토큰은 살아 있다 — 같은 토큰 + 닉네임으로 다시 보낸다(D5-3: 200 + needsNickname).
-    public static readonly ConsumeMagicLinkOutcome NicknameRequired = new((Guid?)null);
+    internal static ConsumeMagicLinkOutcome NicknameRequired(Email email) => new(null, email.Value);
 }
 
 public sealed class ConsumeMagicLinkHandler(
@@ -48,7 +49,7 @@ public sealed class ConsumeMagicLinkHandler(
         {
             // 가입. 닉네임은 회원이 없을 때만 본다(D5-3 — 기존 회원의 nickname은 쓰지 않으므로 검사하지 않는다)
             if (string.IsNullOrEmpty(command.Nickname))
-                return ConsumeMagicLinkOutcome.NicknameRequired;   // 성공 결과지만 커밋하지 않는다
+                return ConsumeMagicLinkOutcome.NicknameRequired(email);   // 성공 결과지만 커밋하지 않는다
 
             if (!Nickname.Create(command.Nickname).TryGetValue(out var nickname, out var nicknameError))
                 return nicknameError;
