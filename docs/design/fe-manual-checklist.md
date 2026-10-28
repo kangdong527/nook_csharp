@@ -1,6 +1,7 @@
 # FE 브라우저 수동 확인 목록
 
 > `web/`에 테스트 러너가 없어 화면 동작은 손으로 확인한다(incident 004 §7). 결과: ✅ 정상 · ❌ 버그(→ incident) · ⏭ 보류
+> **2026-10-28 FE-2 확인 완료(사용자)**: 이전 대화의 A1~9·B10~16 전부 정상, 그룹 지도 회색 별만 버그(incident 004, 수정 후 정상). 아래 표는 그 뒤 재구성한 것이라 이전 목록과 1:1 대응은 보장하지 않는다 → 이후(DEP·Next 업그레이드 뒤) **회귀 확인용**으로 쓴다
 > 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev` → `http://localhost:3300`. 메일 링크는 API 콘솔. 두 번째 계정은 시크릿 창(`demo@nook.test` 등)
 
 ## A. 혼자 쓰는 흐름

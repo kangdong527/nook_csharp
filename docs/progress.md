@@ -28,7 +28,8 @@
      - ~~Supabase 제거~~ ✅ `795dbb3` — 패키지·어댑터·탐침·환경변수. **원본 함수 28/28 연결, 화면 코드에 Supabase 없음**
      - ~~그룹 지도 버그~~ ✅ 2026-10-28 `0bf1e24` · `docs/incidents/004`(Claude 작성, 사용자 요청) — H1(응답에 있음)·H2(슬롯 0도 정상 그림) 기각, **H3 확정**: 다른 멤버의 변경을 다시 불러오는 경로가 없었음(원본도 같음). 해결 A안(사용자 결정): `visibilitychange`+`focus` 때 다시 불러오기, 1초 안 중복 1회(탭 복귀 1번 = 요청 1건 실측). 미확인: 중복 방지 변이, `reloadSaved` 늦은 응답 덮어쓰기 경합, `web/` 테스트 러너 없음(DEP 때 결정)
        - ~~jamME 탈퇴 뒤 옛 "쥑쥑"이 없어진 것~~ 정상 — 탈퇴 때 방장이 hwi로 넘어온 것 사용자 확인, 그 뒤 그룹이 정리됨
-     - **▶ 다음 (여기서 시작)**: 브라우저 확인 목록 이어서 — 로그인·카카오 지도 첫 화면·그룹 지도 정상(사용자). 목록은 **`docs/design/fe-manual-checklist.md`**(2026-10-28 재작성 — 이전 A1~9·B10~16은 대화에만 있어 유실). 빈 칸부터 A2
+     - ~~브라우저 확인~~ ✅ 2026-10-28 — 이전 A1~9·B10~16 전부 정상(사용자), 회색 별만 버그였음. 회귀 확인용 목록 `docs/design/fe-manual-checklist.md`(재구성)
+     - **▶ 다음 (여기서 시작)**: `feat/fe-connect` 푸시·PR(사용자) → DEP
        - 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev`(루트에서 `npx next` 금지 — next@16을 받아 실행) → 메일 링크는 API 콘솔. 사진은 `src/Nook.Api/App_Data/images/`(git 제외). 로컬 DB에 Supabase 데이터 없음(이관한 적 없음 — 회원 10명: 확인용 `@nook.test` 9 + 사용자 `jam`)
        - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
        - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
