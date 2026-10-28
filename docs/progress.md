@@ -1,7 +1,7 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-28, FE-2 이어서 — 원본 함수 28/28·Supabase 제거 완료, 브라우저 확인 중 **그룹 지도 버그 재현부터**). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **FE 완료 → 다음 DEP** (2026-10-28, FE PR #9 `main` 병합 `8c639ba`). 브랜치 `feat/dep`(문서 갱신만, 미푸시). 원본 함수 28/28·Supabase 제거·브라우저 확인 완료, 그룹 지도 버그는 incident 004로 해결. 테스트 348개 통과, `next build` 성공. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
@@ -29,7 +29,8 @@
      - ~~그룹 지도 버그~~ ✅ 2026-10-28 `0bf1e24` · `docs/incidents/004`(Claude 작성, 사용자 요청) — H1(응답에 있음)·H2(슬롯 0도 정상 그림) 기각, **H3 확정**: 다른 멤버의 변경을 다시 불러오는 경로가 없었음(원본도 같음). 해결 A안(사용자 결정): `visibilitychange`+`focus` 때 다시 불러오기, 1초 안 중복 1회(탭 복귀 1번 = 요청 1건 실측). 미확인: 중복 방지 변이, `reloadSaved` 늦은 응답 덮어쓰기 경합, `web/` 테스트 러너 없음(DEP 때 결정)
        - ~~jamME 탈퇴 뒤 옛 "쥑쥑"이 없어진 것~~ 정상 — 탈퇴 때 방장이 hwi로 넘어온 것 사용자 확인, 그 뒤 그룹이 정리됨
      - ~~브라우저 확인~~ ✅ 2026-10-28 — 이전 A1~9·B10~16 전부 정상(사용자), 회색 별만 버그였음. 회귀 확인용 목록 `docs/design/fe-manual-checklist.md`(재구성)
-     - **▶ 다음 (여기서 시작)**: `feat/fe-connect` 푸시·PR(사용자) → DEP
+     - ~~`feat/fe-connect` 푸시·PR~~ ✅ PR #9 병합, 브랜치 정리(사용자). 병합 전 검증: `dotnet build` 경고·오류 0, `dotnet test` 348(1·124·7·216), `next build` 성공
+     - **▶ 다음 (여기서 시작)**: **DEP 1일째** — 브랜치 `feat/dep`(이 문서 갱신 커밋이 있음). 첫 결정(사용자): ① Next 보안 업그레이드 먼저(npm audit critical next 1·high glob 3 — 공개 서버에 취약 버전을 안 올림) vs ② CI 골격 먼저(업그레이드 PR부터 자동 빌드·테스트 보호). 업그레이드 뒤 비교할 기준선: First Load JS 공통 87.3 kB · `/review/new` 96.3 kB · Middleware 26.6 kB. 함께 정할 것: `web/` 테스트 러너(incident 004 §7), 토큰 수명 7일/refresh, `web/.github`·`.githooks` 정리
        - 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev`(루트에서 `npx next` 금지 — next@16을 받아 실행) → 메일 링크는 API 콘솔. 사진은 `src/Nook.Api/App_Data/images/`(git 제외). 로컬 DB에 Supabase 데이터 없음(이관한 적 없음 — 회원 10명: 확인용 `@nook.test` 9 + 사용자 `jam`)
        - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
        - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
