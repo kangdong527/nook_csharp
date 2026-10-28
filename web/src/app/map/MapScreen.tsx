@@ -158,6 +158,26 @@ function MapView({ user }: { user: User }) {
     if (kakaoReady) reloadSaved();
   }, [kakaoReady, reloadSaved]);
 
+  // 다른 멤버의 변경은 서버가 알려 주지 않는다 → 화면으로 돌아올 때 다시 불러온다.
+  // 탭 복귀(visibilitychange)와 창 전환(focus)이 함께 오면 한 번만 부른다.
+  useEffect(() => {
+    if (!kakaoReady) return;
+    let last = 0;
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      reloadSaved();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [kakaoReady, reloadSaved]);
+
   // 선택한 장소 핀 표시 (검색 선택 / 마커 클릭 시)
   useEffect(() => {
     if (!kakaoReady || !mapRef.current || !window.kakao) return;
