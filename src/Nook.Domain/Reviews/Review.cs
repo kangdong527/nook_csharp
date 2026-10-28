@@ -15,7 +15,8 @@ public sealed class Review
     private readonly List<ReviewImage> _images = [];
 
     public ReviewId Id { get; }
-    public UserId UserId { get; }
+    // null = 탈퇴한 작성자(PF-02, PM: 리뷰는 자산이라 남긴다 — fk_reviews_users SET NULL). 아무도 수정·삭제할 수 없다(작성자 비교가 항상 다르다).
+    public UserId? UserId { get; }
     public PlaceId PlaceId { get; }
     public ReviewContent Content { get; private set; }
 
@@ -26,7 +27,7 @@ public sealed class Review
 
     public DateTimeOffset CreatedAt { get; }
 
-    // R-RV-03 기준 날짜(UTC). DB의 (user_id, place_id, review_date) UNIQUE가 하루 1개를 최종 보장한다.
+    // R-RV-03 기준 날짜(KST, ReviewDay). DB의 (user_id, place_id, review_date) UNIQUE가 하루 1개를 최종 보장한다.
     public DateOnly ReviewDate { get; }
 
     // 낙관적 동시성 토큰(incident 002). Edit가 성공할 때마다 1 오른다. 저장은 "읽은 Version과 같을 때만" 반영되므로,
@@ -40,7 +41,7 @@ public sealed class Review
         PlaceId = placeId;
         Content = content;
         CreatedAt = createdAt;
-        ReviewDate = DateOnly.FromDateTime(createdAt.UtcDateTime);
+        ReviewDate = ReviewDay.Of(createdAt);
     }
 
     public static Result<Review> Create(

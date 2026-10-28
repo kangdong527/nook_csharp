@@ -23,6 +23,11 @@ public sealed class InMemoryReviewImageStorage : IReviewImageStorage
         _objects.TryRemove(storageKey, out _);
         return Task.CompletedTask;
     }
+
+    public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) =>
+        Task.FromResult(_objects.TryGetValue(storageKey, out var image)
+            ? new StoredImageStream(new MemoryStream(image.Bytes, writable: false), image.ContentType)
+            : null);
 }
 
 public sealed record StoredImage(byte[] Bytes, string ContentType);

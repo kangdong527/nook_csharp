@@ -34,9 +34,15 @@ public interface IReviewRepository
     // 작성자 닉네임·좋아요 수·내 좋아요 여부를 행마다 함께 계산한다(take개 × 상관 하위 쿼리). 카운터 비정규화 여부는 D9에서 측정 후.
     Task<IReadOnlyList<PlaceReview>> ListByPlaceAsync(
         PlaceId placeId, UserId me, ReviewCursor? after, int take, CancellationToken ct);
+
+    // PF-04 내 리뷰. 최신순(created_at DESC, id DESC), after보다 뒤에서 take개. 장소 이름·좋아요 수·내 좋아요 여부를 함께. 쿼리 한 번.
+    Task<IReadOnlyList<MyReview>> ListByUserAsync(UserId userId, ReviewCursor? after, int take, CancellationToken ct);
 }
 
-public sealed record PlaceReview(Review Review, string AuthorNickname, int LikeCount, bool LikedByMe);
+// AuthorNickname·AuthorAvatarKey: 작성자가 탈퇴했으면(Review.UserId null) null.
+public sealed record PlaceReview(Review Review, string? AuthorNickname, string? AuthorAvatarKey, int LikeCount, bool LikedByMe);
+
+public sealed record MyReview(Review Review, string PlaceName, int LikeCount, bool LikedByMe);
 
 public sealed record ReviewDeletion(PlaceId PlaceId, IReadOnlyList<string> StorageKeys);
 

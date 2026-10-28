@@ -1,0 +1,49 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+
+# editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# 기획 문서는 제외(외부 공개 대상 아님), 개발자용 문서는 포함한다.
+# 제외: NOOK_PRD(.md/.pdf) · NOOK_PRD_리뷰 · 기능명세서_통합 · 인수인계 · link.md(노션/피그마 URL)
+/docs/*
+!/docs/개발_운영_전략.md
+!/docs/개발_프로세스.md
+!/docs/아키텍처_패턴.md
+!/docs/기술스택_로드맵.md
+!/docs/진행내역.md
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

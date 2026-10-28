@@ -15,9 +15,45 @@ internal sealed class UserRepository(NookDbContext db) : IUserRepository
             .FromSql($"SELECT * FROM users WHERE lower(email) = lower({email.Value})")
             .SingleOrDefaultAsync(ct);
 
+    public Task<User?> FindByIdAsync(UserId userId, CancellationToken ct) =>
+        // erd.md users Q1. 받는 인덱스: pk_users.
+        db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct);
+
+    public Task<User?> FindForUpdateAsync(UserId userId, CancellationToken ct) =>
+        // erd.md users Q1. 추적 쿼리 — 핸들러가 ChangeNickname으로 바꾼 것을 SaveAsync가 그대로 저장한다.
+        db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+
+    public async Task<User?> LockForDeleteAsync(UserId userId, CancellationToken ct)
+    {
+        // 잠금과 로딩을 나눈다(GroupRepository.LockByIdAsync와 같은 이유 — 잠금 대기 뒤 최신을 다시 읽는다).
+        // FOR UPDATE: 지울 행이라 가장 강한 잠금. 합류·생성의 FOR NO KEY UPDATE(LockAsync)와 충돌한다.
+        var locked = await db.Database.SqlQuery<Guid>($"""
+            SELECT id AS "Value" FROM users WHERE id = {userId.Value} FOR UPDATE
+            """).ToListAsync(ct);
+        if (locked is [])
+            return null;
+
+        return await db.Users.SingleAsync(u => u.Id == userId, ct);
+    }
+
+    public async Task DeleteAsync(User user, CancellationToken ct)
+    {
+        db.Users.Remove(user);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<Result> AddAsync(User user, CancellationToken ct)
     {
         db.Users.Add(user);
+        return await SaveNicknameGuardedAsync(ct);
+        // ux_users_email_lower 위반(같은 이메일 동시 가입)은 일부러 잡지 않는다 → 500. 처리 방식은 미결(progress.md D5).
+    }
+
+    public Task<Result> SaveAsync(User user, CancellationToken ct) => SaveNicknameGuardedAsync(ct);
+
+    // 닉네임 UNIQUE 위반만 예상 가능한 실패로 바꾼다(R-US-02 — 동시 가입·동시 변경). 위반이 나면 이 DbContext는 더 쓰지 않는다.
+    private async Task<Result> SaveNicknameGuardedAsync(CancellationToken ct)
+    {
         try
         {
             await db.SaveChangesAsync(ct);
@@ -30,7 +66,6 @@ internal sealed class UserRepository(NookDbContext db) : IUserRepository
         {
             return UserErrors.NicknameTaken;
         }
-        // ux_users_email_lower 위반(같은 이메일 동시 가입)은 일부러 잡지 않는다 → 500. 처리 방식은 미결(progress.md D5).
     }
 
     public Task LockAsync(UserId userId, CancellationToken ct) =>

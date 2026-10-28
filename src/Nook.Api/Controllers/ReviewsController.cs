@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Reviews;
-using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
 
@@ -11,7 +11,7 @@ namespace Nook.Api.Controllers;
 [Route("reviews")]
 public sealed class ReviewsController : ControllerBase
 {
-    // RV-01. 201 + Location(ADR-009 결정 2). 조회 엔드포인트(GET /reviews/{id})는 아직 없다 — Location은 자원 주소의 약속.
+    // RV-01. 201 + Location(ADR-009 결정 2). Location이 가리키는 GET /reviews/{id}는 RV-04(작성자만).
     [HttpPost]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<ReviewView>(StatusCodes.Status201Created)]
@@ -30,7 +30,7 @@ public sealed class ReviewsController : ControllerBase
             var result = await handler.HandleAsync(command, ct);
 
             if (!result.TryGetValue(out var review, out var error))
-                return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+                return this.Problem(error);
 
             return Created($"/reviews/{review.Id}", review);
         }
@@ -38,6 +38,18 @@ public sealed class ReviewsController : ControllerBase
         {
             await DisposeAsync(images);
         }
+    }
+
+    // RV-04. 수정 화면 전용 — 작성자만(남의 리뷰 403, 없으면 404).
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<EditableReviewView>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetForEdit(Guid id, [FromServices] GetReviewForEditHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetReviewForEditQuery(User.GetUserId(), id), ct);
+
+        return result.TryGetValue(out var review, out var error) ? Ok(review) : this.Problem(error);
     }
 
     // RV-02. 본문·이미지를 통째로 보낸다(최종 상태) → PUT. 200 + 수정된 리뷰.
@@ -61,7 +73,7 @@ public sealed class ReviewsController : ControllerBase
             var result = await handler.HandleAsync(command, ct);
 
             if (!result.TryGetValue(out var review, out var error))
-                return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+                return this.Problem(error);
 
             return Ok(review);
         }
@@ -83,7 +95,7 @@ public sealed class ReviewsController : ControllerBase
         var result = await handler.HandleAsync(new DeleteReviewCommand(User.GetUserId(), id), ct);
 
         if (!result.TryGetValue(out var view, out var error))
-            return Problem(statusCode: StatusCodeOf(error), title: error.Code, detail: error.Description);
+            return this.Problem(error);
 
         return Ok(view);
     }
@@ -97,15 +109,6 @@ public sealed class ReviewsController : ControllerBase
         foreach (var image in images)
             await image.Content.DisposeAsync();
     }
-
-    private static int StatusCodeOf(Error error) => error.Type switch
-    {
-        ErrorType.Validation => StatusCodes.Status400BadRequest,
-        ErrorType.NotFound => StatusCodes.Status404NotFound,
-        ErrorType.Conflict => StatusCodes.Status409Conflict,
-        ErrorType.Forbidden => StatusCodes.Status403Forbidden,
-        _ => StatusCodes.Status500InternalServerError,
-    };
 }
 
 // multipart 폼. PlaceId는 Guid?+[Required] — 빠지면 Guid.Empty로 바인딩되어 조용히 통과하는 것을 400으로 막는다(PlaceRequest와 같은 이유).

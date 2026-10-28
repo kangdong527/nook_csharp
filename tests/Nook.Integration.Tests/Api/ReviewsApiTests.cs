@@ -30,6 +30,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Create_ThirdImageUnsupported_Returns400AndUploadsNothing           (2c — 검증을 전부 끝낸 뒤에 올린다)
     // - Create_FourImages_Returns400AndUploadsNothing                      (2b)
     // - Create_WhenAlreadyReviewedToday_Returns409AndUploadsNothing        (4a — 사전 확인)
+    // - Create_WhenPreviousReviewIsYesterdayInKstButSameUtcDate_Returns201 (하루 기준 = KST 00:00)
     // - Create_ConcurrentBothPassPreCheck_One201One409AndOneReview         (6a — UNIQUE가 최종 판정, 진 쪽 이미지는 고아)
     //
     // RV-02 — 시작 상태: 이미지 A·B·C가 붙은 리뷰(스토리지 3개)
@@ -57,6 +58,12 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // - Delete_Concurrent_OneChangedOneUnchanged                           (7, 3c)
     // - Delete_WhenStorageDeleteFails_StillReturns200                      (8)
     // - Delete_ThenCreateSameDay_Returns201                                (9 — R-RV-03 미결의 현재 동작 기록)
+    //
+    // RV-04 — 수정 화면 전용 단건 조회(작성자만)
+    // - GetForEdit_Own_Returns200WithPlaceNameImagesInOrderAndVersion
+    // - GetForEdit_ThenEditWithReturnedVersion_Returns200                  (version 왕복 — RV-02 계약)
+    // - GetForEdit_ByOtherUser_Returns403                                  (RV-02 4b와 같은 오류)
+    // - GetForEdit_UnknownReview_Returns404
 
     // 시계를 고정한다: 사전 확인 날짜·키 날짜·CreatedAt이 이 값 하나에서 나오는지 확인할 수 있다.
     // 20:00Z = KST 다음 날 05:00 — 로컬 날짜와 UTC 날짜가 갈리는 시각이라, 날짜를 로컬로 계산하면 드러난다.
@@ -71,9 +78,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     private const string EditedContent = "다시 가 보니 디저트도 맛있는 곳";
 
     private readonly PostgresFixture _fixture;
-    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"));
+    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
     // RV-03: R에 좋아요를 누른 다른 회원 — 남의 리뷰 삭제(403)의 요청자도 겸한다. SeedReviewToDeleteAsync가 저장한다.
-    private readonly User _liker = User.Create(Nickname.From("좋아요"), Email.From("liker@example.com"));
+    private readonly User _liker = User.Create(Nickname.From("좋아요"), Email.From("liker@example.com"), Gender.None, null);
     private readonly Place _place = Place.Create(
         KakaoPlaceId.From("8130394"), "누크 카페", "서울", Coordinate.Create(37.5665, 126.978).Unwrap()).Unwrap();
 
@@ -119,9 +126,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         await using var db = Db.CreateContext();
         var saved = await db.Reviews.SingleAsync();
-        Assert.Equal(DateOnly.FromDateTime(Now.UtcDateTime), saved.ReviewDate);
+        Assert.Equal(new DateOnly(2026, 10, 23), saved.ReviewDate);   // Now 20:00Z = KST 10-23 05:00 — 작성일은 KST 날짜(R-RV-03)
         // 응답의 이미지 ID가 저장된 ID다 — 클라이언트가 RV-02의 KeepImageIds로 그대로 돌려보낸다(ADR-009 결정 2).
-        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}")));
     }
 
     [Fact]
@@ -154,11 +161,11 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     [Fact]
     public async Task Create_WhenAlreadyReviewedToday_Returns409AndUploadsNothing()
     {
-        // 같은 UTC 날짜의 이른 시각 — 사전 확인이 "지금"과 같은 날을 보는지.
+        // 같은 KST 날짜의 이른 시각(16:00Z = KST 10-23 01:00) — 사전 확인이 "지금"과 같은 날을 보는지.
         await using (var db = Db.CreateContext())
         {
             db.Reviews.Add(Review.Create(
-                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-8)).Unwrap());
+                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-4)).Unwrap());
             await db.SaveChangesAsync();
         }
 
@@ -166,6 +173,22 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         await AssertProblemAsync(response, HttpStatusCode.Conflict, ReviewWriteErrors.AlreadyReviewedToday);
         Assert.Empty(_factory.ImageStorage.Objects);
+    }
+
+    [Fact]
+    public async Task Create_WhenPreviousReviewIsYesterdayInKstButSameUtcDate_Returns201()
+    {
+        // 14:00Z = KST 10-22 23:00. UTC 날짜는 "지금"(20:00Z)과 같은 10-22지만 KST로는 전날 — KST 기준이면 새로 쓸 수 있다.
+        await using (var db = Db.CreateContext())
+        {
+            db.Reviews.Add(Review.Create(
+                _user.Id, _place.Id, ReviewContent.From(Content), [], Now.AddHours(-6)).Unwrap());
+            await db.SaveChangesAsync();
+        }
+
+        var response = await CreateAsync(_place.Id.Value);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
     [Fact]
@@ -215,7 +238,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var saved = await ReloadAsync(reviewId);
         Assert.Equal(EditedContent, saved.Content.Value);
         Assert.Equal([c.Id.Value, a.Id.Value, view.Images[2].Id], saved.Images.Select(i => i.Id.Value));
-        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey)));
+        Assert.Equal(view.Images, saved.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}")));
 
         // B만 지워지고 새 이미지가 올라간다: 3 - 1 + 1.
         Assert.Equal(3, _factory.ImageStorage.Objects.Count);
@@ -244,7 +267,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     public async Task Edit_ByOtherUser_Returns403AndUploadsNothing()
     {
         var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
-        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
         await using (var db = Db.CreateContext())
         {
             db.Add(other);
@@ -547,6 +570,58 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     }
 
     // RV-03 공통 시작 상태: 내 리뷰 R(오늘, 이미지 2장) + 다른 회원의 좋아요 1개.
+    [Fact]
+    public async Task GetForEdit_Own_Returns200WithPlaceNameImagesInOrderAndVersion()
+    {
+        var (reviewId, a, b, c) = await SeedReviewWithThreeImagesAsync();
+
+        var view = await _client.GetFromJsonAsync<EditableReviewView>($"/reviews/{reviewId}");
+
+        Assert.NotNull(view);
+        Assert.Equal((reviewId, _place.Id.Value, "누크 카페", Content, SeededVersion),
+            (view.Id, view.PlaceId, view.PlaceName, view.Content, view.Version));
+        Assert.Equal(
+            [Image(a), Image(b), Image(c)],
+            view.Images);
+    }
+
+    [Fact]
+    public async Task GetForEdit_ThenEditWithReturnedVersion_Returns200()
+    {
+        var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
+        var view = await _client.GetFromJsonAsync<EditableReviewView>($"/reviews/{reviewId}");
+
+        var response = await EditAsync(reviewId, Ids(a), [], _client, view!.Version);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetForEdit_ByOtherUser_Returns403()
+    {
+        var (reviewId, _, _, _) = await SeedReviewWithThreeImagesAsync();
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
+        await using (var db = Db.CreateContext())
+        {
+            db.Add(other);
+            await db.SaveChangesAsync();
+        }
+        using var otherClient = _factory.CreateClient();
+        Authorize(otherClient, _factory, other.Id.Value);
+
+        var response = await otherClient.GetAsync($"/reviews/{reviewId}");
+
+        await AssertProblemAsync(response, HttpStatusCode.Forbidden, ReviewWriteErrors.NotReviewAuthor);
+    }
+
+    [Fact]
+    public async Task GetForEdit_UnknownReview_Returns404()
+    {
+        var response = await _client.GetAsync($"/reviews/{Guid.NewGuid()}");
+
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, ReviewWriteErrors.ReviewNotFound);
+    }
+
     private async Task<Guid> SeedReviewToDeleteAsync()
     {
         var (reviewId, _) = await SeedReviewAsync("a.jpg", "b.jpg");
@@ -630,7 +705,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // 다른 회원의 리뷰 이미지. 스토리지에는 넣지 않는다 — 단언하는 개수는 이 테스트 리뷰의 것만.
     private async Task<ReviewImage> SeedOtherUsersReviewImageAsync()
     {
-        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"));
+        var other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
         var review = Review.Create(other.Id, _place.Id, ReviewContent.From(Content), ["reviews/seed/z.jpg"], Now).Unwrap();
         await using var db = Db.CreateContext();
         db.AddRange(other, review);
@@ -644,12 +719,15 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         return await db.Reviews.AsNoTracking().SingleAsync(r => r.Id == ReviewId.From(reviewId));
     }
 
-    // 클라이언트가 수정 화면에 들어가는 길 — 단건 GET이 없어 장소별 목록에서 버전을 얻는다.
+    // 장소별 목록(PL-02)에서 버전을 얻는 길. 수정 화면은 RV-04 단건 GET으로도 얻는다.
     private async Task<int> GetPlaceReviewVersionAsync(Guid reviewId)
     {
         var page = await _client.GetFromJsonAsync<ReviewPageView>($"/places/{_place.Id.Value}/reviews");
         return page!.Items.Single(r => r.Id == reviewId).Version;
     }
+
+    // 응답 이미지 — Url은 기본 기준 주소(BFF 중계, Program.cs)로 만든다.
+    private static ReviewImageView Image(ReviewImage i) => new(i.Id.Value, i.StorageKey, $"/api/nook/images/{i.StorageKey}");
 
     private static Guid[] Ids(params ReviewImage[] images) => [.. images.Select(i => i.Id.Value)];
 
@@ -743,6 +821,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 랑데부 뒤 heldContentType 업로드만 붙잡는다 — 다른 요청이 커밋까지 끝낸 다음 테스트가 release로 풀어 준다.
@@ -762,6 +842,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 커밋 후 정리가 실패하는 스토리지. 업로드는 그대로.
@@ -772,6 +854,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) =>
             throw new IOException("스토리지 삭제 실패(테스트)");
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // 업로드 직전에 끼어든다 — 핸들러의 조회와 저장 사이에 다른 트랜잭션을 커밋시키는 지점.
@@ -784,6 +868,8 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         }
 
         public Task DeleteAsync(string storageKey, CancellationToken ct) => inner.DeleteAsync(storageKey, ct);
+
+        public Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct) => inner.OpenAsync(storageKey, ct);
     }
 
     // DELETE 직전에서 두 요청이 서로를 기다린다. 나머지는 원래 리포지토리 그대로.
@@ -806,5 +892,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         public Task<IReadOnlyList<PlaceReview>> ListByPlaceAsync(
             PlaceId placeId, UserId me, ReviewCursor? after, int take, CancellationToken ct) =>
             inner.ListByPlaceAsync(placeId, me, after, take, ct);
+
+        public Task<IReadOnlyList<MyReview>> ListByUserAsync(
+            UserId userId, ReviewCursor? after, int take, CancellationToken ct) =>
+            inner.ListByUserAsync(userId, after, take, ct);
     }
 }

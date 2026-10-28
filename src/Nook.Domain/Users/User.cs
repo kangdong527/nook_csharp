@@ -2,7 +2,7 @@ namespace Nook.Domain.Users;
 
 // 회원 애그리거트 루트. Nickname·Email(값)을 포함한다.
 // 지키는 규칙: R-US-01(닉네임 형식, Nickname이 검증), R-US-02(닉네임 유일 — 다른 회원과 비교하므로 DB가 최종 보장),
-// R-US-03(이메일 형식은 Email이 검증, 유일은 DB가 최종 보장).
+// R-US-03(이메일 형식은 Email이 검증, 유일은 DB가 최종 보장), R-US-04(성별 필수), R-US-05(생년월일 선택, Birthdate가 검증).
 // 그룹 합류 시 사용자별 직렬화 지점(R-GR-04 행 잠금 대상)이지만, 잠금은 Application·DB의 일이다.
 // 시각 없음: 가입일을 쓰는 규칙·화면이 없다(Place와 같은 기준).
 public sealed class User
@@ -10,21 +10,46 @@ public sealed class User
     public UserId Id { get; }
     public Nickname Nickname { get; private set; }
     public Email Email { get; }
+    public Gender Gender { get; }
+    public Birthdate? Birthdate { get; }
 
-    private User(UserId id, Nickname nickname, Email email)
+    // 프로필 사진의 스토리지 키(PF-01, FE-2). null = 기본 이미지(FE 몫). 키 규칙은 리뷰 이미지와 같은 모양에 prefix만 avatars/.
+    public string? AvatarKey { get; private set; }
+
+    private User(UserId id, Nickname nickname, Email email, Gender gender, Birthdate? birthdate)
     {
         Id = id;
         Nickname = nickname;
         Email = email;
+        Gender = gender;
+        Birthdate = birthdate;
     }
 
-    // 두 값 객체가 이미 형식을 검증했고 유일성은 DB가 맡으므로, User가 판단할 실패가 없어 User를 바로 반환한다.
-    public static User Create(Nickname nickname, Email email)
+    // 값 객체·GenderCode가 이미 형식을 검증했고 유일성은 DB가 맡으므로, User가 판단할 실패가 없어 User를 바로 반환한다.
+    // 정의되지 않은 Gender(default 0 포함)는 호출 경로 이탈 → 예외.
+    public static User Create(Nickname nickname, Email email, Gender gender, Birthdate? birthdate)
     {
         ArgumentNullException.ThrowIfNull(nickname);
         ArgumentNullException.ThrowIfNull(email);
+        if (!Enum.IsDefined(gender))
+            throw new ArgumentOutOfRangeException(nameof(gender), gender, null);
 
-        return new User(UserId.New(), nickname, email);
+        return new User(UserId.New(), nickname, email, gender, birthdate);
+    }
+
+    // PF-01 프로필 사진 교체·삭제(null). 이전 키를 돌려준다 — 호출 쪽이 DB 커밋 뒤 스토리지에서 지운다(리뷰 이미지와 같은 규칙).
+    // 키는 서버가 만드는 값이라 규칙 위반(빈 값·상한 초과)은 생성 코드의 버그 → 예외(ReviewImage와 같은 기준).
+    public string? ReplaceAvatar(string? newKey)
+    {
+        if (newKey is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(newKey);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(newKey.Length, Reviews.ReviewImage.StorageKeyMaxLength, nameof(newKey));
+        }
+
+        var previous = AvatarKey;
+        AvatarKey = newKey;
+        return previous == newKey ? null : previous;
     }
 
     // PF-01. 표기까지 같으면 아무것도 바꾸지 않는다(멱등, R-US-02). 대소문자만 다른 표기는 바꾼다.

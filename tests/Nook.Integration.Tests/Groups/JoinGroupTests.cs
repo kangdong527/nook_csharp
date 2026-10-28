@@ -137,13 +137,18 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
         Assert.Equal(Group.MaxGroupMembers, members.Count);
         Assert.Equal(Group.MaxGroupMembers - 1, results.Count(r => r.IsSuccess));
         Assert.All(results.Where(r => !r.IsSuccess), r => AssertFailure(r, GroupErrors.GroupFull));
+
+        // R-GR-12: 동시 합류여도 색 슬롯이 겹치지 않는다(그룹 행 잠금 안에서 고른다 + ux_group_members_group_color_slot)
+        await using var db = Db.CreateContext();
+        var slots = await db.Groups.Where(g => g.Id == group.Id).SelectMany(g => g.Members.Select(m => m.ColorSlot)).ToListAsync();
+        Assert.Equal([0, 1, 2, 3], slots.Select(s => (int)s).Order());
     }
 
     // ── 도우미 ────────────────────────────────────────────
 
     private async Task<User> SeedUserAsync(int n)
     {
-        var user = User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"));
+        var user = User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), Gender.None, null);
         await using var db = Db.CreateContext();
         db.Users.Add(user);
         await db.SaveChangesAsync();

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Bookmarks;
 
 namespace Nook.Api.Controllers;
@@ -19,7 +20,7 @@ public sealed class BookmarksController : ControllerBase
 
         return result.TryGetValue(out var view, out var error)
             ? Ok(view)
-            : Problem(statusCode: StatusCodes.Status404NotFound, title: error.Code, detail: error.Description);
+            : this.Problem(error);
     }
 
     [HttpDelete]
@@ -31,6 +32,6 @@ public sealed class BookmarksController : ControllerBase
 
         return result.TryGetValue(out var view, out var error)
             ? Ok(view)
-            : Problem(statusCode: StatusCodes.Status404NotFound, title: error.Code, detail: error.Description);
+            : this.Problem(error);
     }
 }

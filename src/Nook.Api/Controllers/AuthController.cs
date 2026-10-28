@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Auth;
-using Nook.SharedKernel;
 
 namespace Nook.Api.Controllers;
 
@@ -24,7 +24,7 @@ public sealed class AuthController : ControllerBase
         var result = await handler.HandleAsync(new RequestMagicLinkCommand(request.Email), ct);
 
         if (result.IsFailure(out var error))
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: error.Code, detail: error.Description);
+            return this.Problem(error);
 
         return Accepted();
     }
@@ -42,30 +42,22 @@ public sealed class AuthController : ControllerBase
         [FromServices] AccessTokenIssuer issuer,
         CancellationToken ct)
     {
-        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(request.Token, request.Nickname), ct);
+        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(request.Token, request.Nickname, request.Gender, request.Birthdate), ct);
 
         if (!result.TryGetValue(out var outcome, out var error))
-            return Problem(statusCode: ToStatusCode(error.Type), title: error.Code, detail: error.Description);
+            return this.Problem(error);
 
         // 토큰 발급은 커밋 뒤, AccessTokenIssuer 한 곳에서(D5 결정)
         return outcome.SignedInUserId is { } userId
             ? Ok(new ConsumeMagicLinkResponse(issuer.Issue(userId), NeedsNickname: false))
-            : Ok(new ConsumeMagicLinkResponse(AccessToken: null, NeedsNickname: true));
+            : Ok(new ConsumeMagicLinkResponse(AccessToken: null, NeedsNickname: true, outcome.SignupEmail));
     }
-
-    // ErrorType → 상태 코드(D2-1: Domain은 HTTP를 모르고 Api가 번역한다). 컨트롤러가 늘면 공통 위치로 옮긴다.
-    private static int ToStatusCode(ErrorType type) => type switch
-    {
-        ErrorType.Validation => StatusCodes.Status400BadRequest,
-        ErrorType.NotFound => StatusCodes.Status404NotFound,
-        ErrorType.Conflict => StatusCodes.Status409Conflict,
-        ErrorType.Forbidden => StatusCodes.Status403Forbidden,
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
-    };
 }
 
 public sealed record MagicLinkRequest(string? Email);
 
-public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname);
+// Gender: female|male|none, Birthdate: YYYY-MM-DD(선택). 둘 다 가입일 때만 쓴다.
+public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
 
-public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname);
+// Email: needsNickname일 때만 — 가입 폼 표시용(FE-2).
+public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname, string? Email = null);

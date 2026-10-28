@@ -65,12 +65,19 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(6)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.HasKey("Id")
                         .HasName("pk_groups");
 
                     b.HasIndex("InviteCode")
                         .IsUnique()
                         .HasDatabaseName("ux_groups_invite_code");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_groups_owner_id");
 
                     b.ToTable("groups", null, t =>
                         {
@@ -82,23 +89,32 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nook.Domain.Likes.Like", b =>
                 {
-                    b.Property<Guid>("ReviewId")
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("review_id");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                        .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.HasKey("ReviewId", "UserId")
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_id");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
                         .HasName("pk_likes");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_likes_user_id");
+
+                    b.HasIndex("ReviewId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_likes_review_user");
 
                     b.ToTable("likes", (string)null);
                 });
@@ -183,7 +199,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("review_date");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -217,11 +233,26 @@ namespace Nook.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AvatarKey")
+                        .HasMaxLength(56)
+                        .HasColumnType("character varying(56)")
+                        .HasColumnName("avatar_key");
+
+                    b.Property<DateOnly?>("Birthdate")
+                        .HasColumnType("date")
+                        .HasColumnName("birthdate");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)")
                         .HasColumnName("email");
+
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("gender");
 
                     b.Property<string>("Nickname")
                         .IsRequired()
@@ -234,7 +265,13 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
                     b.ToTable("users", null, t =>
                         {
+                            t.HasCheckConstraint("ck_users_avatar_key", "btrim(avatar_key) <> ''");
+
+                            t.HasCheckConstraint("ck_users_birthdate", "birthdate >= DATE '1900-01-01'");
+
                             t.HasCheckConstraint("ck_users_email", "email ~ '^[^@[:space:]]+@[^@[:space:]]+$'");
+
+                            t.HasCheckConstraint("ck_users_gender", "gender IN ('female', 'male', 'none')");
 
                             t.HasCheckConstraint("ck_users_nickname", "char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED");
                         });
@@ -296,6 +333,13 @@ namespace Nook.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nook.Domain.Groups.Group", b =>
                 {
+                    b.HasOne("Nook.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_groups_owner");
+
                     b.OwnsMany("Nook.Domain.Groups.GroupMember", "Members", b1 =>
                         {
                             b1.Property<Guid>("GroupId")
@@ -305,6 +349,10 @@ namespace Nook.Infrastructure.Persistence.Migrations
                             b1.Property<Guid>("UserId")
                                 .HasColumnType("uuid")
                                 .HasColumnName("user_id");
+
+                            b1.Property<short>("ColorSlot")
+                                .HasColumnType("smallint")
+                                .HasColumnName("color_slot");
 
                             b1.Property<DateTimeOffset>("JoinedAt")
                                 .HasColumnType("timestamp with time zone")
@@ -316,7 +364,14 @@ namespace Nook.Infrastructure.Persistence.Migrations
                             b1.HasIndex("UserId")
                                 .HasDatabaseName("ix_group_members_user_id");
 
-                            b1.ToTable("group_members", (string)null);
+                            b1.HasIndex("GroupId", "ColorSlot")
+                                .IsUnique()
+                                .HasDatabaseName("ux_group_members_group_color_slot");
+
+                            b1.ToTable("group_members", null, t =>
+                                {
+                                    t.HasCheckConstraint("ck_group_members_color_slot", "color_slot BETWEEN 0 AND 3");
+                                });
 
                             b1.WithOwner()
                                 .HasForeignKey("GroupId")
@@ -345,8 +400,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                     b.HasOne("Nook.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_likes_users");
                 });
 
@@ -362,8 +416,7 @@ namespace Nook.Infrastructure.Persistence.Migrations
                     b.HasOne("Nook.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_reviews_users");
 
                     b.OwnsMany("Nook.Domain.Reviews.ReviewImage", "Images", b1 =>

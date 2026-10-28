@@ -38,6 +38,14 @@ public class GroupTests
     // - RemoveMember_WhenSameMemberTwice_SecondReturnsNotMember
     // - RemoveMember_WhenLastMember_ReturnsGroupEmptied
     // - RemoveMember_WhenLastMember_MembersIsEmpty
+    //
+    // 방장(R-GR-11)·색 슬롯(R-GR-12)·이름 변경(GR-03) — FE-2
+    // - Create_CreatorIsOwnerWithPickedSlot
+    // - AddMember_PicksOnlyFreeSlots_AllFourDistinct          (고정 함수 n => 0 → 매번 남은 것 중 가장 작은 슬롯)
+    // - AddMember_AfterRemoval_ReusesFreedSlot
+    // - RemoveMember_WhenOwnerLeaves_OwnershipGoesToEarliestJoined
+    // - RemoveMember_WhenOtherLeaves_OwnerUnchanged
+    // - Rename_ByOwner_ChangesName / Rename_ByMember_ReturnsNotOwner
 
     private static readonly DateTimeOffset Now = new(2026, 10, 13, 0, 0, 0, TimeSpan.Zero);
 
@@ -335,6 +343,88 @@ public class GroupTests
         var group = NewGroup();
 
         Assert.True(group.AddMember(UserId.New(), Now).IsSuccess);
+    }
+
+    [Fact]
+    public void Create_CreatorIsOwnerWithPickedSlot()
+    {
+        var creator = UserId.New();
+
+        var group = Group.Create(ValidName(), creator, InviteCode.Generate(_ => 0), Now, pickSlot: _ => 2);
+
+        Assert.Equal(creator, group.OwnerId);
+        Assert.Equal(2, group.Members.Single().ColorSlot);
+    }
+
+    [Fact]
+    public void AddMember_PicksOnlyFreeSlots_AllFourDistinct()
+    {
+        var group = Group.Create(ValidName(), UserId.New(), InviteCode.Generate(_ => 0), Now, pickSlot: _ => 2);
+        for (var i = 0; i < 3; i++)
+            Assert.True(group.AddMember(UserId.New(), Now, pickSlot: _ => 0).IsSuccess);
+
+        Assert.Equal([0, 1, 2, 3], group.Members.Select(m => (int)m.ColorSlot).Order());
+    }
+
+    [Fact]
+    public void AddMember_AfterRemoval_ReusesFreedSlot()
+    {
+        var group = Group.Create(ValidName(), UserId.New(), InviteCode.Generate(_ => 0), Now, pickSlot: _ => 0);   // 0
+        var leaver = UserId.New();
+        group.AddMember(leaver, Now, pickSlot: _ => 0);                                                            // 1
+        group.AddMember(UserId.New(), Now, pickSlot: _ => 0);                                                      // 2
+        group.RemoveMember(leaver);
+
+        group.AddMember(UserId.New(), Now, pickSlot: _ => 0);
+
+        Assert.Equal([0, 1, 2], group.Members.Select(m => (int)m.ColorSlot).Order());
+    }
+
+    [Fact]
+    public void RemoveMember_WhenOwnerLeaves_OwnershipGoesToEarliestJoined()
+    {
+        var owner = UserId.New();
+        var (early, late) = (UserId.New(), UserId.New());
+        var group = Group.Create(ValidName(), owner, InviteCode.Generate(_ => 0), Now);
+        group.AddMember(late, Now.AddMinutes(10));
+        group.AddMember(early, Now.AddMinutes(5));
+
+        Assert.Equal(MemberRemoval.Removed, group.RemoveMember(owner));
+        Assert.Equal(early, group.OwnerId);
+    }
+
+    [Fact]
+    public void RemoveMember_WhenOtherLeaves_OwnerUnchanged()
+    {
+        var (owner, other) = (UserId.New(), UserId.New());
+        var group = Group.Create(ValidName(), owner, InviteCode.Generate(_ => 0), Now);
+        group.AddMember(other, Now);
+
+        group.RemoveMember(other);
+
+        Assert.Equal(owner, group.OwnerId);
+    }
+
+    [Fact]
+    public void Rename_ByOwner_ChangesName()
+    {
+        var owner = UserId.New();
+        var group = Group.Create(ValidName(), owner, InviteCode.Generate(_ => 0), Now);
+
+        Assert.True(group.Rename(GroupName.From("새 이름"), owner).IsSuccess);
+        Assert.Equal("새 이름", group.Name.Value);
+    }
+
+    [Fact]
+    public void Rename_ByMember_ReturnsNotOwner()
+    {
+        var member = UserId.New();
+        var group = Group.Create(ValidName(), UserId.New(), InviteCode.Generate(_ => 0), Now);
+        group.AddMember(member, Now);
+
+        Assert.True(group.Rename(GroupName.From("새 이름"), member).IsFailure(out var error));
+        Assert.Equal(GroupErrors.NotOwner, error);
+        Assert.Equal("주말 산책", group.Name.Value);
     }
 
     private static Group NewGroup() =>

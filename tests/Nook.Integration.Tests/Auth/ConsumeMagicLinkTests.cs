@@ -19,8 +19,12 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     // - SignUp_WhenNicknameMissing_NeedsNicknameAndKeepsToken      (롤백으로 Q1 소모가 되돌아감 → 같은 토큰으로 재시도 성공)
     // - SignUp_WhenNicknameTaken_ReturnsConflictAndKeepsToken      (대소문자만 다른 닉네임 — ux_users_nickname_lower)
     // - SignUp_WhenNicknameFormatInvalid_ReturnsValidationAndKeepsToken
+    // - SignUp_SavesGenderAndBirthdate / SignUp_WithoutBirthdate_SavesNull
+    // - SignUp_WhenGenderMissingOrUnknown_ReturnsValidationAndKeepsToken   (R-US-04)
+    // - SignUp_WhenBirthdateInvalid_ReturnsValidationAndKeepsToken         (R-US-05 형식·범위)
     //
     // 로그인
+    // - SignIn_ExistingUser_IgnoresGenderAndBirthdate
     // - SignIn_ExistingUser_IgnoresNickname                        (기존 회원이 쓰레기 nickname을 보내도 로그인)
     // - SignIn_MatchesEmailIgnoringCase
     //
@@ -109,6 +113,69 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     // ── 로그인 ────────────────────────────────────────────
 
     [Fact]
+    public async Task SignUp_SavesGenderAndBirthdate()
+    {
+        var token = await IssueAsync(NewEmail);
+
+        (await ConsumeAsync(token, "누크", "female", "1995-03-01")).Unwrap();
+
+        var user = await Db.CreateContext().Users.SingleAsync();
+        Assert.Equal((Gender.Female, new DateOnly(1995, 3, 1)), (user.Gender, user.Birthdate?.Value));
+    }
+
+    [Fact]
+    public async Task SignUp_WithoutBirthdate_SavesNull()
+    {
+        var token = await IssueAsync(NewEmail);
+
+        (await ConsumeAsync(token, "누크", "male", birthdate: null)).Unwrap();
+
+        Assert.Null((await Db.CreateContext().Users.SingleAsync()).Birthdate);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("FEMALE")]     // 표기는 소문자만
+    [InlineData("other")]
+    public async Task SignUp_WhenGenderMissingOrUnknown_ReturnsValidationAndKeepsToken(string? gender)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        AssertFailure(await ConsumeAsync(token, "누크", gender), UserErrors.GenderInvalid);
+        Assert.Null(await ConsumedAtAsync(token));
+        Assert.Equal(0, await Db.CreateContext().Users.CountAsync());
+    }
+
+    // IssuedAt = 2026-10-20(UTC) → 오늘. 내일은 범위 밖.
+    [Theory]
+    [InlineData("95-03-01", "User.BirthdateFormat")]       // 원본 화면 표기 그대로 — FE가 바꿔 보내야 한다
+    [InlineData("2026-02-30", "User.BirthdateFormat")]     // 없는 날짜
+    [InlineData("1899-12-31", "User.BirthdateOutOfRange")]
+    [InlineData("2026-10-21", "User.BirthdateOutOfRange")]
+    public async Task SignUp_WhenBirthdateInvalid_ReturnsValidationAndKeepsToken(string birthdate, string code)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        var result = await ConsumeAsync(token, "누크", "none", birthdate);
+
+        Assert.False(result.TryGetValue(out _, out var error));
+        Assert.Equal(code, error.Code);
+        Assert.Null(await ConsumedAtAsync(token));
+    }
+
+    [Fact]
+    public async Task SignIn_ExistingUser_IgnoresGenderAndBirthdate()
+    {
+        await SeedUserAsync("누크", NewEmail);
+        var token = await IssueAsync(NewEmail);
+
+        var outcome = (await ConsumeAsync(token, nickname: null, gender: "invalid", birthdate: "nope")).Unwrap();
+
+        Assert.False(outcome.NeedsNickname);
+    }
+
+    [Fact]
     public async Task SignIn_ExistingUser_IgnoresNickname()
     {
         var existing = await SeedUserAsync("누크", NewEmail);
@@ -171,11 +238,13 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     // ── 도우미 ────────────────────────────────────────────
 
     // 요청마다 새 스코프 = 운영의 요청당 DbContext 하나와 같다.
-    private async Task<Result<ConsumeMagicLinkOutcome>> ConsumeAsync(string? token, string? nickname)
+    // 가입 폼은 성별을 반드시 보낸다 — 성별이 주제가 아닌 테스트는 기본값 "none".
+    private async Task<Result<ConsumeMagicLinkOutcome>> ConsumeAsync(
+        string? token, string? nickname, string? gender = "none", string? birthdate = null)
     {
         await using var scope = _services.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<ConsumeMagicLinkHandler>();
-        return await handler.HandleAsync(new ConsumeMagicLinkCommand(token, nickname), CancellationToken.None);
+        return await handler.HandleAsync(new ConsumeMagicLinkCommand(token, nickname, gender, birthdate), CancellationToken.None);
     }
 
     // AU-01 발급과 같은 저장 경로(IMagicLinkTokenStore.AddAsync)로 넣고 원문을 돌려준다.
@@ -190,7 +259,7 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
 
     private async Task<User> SeedUserAsync(string nickname, string email)
     {
-        var user = User.Create(Nickname.From(nickname), Email.From(email));
+        var user = User.Create(Nickname.From(nickname), Email.From(email), Gender.None, null);
         await using var db = Db.CreateContext();
         db.Users.Add(user);
         await db.SaveChangesAsync();

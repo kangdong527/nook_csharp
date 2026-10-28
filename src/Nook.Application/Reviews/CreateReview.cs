@@ -21,6 +21,7 @@ public sealed class CreateReviewHandler(
     IPlaceRepository places,
     IReviewRepository reviews,
     IReviewImageStorage storage,
+    IReviewImageUrls urls,
     TimeProvider time)
 {
     public async Task<Result<ReviewView>> HandleAsync(CreateReviewCommand command, CancellationToken ct)
@@ -41,9 +42,9 @@ public sealed class CreateReviewHandler(
             return ReviewWriteErrors.PlaceNotFound;
 
         // "지금"은 여기서 한 번만 정한다(ADR-007). 사전 확인 날짜·이미지 키·Review.CreatedAt이 모두 이 값을 쓴다.
-        // 날짜는 Review 생성자(ReviewDate)와 같은 식으로 계산해야 사전 확인과 UNIQUE가 같은 날을 본다. GetLocalNow는 서버 시간대를 탄다.
+        // 날짜는 Review 생성자와 같은 함수(ReviewDay)로 — 사전 확인과 UNIQUE가 같은 날을 본다. GetLocalNow는 서버 시간대를 타므로 쓰지 않는다.
         var now = time.GetUtcNow();
-        var reviewDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var reviewDate = ReviewDay.Of(now);
 
         // 4단계(4a). 업로드 전에 걸러 고아 이미지를 줄이는 용도 — 최종 판정은 6단계의 UNIQUE.
         var userId = UserId.From(command.UserId);
@@ -63,7 +64,7 @@ public sealed class CreateReviewHandler(
         return outcome switch
         {
             // 7단계. 방금 쓴 리뷰가 있으니 R-STAR는 북마크와 무관하게 fill — 북마크를 조회하지 않는다.
-            AddReviewOutcome.Added => ReviewView.From(review, StarRule.Evaluate(isBookmarked: false, hasReview: true)),
+            AddReviewOutcome.Added => ReviewView.From(review, urls, StarRule.Evaluate(isBookmarked: false, hasReview: true)),
             // 6a. 진 쪽 이미지는 고아로 남고 배치가 정리한다(ADR-009).
             AddReviewOutcome.AlreadyReviewedToday => ReviewWriteErrors.AlreadyReviewedToday,
             _ => throw new UnreachableException($"처리하지 않은 {nameof(AddReviewOutcome)}: {outcome}"),

@@ -82,4 +82,77 @@ internal sealed class GroupRepository(NookDbContext db) : IGroupRepository
 
     public Task SaveAsync(Group group, CancellationToken ct) =>
         db.SaveChangesAsync(ct);
+
+    public async Task<IReadOnlyList<MyGroupView>> ListMineAsync(UserId userId, CancellationToken ct)
+    {
+        // 한 문장: 내 멤버십이 있는 그룹 + 멤버 수·내 슬롯·합류 시각을 상관 하위 쿼리로(행 수 ≤ 3, R-GR-02).
+        // 받는 인덱스(예상): ix_group_members_user_id(내 그룹 찾기), pk_group_members(group_id 앞 — 멤버 수). D9에서 EXPLAIN.
+        var rows = await db.Groups
+            .AsNoTracking()
+            .Where(g => g.Members.Any(m => m.UserId == userId))
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.InviteCode,
+                MemberCount = g.Members.Count,
+                Mine = g.Members.Where(m => m.UserId == userId).Select(m => new { m.ColorSlot, m.JoinedAt }).First(),
+                IsOwner = g.OwnerId == userId,
+            })
+            .ToListAsync(ct);
+
+        return [.. rows
+            .OrderBy(r => r.Mine.JoinedAt)
+            .Select(r => new MyGroupView(r.Id.Value, r.Name.Value, r.InviteCode.Value, r.MemberCount, r.Mine.ColorSlot, r.IsOwner))];
+    }
+
+    public async Task<bool?> IsMemberAsync(GroupId groupId, UserId userId, CancellationToken ct)
+    {
+        // 한 문장: 그룹 존재 + 멤버 여부. 받는 인덱스: pk_groups, pk_group_members.
+        var row = await db.Groups
+            .AsNoTracking()
+            .Where(g => g.Id == groupId)
+            .Select(g => new { IsMember = g.Members.Any(m => m.UserId == userId) })
+            .SingleOrDefaultAsync(ct);
+        return row?.IsMember;
+    }
+
+    public async Task<IReadOnlyList<GroupPlaceView>> ListPlacesAsync(GroupId groupId, CancellationToken ct) =>
+        // 현재 멤버(m)만 모은다 — 나간 멤버·탈퇴 회원(reviews.user_id가 PF-02 뒤 NULL)의 기록은 JOIN에서 빠진다.
+        // 첫 리뷰어: 현재 멤버의 리뷰 중 created_at(동점은 id)이 가장 이른 것의 슬롯 — 저장하지 않고 매번 계산(R-STAR와 같은 이유).
+        // 받는 인덱스(예상): pk_group_members(group_id 앞), reviews·bookmarks의 user_id 앞 인덱스. 정렬 없음(지도라 순서 무관). D9에서 EXPLAIN.
+        await db.Database.SqlQuery<GroupPlaceView>($"""
+            WITH m AS (
+                SELECT user_id, color_slot FROM group_members WHERE group_id = {groupId.Value}
+            ),
+            rv AS (
+                SELECT r.place_id,
+                       COUNT(DISTINCT r.user_id)::int AS review_members,
+                       (array_agg(m.color_slot ORDER BY r.created_at, r.id))[1]::int AS first_slot
+                FROM reviews r JOIN m ON m.user_id = r.user_id
+                GROUP BY r.place_id
+            ),
+            bm AS (
+                SELECT b.place_id, COUNT(*)::int AS bookmarks, MIN(m.color_slot)::int AS any_slot
+                FROM bookmarks b JOIN m ON m.user_id = b.user_id
+                GROUP BY b.place_id
+            )
+            SELECT p.id AS "PlaceId", p.kakao_place_id AS "KakaoPlaceId", p.name AS "Name", p.address AS "Address",
+                   p.latitude AS "Latitude", p.longitude AS "Longitude",
+                   COALESCE(rv.review_members, 0) AS "ReviewMemberCount", rv.first_slot AS "FirstReviewerSlot",
+                   COALESCE(bm.bookmarks, 0) AS "BookmarkCount",
+                   CASE WHEN bm.bookmarks = 1 THEN bm.any_slot END AS "SoleBookmarkerSlot"
+            FROM places p
+            LEFT JOIN rv ON rv.place_id = p.id
+            LEFT JOIN bm ON bm.place_id = p.id
+            WHERE rv.place_id IS NOT NULL OR bm.place_id IS NOT NULL
+            """).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<GroupId>> ListMembershipGroupIdsAsync(UserId userId, CancellationToken ct) =>
+        // erd.md group_members Q2. 받는 인덱스: ix_group_members_user_id.
+        await db.Groups
+            .Where(g => g.Members.Any(m => m.UserId == userId))
+            .OrderBy(g => g.Id)
+            .Select(g => g.Id)
+            .ToListAsync(ct);
 }

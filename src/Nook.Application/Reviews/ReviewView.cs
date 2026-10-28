@@ -16,15 +16,19 @@ public sealed record ReviewView(
     int Version,
     string Star)
 {
-    internal static ReviewView From(Review review, StarState star) =>
+    internal static ReviewView From(Review review, IReviewImageUrls urls, StarState star) =>
         new(
             review.Id.Value,
             review.PlaceId.Value,
             review.Content.Value,
-            [.. review.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey))],
+            [.. review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
             review.CreatedAt,
             review.Version,
             star.ToString().ToLowerInvariant());
 }
 
-public sealed record ReviewImageView(Guid Id, string Key);
+// Url: 화면이 그대로 쓰는 주소(IReviewImageUrls가 만든다, FE-2). Key는 RV-02 이전 클라이언트 호환·디버깅용으로 남긴다.
+public sealed record ReviewImageView(Guid Id, string Key, string Url)
+{
+    internal static ReviewImageView From(Guid id, string key, IReviewImageUrls urls) => new(id, key, urls.For(key));
+}

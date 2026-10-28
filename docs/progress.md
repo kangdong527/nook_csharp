@@ -1,18 +1,48 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **D6 마무리** (2026-10-26, D6-3 — 남은 것: 푸시·PR·병합, PM 확인 항목). 브랜치 `feat/d6-concurrency`(미푸시). 그룹 동시성 4건(GR-01 합류·GR-02 생성·R-GR-02/04 3그룹·R-GR-09 탈퇴) 커밋됨, incident 002 미결 ①·② 해소, 그룹 API 3개, 테스트 252개 통과. D6 게이트(동시성 테스트 + incident) 충족. 달력 기준 약 6일 지연
+- 현재: **FE 진행 중** (2026-10-28, FE-2 이어서 — 원본 함수 28/28·Supabase 제거 완료, 브라우저 확인 중 **그룹 지도 버그 재현부터**). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **D6 남은 것** (순서는 사용자가 정함)
+  1. **FE** (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
+     - 결정(사용자): 같은 리포 `web/`(원본 리포는 Supabase판으로 보존), TypeScript + Next.js 14 그대로, React Native 변환 안 함. 개발 포트 **3300**(카카오 도메인 등록 기준 → CORS도 3300)
+     - 연결 구조: 브라우저 → C# API → Docker PostgreSQL. 프론트는 DB를 모른다. 끝나면 `@supabase/*`·`NEXT_PUBLIC_SUPABASE_*` 전부 제거
+     - ~~`web/.env.local`은 원본 Supabase 것~~ → FE-2에서 Supabase 제거. `NEXT_PUBLIC_SUPABASE_*` 줄은 쓰이지 않으니 사용자가 지운다(남아도 동작 영향 없음)
+     - ~~가져오기 커밋~~ ✅ `73a14db` · 루트 `.env*.local` 무시 `508de04`
+     - ~~`npm audit fix`~~ ✅ `48bb561`(lockfile만, `tsc`·`next build` 통과. 남은 것은 next critical 1건 → DEP 전 업그레이드)
+     - 백엔드 할 일 전체 목록: **`docs/design/fe-backend-backlog.md`**(원본 함수 28개 대조, 제안 순서 1~7, 결정 기록). 순서·일정은 사용자 결정 — 아래는 그 3번부터
+     - ~~백엔드 선행 과제 1·2·3·4~~ ✅ FE-2 — `GET /me`(AU-04) · `GET /reviews/{id}`(RV-04, 작성자만·403) · 이미지 A안 결정 · 토큰 BFF 결정 · `IsBookmarked`(PL-02) · 가입 성별·생일(R-US-04·05)
+     - ~~FE 인증 교체(BFF)~~ ✅ FE-2 `47e8ffd` — route handler `/api/auth/{magic-link,consume,signup,logout}`, 쿠키 `nook_at`(1시간)·`nook_signup`(15분), 링크 도착 `/auth/magic-link`(클라이언트가 `#token` 읽음), `GET /me` 기반 3상태 가드, middleware는 쿠키 유무만. 로컬 API·DB로 가입·로그인·링크 재사용 400·로그아웃·가짜 쿠키 13단계 확인
+     - ~~BFF 중계 + 지도·별 상태~~ ✅ FE-2 — `/api/nook/[...path]`(허용 목록·헤더 정리·Origin 검사·경로 조작 거절), `lib/api/client.ts` `nookFetch`(401 → /login). `store.ts` `getMySavedPlaces`·`upsertPlace`·`getPlace`·`isBookmarked` → C# API, `toggleBookmark` → `setBookmarked(placeId, on)`(PUT/DELETE 멱등). 13항목 확인(허용 밖 404, Origin 없음·외부 403, `..%2F` 404, 쿠키 없음 401)
+     - ~~리뷰 흐름 연결~~ ✅ FE-2 — 이미지 표시 A안 `7f93f8f`(로컬 디스크 `App_Data/images`, 익명 `GET /images/{key}`, 응답 `Url` = `/api/nook/images/…`) · 리뷰 6함수 `863cea1`(목록 커서 무한 스크롤, multipart 작성·수정 + version, 좋아요 목표 상태, RV-04 403) · **R-RV-03 하루 기준 UTC → KST 00시** `e663bfb`(사용자 결정, `ReviewDay`). 로컬 API로 11단계 확인. **데모 3흐름(로그인·지도·리뷰) 연결 완료 — 원본 함수 28개 중 15개**
+       - 수동 확인 메모: `curl` 체인에서 `grep -c`가 0이면 종료 코드 1 → `&&` 뒤가 안 돈다. 같은 이메일 링크는 15분에 3개(`MagicLinkPolicy`). Next는 `npm --prefix web run dev`로(루트에서 `npx next`는 next@16을 받아 실행한다)
+       - 알려진 빈 곳: 저장한 장소를 다시 열면 카테고리·전화가 비어 보임(`places` 부가 정보 없음, D3-2), 리뷰 카드 작성자 사진은 기본 이미지(PF-01 때). 로컬 개발 DB의 기존 `review_date`는 UTC 기준 값(운영 데이터 아님)
+       - 브라우저로 직접 눌러 본 적 없음(원본 Supabase 보호) — 카카오 키·`.env.local` 교체 뒤 화면 확인 필요
+     - ~~프로필 묶음~~ ✅ FE-2 — PF-04 `GET /me/reviews`(키셋 5개)·PF-03 FE가 `/me/places`로 셈 `b1a6e79` · PF-01 `PATCH /me`(닉네임, 미리 확인 없음 — DB UNIQUE)·`PUT/DELETE /me/avatar`(`users.avatar_key`, `avatars/` 키) `a5a6f0e`. 원본 모달엔 사진 삭제 버튼이 없어 DELETE는 미사용(정정)
+     - 그룹 묶음 (PM 허가: 만든 사람이 방장 — ADR-012, ADR-004 결정 6 번복)
+       - ~~1. 방장 + 색 슬롯~~ ✅ `ed28fbc` — `groups.owner_id`(RESTRICT + 인덱스), 방장이 나가면 가장 먼저 합류한 멤버로, `group_members.color_slot` 0~3 랜덤·UNIQUE. 원자성 테스트는 임시 CHECK로 바꿈(owner FK가 groups INSERT를 먼저 막아서)
+       - ~~2. GR-03 이름 변경(방장만, 그룹 행 잠금 안)·GR-06 `GET /me/groups`(SQL 1문장 — 로그로 확인)~~ ✅ `ea94b3f`
+       - ~~3. GR-05 그룹 지도~~ ✅ `237d1f8` — 장소마다 1행 사실(리뷰 멤버 수·첫 리뷰어 슬롯·북마크 수·단독 북마커 슬롯), SQL 1문장, 멤버만 403 · FE 그룹 6함수 `403bdd6`(슬롯 → 원본 팔레트 임시 매핑 `slotColor`, PM 별 그리기 `groupStarSvg`, 그룹명 2~6자, 이름 변경 UI 방장만). 로컬 API로 두 회원 흐름 확인(합류·403·방장 넘김)
+     - ~~탈퇴 PF-02~~ ✅ — 스키마 `9d4440e`(reviews·likes `SET NULL`, likes 대리 키 `id` — 복합 PK는 NULL 불가) · `DELETE /me` `33f84cd`(회원 행 FOR UPDATE → 그룹마다 나가기 경로 → 링크 기록 삭제 → DELETE, 커밋 뒤 사진 삭제, 남은 토큰 쓰기 = 자식 쪽 FK 위반만 401) · FE `2683756`(BFF `/api/auth/withdraw`, "탈퇴한 사용자"). PM 답: 복구 없음, 좋아요 유지
+     - ~~Supabase 제거~~ ✅ `795dbb3` — 패키지·어댑터·탐침·환경변수. **원본 함수 28/28 연결, 화면 코드에 Supabase 없음**
+     - ~~그룹 지도 버그~~ ✅ 2026-10-28 `0bf1e24` · `docs/incidents/004`(Claude 작성, 사용자 요청) — H1(응답에 있음)·H2(슬롯 0도 정상 그림) 기각, **H3 확정**: 다른 멤버의 변경을 다시 불러오는 경로가 없었음(원본도 같음). 해결 A안(사용자 결정): `visibilitychange`+`focus` 때 다시 불러오기, 1초 안 중복 1회(탭 복귀 1번 = 요청 1건 실측). 미확인: 중복 방지 변이, `reloadSaved` 늦은 응답 덮어쓰기 경합, `web/` 테스트 러너 없음(DEP 때 결정)
+       - ~~jamME 탈퇴 뒤 옛 "쥑쥑"이 없어진 것~~ 정상 — 탈퇴 때 방장이 hwi로 넘어온 것 사용자 확인, 그 뒤 그룹이 정리됨
+     - ~~브라우저 확인~~ ✅ 2026-10-28 — 이전 A1~9·B10~16 전부 정상(사용자), 회색 별만 버그였음. 회귀 확인용 목록 `docs/design/fe-manual-checklist.md`(재구성)
+     - **▶ 다음 (여기서 시작)**: `feat/fe-connect` 푸시·PR(사용자) → DEP
+       - 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev`(루트에서 `npx next` 금지 — next@16을 받아 실행) → 메일 링크는 API 콘솔. 사진은 `src/Nook.Api/App_Data/images/`(git 제외). 로컬 DB에 Supabase 데이터 없음(이관한 적 없음 — 회원 10명: 확인용 `@nook.test` 9 + 사용자 `jam`)
+       - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
+       - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
+     - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
+     - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
+  - **D6 남은 것** (완료, PR #8)
      - ~~incident 002 미결 ②~~ ✅ D6-2 — 바디 필드 `Version`(응답 `ReviewView`·`PlaceReviewView`, RV-02 폼 필수). ADR-011·usecases.md RV-02(3d·4d·6c)·PL-02·erd.md reviews version·ADR-009 결정 2 반영(Claude 작성, 사용자 요청)
      - ~~incident 002 미결 ①: 변이 6/15~~ ✅ D6-2 — `OrderedGateStorage`(랑데부 + `TaskCompletionSource` 게이트)로 커밋 순서 고정, Theory 2케이스. (D6-1 탈퇴·합류 분포 테스트에도 같은 장치 적용 가능 — 필요하면 사용자 결정)
      - ~~GR-01·02·04 API 엔드포인트~~ ✅ D6-2 — `POST /groups`(201 + Location + `GroupView`), `POST /groups/join` 본문 `{ inviteCode }`(200 + `GroupView`), `DELETE /groups/{id}/membership`(204, 멱등). 이월: 그룹 조회 API(내 그룹 목록·상세)는 유스케이스에 없음 — FE 연결 때 필요하면 사용자가 유스케이스부터
      - ~~ADR-010 "후속" 반영~~ ✅ D6-2 — "후속 결정" 절(잠금 순서·강도·탈퇴·생성)
      - ~~이월 메모: 그룹 조회 API~~ → D6-3에서 원본 조사, 판단은 PM 확인 후("PM 확인 항목" 2)
   2. ~~learning-log D6-1·D6-2~~ ✅ Claude 작성(사용자 요청). 예전 것: learning-log D5-7·D5-8 확인, ADR 권장 3건(메일 폭탄 방어 겹·단일 소비자 전제 / ADR-001 결정 3 보완 SharedKernel / **"장소는 삭제하지 않는다" 불변식**)
-  3. **▶ 다음 재개**: 사용자가 `feat/d6-concurrency` 푸시 → PR → `main` 병합하면 D6 종료. PM과 "PM 확인 항목" 1~4 의논 → 결과에 따라 FE 시작(그룹 조회 유스케이스가 먼저일 수 있음)
+  3. ~~D6 푸시·PR·병합~~ ✅ PR #8. PM과 "PM 확인 항목" 1~4 의논은 남음
 - 다음 할 일 (D5, 순서대로)
   1. ~~인증 골격 커밋 + 문서~~ ✅ `a9ce0d9` · `c1f8539`
   2. ~~`magic_link_tokens` 마이그레이션~~ ✅ `AddMagicLinkTokens`(Claude 작성, 사용자 요청). 영속 클래스 `Persistence/Auth/MagicLinkToken`(internal, DbSet 없음) + Configuration, 식 인덱스는 `migrationBuilder.Sql`. CHECK 3개 통합 테스트 추가(Integration 21개). 로컬 DB 적용·`\d`로 erd.md와 일치 확인
@@ -336,6 +366,8 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 7. **그룹 API**(사용자 결정, Claude 추천 채택): 합류는 코드만 아는 상태라 `/groups/{id}/membership`에 PUT할 수 없음 → `POST /groups/join`, 코드는 본문(경로는 로그에 남음). 합류 응답 `200 + GroupView`(핸들러 `Result<GroupView>`로 변경), 탈퇴 `DELETE …/membership` 204. 그룹 핸들러가 API DI에 빠져 있던 것도 등록. 첫 실행 4건 실패 = 시드 시각이 실제 시계보다 미래(`AddMember`의 joinedAt ≥ CreatedAt 가드)
 8. 검증: `dotnet build` 경고 0·오류 0, `dotnet test` 252개 통과(Domain 95·Algorithms 1·Application 7·Integration 149)
 
+Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청), `GroupsController`·DI 등록·합류 핸들러 반환 타입·`GroupsApiTests` 10개·기존 그룹 테스트 헬퍼 수정. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+
 ### 2026-10-26 (D6-3)
 1. 이월 메모(그룹 조회 API) 원본 조사: 그룹 함수 6개 중 `getMyGroups`만 유스케이스 목록에 없음(MapScreen 첫 로드가 호출). D1 목록이 쓰기 위주로 뽑혀 "화면 진입용 읽기"가 빠짐. 판단은 PM 확인 후
 2. 회원 탈퇴 users 잠금(D6 미결): PF-02가 일정에 없음 → PF-02 구현 때로 미룸(사용자 결정). 흩어진 PF-02 미결 3건을 "PF-02 착수 전 결정 묶음"으로 합침
@@ -344,7 +376,40 @@ Claude가 작성(D6-1): 모든 테스트(Join·Create·GroupMembershipLimit·Lea
 
 Claude가 작성(D6-3): 원본 조사 표, `progress.md` 정리(PM 확인 항목·PF-02 묶음·낡은 줄) — 사용자 요청. 결정은 사용자: PF-02 미룸, PM 확인 대상
 
-Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6·§7 갱신, Version 뼈대(View·Request·Command·컨트롤러)와 테스트 2개·헬퍼, ADR-011·usecases.md·erd.md·ADR-009 갱신(사용자 요청), `GroupsController`·DI 등록·합류 핸들러 반환 타입·`GroupsApiTests` 10개·기존 그룹 테스트 헬퍼 수정. 사용자: 변이 실행·되돌리기, 버전 사전 비교, 결정 A~D. 사용자 작성: GR-01 핸들러, 합류 users 잠금·3개 검사, 탈퇴 switch. 결정은 사용자: (가) FOR UPDATE, 코드 충돌 3회 후 예외, 생성 응답 `GroupView`, 잠금 순서 users → groups, `FOR NO KEY UPDATE`, AlreadyMember 우선, 없는 그룹 탈퇴는 성공(멱등)
+### 2026-10-26 (FE-1)
+1. 결정(사용자): 같은 리포 `web/`, TS + Next.js 그대로, RN 변환 안 함(사용자 개인 의견이라 PM 항목에도 넣지 않음)
+2. 원본 함수 29개 ↔ API 대조: 바로 쓸 수 있는 것 13개, 데모를 막는 빈 곳 3개(`GET /me`·단건 리뷰·이미지 표시) + 토큰 저장 위치. 그룹 조회와 같은 원인 — 쓰기 위주로 만든 백엔드에 화면 진입용 읽기가 빠짐
+3. 가져오기: `git archive 668390e`로 추적 파일만(`.env.local`·`node_modules`·미커밋 변경 차단), 70개. 원본 CRLF → `.gitattributes`로 LF 저장. 사용자가 화면 확인 후 커밋(사용자 요청)
+4. 사고(예방): 원본 `.env.local`이 `web/`이 아니라 리포 루트로 복사됨 — `web/.gitignore`는 `web/` 안만 막아 루트에선 미추적·비무시 → `web/`로 옮기고 루트에도 `.env*.local`
+5. `npm audit`: critical 1(next 14.2.35, 수정판 16.x) · high 2(nanoid·source-map-js, `audit fix` 가능)
+6. `GET /me` 설계 질문: ① 원본 3상태 → 사용자 답 `401 / 401 / 200` — 결과는 맞음. 단 `no_profile`은 우리 구조에 없음(닉네임 없으면 consume이 토큰을 안 줌 → 토큰 없는 401). 닉네임 화면 분기는 consume 응답으로 ② 서명 유효 + 회원 없음 → 사용자 첫 답 "다른 회원 ID로 바꾼 요청, 400" — 정정: `sub`를 바꾸면 서명 검증에서 미들웨어 401, 핸들러에 오지 않음. 실제 경우는 탈퇴 후 남은 토큰·개발 중 DB 초기화. 400은 형식 오류라 부적합 → **결정(사용자): 401**("로그인 화면으로 보내야 하니까"). Claude가 앞서 적은 "404 권장"은 철회
+
+커밋: `73a14db` 가져오기 · `508de04` 루트 gitignore · `a41e2d0` progress · `48bb561` audit fix (`feat/fe-connect`). 6번(`GET /me` 결정)은 progress.md 미커밋
+Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `progress.md` — 사용자 요청. 결정은 사용자
+
+### 2026-10-27 (FE-2)
+1. `GET /me`(AU-04): `ErrorType.Unauthorized` 추가(D2-1 "401은 미들웨어 몫" 번복 — ErrorOr 등 Result 라이브러리 관례, 사용자 요청 "대중적인 방법"). 미들웨어 401은 title 없음, 핸들러 401은 `Auth.UnknownUser`. 변이(null 검사 제거) 예측: 사용자 "두 테스트 깨짐" → 실제 1개(회원 있는 테스트는 그 줄을 안 지남)
+2. 리팩터링: `ErrorResults.Problem(this ControllerBase, Error)` 한 곳으로(복사된 표 4개 + 하드코딩 400/404 제거). 기본 분기 `throw`로 통일(Groups·Reviews는 조용한 500이었음). 테스트 무수정 255개 초록. 확인 질문(표 누락 시) ○
+3. `GET /reviews/{id}`(RV-04): A안 작성자만 + 403(사용자 결정). 원본은 누구나 읽고 클라이언트가 본인 확인 → 서버 계약으로. version 왕복 테스트로 RV-04→RV-02 계약 고정
+4. PM 결정(다른 세션) 반영: 범위 = 원본 화면 전체, PF-02 ⓪ (가) users DELETE + `SET NULL`. 사용자 지적으로 "할 일 목록이 데모 범위 그대로" 발견 → `docs/design/fe-backend-backlog.md` 작성(원본 함수 28개 대조: 있음 17 · 보강 2 · 새 API 9 · API 밖 결정 2)
+5. 범위 답(사용자·PM): 아바타 = 프로필 사진(직접 설정, 없으면 기본, 가입 직후 PF-01로) · 성별·생일 가입 때 입력, 생일 `date`, FE가 `YYYY-MM-DD`로 변환 · 그룹 색 = 디자인 확정 전 → **슬롯 번호(0~3) 저장** 제안, 그룹맵 표시 정책(PM: 리뷰 중첩 = 첫 리뷰어 색 + 리뷰한 멤버 수, 북마크만 중첩 = #4A4A4A + 수, 단독 북마크 = 회색 + 멤버 색 외곽선) → 응답은 장소마다 1행·사실만, 그리기는 FE. 가입 전 리뷰 포함
+6. 결정: 이미지 A(로컬 디스크 + 익명 `GET /images/{key}`, 서버가 `Url` 생성, DEP에서 S3로 구현체 교체) · 토큰 ③ BFF · 로그인/가입 문구 통일 (a) · 토큰 60분 유지
+7. `IsBookmarked`(PL-02): 별은 리뷰가 있으면 fill이라 북마크 상태가 가려짐(정보 손실). 이미 조회하던 값을 응답에 추가, 쿼리 수 그대로
+8. 가입 성별·생일(R-US-04·05): `Gender` enum 1부터(default 차단), `Birthdate`(1900-01-01~오늘 UTC), 새 회원만 검사, 마이그레이션은 기존 행 `'none'` 채운 뒤 기본값 삭제, CHECK에 `current_date` 안 씀(비결정적). 변이(상한 제거) → 도메인·통합 각 1개 빨간불
+
+9. FE 인증 교체(BFF): 로그인·가입 문구 통일 (a) · 성별·생일 백엔드 먼저 · 토큰 60분 유지(사용자 결정). 링크 토큰이 `#` 프래그먼트라 도착 지점은 route handler가 아니라 클라이언트 페이지. 가입 대기 쿠키가 원본 `no_profile` 자리를 대신해 3상태 가드 재사용. 가입 폼 표시용으로 consume `needsNickname` 응답에 이메일 추가
+10. BFF 중계: 사용자 요청 "안전하고 대중적인 방식" → 범용 중계 route handler + 허용 목록 추천·채택(Server Actions는 본문 1MB 기본 제한·읽기 용도에 안 맞음). open proxy 방지 장치 4개. 토글 → 목표 상태 명시(PUT/DELETE)
+11. 수동 확인 중 오진 1건: 401 원인을 "이메일당 메일 제한"으로 설명 → DB 확인 결과 2건뿐이라 틀림 → 실제는 테스트 스크립트(`grep -c` 0 → 종료 코드 1 → `&&` 중단). 측정 전 추측을 원인으로 말하지 않기
+12. 이미지 표시 A안: 키 모양 검사(`ReviewImageKeys.IsValid`) + 디스크 root 밖 거절(2겹). 변이로 모양 검사를 지우면 모양 사례 3개만 빨간불 — `..` 사례는 URL 정규화가 먼저 막아 우리 검사를 지키지 않음을 확인하고 테스트 주석에 남김
+13. 리뷰 흐름: `ReviewEditor`가 사진을 고르는 즉시 올리던 것(원본 고아 이미지 원인) → 파일을 들고 있다 저장 때 한 요청으로. 목록이 페이지가 되면서 "내 리뷰가 있나"를 목록으로 판정할 수 없게 됨 → 별은 서버 판정(PL-02 상세)으로. 무한 스크롤 (b)는 사용자 결정
+14. R-RV-03 하루 기준을 KST 00시로(사용자 결정, D2-2 UTC 번복). 화면 문구 "00시 기준"과 서버 실제 기준(KST 09시)이 달랐던 것을 리뷰 연결 중 발견. 비용이 작았던 이유: `review_date`는 앱 계산 컬럼이고 `created_at`과 묶는 CHECK를 D3에서 일부러 두지 않았다. 운영 데이터 전이라 재계산 충돌(UTC 다른 날 → KST 같은 날 = UNIQUE 위반) 위험도 없었다. 테스트 먼저(빨간불 확인) → `ReviewDay` 한 곳
+15. 프로필: PF-04 키셋 재사용, PF-03 API 없음, PF-01 닉네임 미리 확인 없음(원본 화면이 직접 안 불렀다)·사진 `avatars/`. 정정 2건: "원본에 사진 삭제 버튼 있다"(없음), 함수 수 15 → 16
+16. 그룹: 방장(PM 허가, ADR-012 — ADR-004 결정 6 번복, 원본 CASCADE 결함 대신 넘기기 + RESTRICT), 색은 슬롯 저장(디자인 미정), N+1 → SQL 1문장(로그로 확인, 비교 측정은 D9), 그룹 지도는 장소마다 1행 사실(사용자 A안). owner FK 때문에 원자성 테스트가 다른 경로를 타게 된 것을 발견 → 임시 CHECK로 원래 상황 재현
+17. 탈퇴(PF-02): PM 답 — 복구 없음, 좋아요 유지. 좋아요의 복합 PK `(user_id, review_id)`는 NULL이 될 수 없어 대리 키 + UNIQUE(A안, 사용자 결정) — "규칙이 PK 자체"(D2)의 대가. 남은 토큰은 요청마다 회원 조회 대신 FK 위반을 401로 번역(DB가 최종 판정자). 변이로 발견: 그룹 나가기를 빼먹은 **버그가 401로 가려짐** → 자식 쪽 위반("insert or update")만 401, 부모 쪽은 500. `UseExceptionHandler` 추가로 처리 안 된 예외는 500 ProblemDetails
+18. Supabase 제거: 화면 코드에 참조 0. npm audit은 제거 전후 같음(next critical 1, glob high 3 — dev lint 경유)
+19. (2026-10-28) 브라우저 확인 시작 — 로그인·지도 정상. 사진 저장 위치 질문(로컬 디스크 `App_Data/images`, DB엔 키만). 로컬 DB에 Supabase 데이터가 넘어오지 않았음을 확인(회원 10명 출처 대조). **버그 보고 1건**(그룹 지도에서 다른 멤버의 북마크만 장소가 안 보임) → 가설 H1~H3, 재현 순서 정리, 원인 미확정 — 다음 세션 재개 지점
+커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · `3a531ad` progress · `b1a6e79` PF-04·03 · `a5a6f0e` PF-01 · `ed28fbc` 방장·슬롯 · `ea94b3f` GR-03·06 · `1f13faa` progress · `237d1f8` GR-05 · `403bdd6` FE 그룹 · `cb31f42` progress · `9d4440e`·`33f84cd`·`2683756` 탈퇴 · `795dbb3` Supabase 제거 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
+Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절차·예외 처리기·FE), 그룹·프로필 전체, web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
 ## 체크리스트
 
@@ -356,8 +421,8 @@ Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6
 - [x] D3 ERD·스키마·EF Core 매핑·마이그레이션·ADR-002 (design-review 🔴 0, `database update` 성공) — 테이블 8개, Mermaid·보장 주체 표, compose, `Init` 마이그레이션(SQL 제약 3개), `From` 6개, ADR-002·008
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
-- [ ] D6 트랜잭션·동시성(그룹 합류) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
-- [ ] FE 프론트 연결(원본 Next.js 재사용, 로컬 3흐름 동작)
+- [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
+- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅. 남음: 브라우저 화면 확인 → 푸시·PR
 - [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
@@ -374,20 +439,36 @@ Claude가 작성(D6-2): `OrderedGateStorage`·Theory 테스트, incident 002 §6
 ## PM 확인 항목
 > 사용자 혼자 정할 수 없는 범위·정책 질문. PM과 의논한 뒤 결과를 "확정된 결정"으로 옮기고 여기서 지운다.
 
-1. **프론트 연결 범위**: 데모 3흐름 + 로그인만 vs 원본 화면 전체 — FE 시작 전. 아래 2·3이 이 답에 달려 있다
-2. **그룹 조회(내 그룹 목록, 원본 `getMyGroups`)** — 원본 MapScreen 첫 로드(`src/app/map/MapScreen.tsx:182`)가 부르지만 유스케이스 목록에 없음(D1 목록이 쓰기 위주). 물을 것: ① 데모 "그룹 합류" 흐름의 끝(합류 응답까지 vs 새로고침 후에도 그룹 표시) ② 데모에 GR-05 그룹맵 포함 여부. 필요하면 사용자가 유스케이스부터, 원본의 그룹별 `memberCount` N+1을 그대로 둘지도 결정 — FE 시작 전 (D6-3 원본 조사)
-3. **PF-02 회원 탈퇴를 이번 범위에 넣는가** — 현재 D1~D14·FE·DEP 어디에도 없음. 넣으면 "미결 결정"의 PF-02 착수 전 결정 묶음부터 (D6-3)
-4. **R-RV-03과 삭제 후 재작성**: 오늘 쓴 리뷰를 지우면 오늘 다시 쓸 수 있다(현재 동작, `Delete_ThenCreateSameDay_Returns201`이 기록). ADR-009 · usecases.md RV-03에 미결로 표시
+(2026-10-27 1~4 답변 받음 → "확정된 결정 (PM, 2026-10-27)". 아래는 PF-02 구현 전까지만 답 받으면 됨, 지금 진행엔 영향 없음)
+
+1. **탈퇴 철회·재가입 시 예전 리뷰 복구가 없어도 되나** — PF-02 (가)안(`SET NULL`)은 복구 불가. "필요하다"면 ⓪ 재검토
+2. **탈퇴 회원이 남의 리뷰에 누른 좋아요를 지우나** — 지우면 그 리뷰의 좋아요 수가 줄어듦. 북마크·그룹 멤버십 삭제와 함께 PF-02 절차에 들어감
+3. **(알림) 로그인·가입 화면 안내 문구 변경** — 명세서 :81(이미 가입된 이메일)·:148(가입되지 않은 이메일) 안내를 없애고 "메일을 보냈어요"로 통일(FE-2 사용자 결정). 이유: 가입 여부를 노출하지 않는 백엔드 설계(D5). 답이 필요한 질문이 아니라 알림
+4. **그룹맵 세부(GR-05 때)** — 색 팔레트는 디자인 확정 후. 그때 슬롯 → 색 매핑만 FE에서 정한다
+
+## 확정된 결정 (PM, 2026-10-27)
+1. **프론트 연결 범위 = B안, 원본 화면 전체.** "데모 밖"으로 분류했던 것도 전부 범위 안: `getMyReviews`·`getStarCounts`(PF-03)·`updateProfile`·`nicknameExists`·아바타 업로드(User에 아바타 없음 → 스키마 변경)·`deleteAccount`(PF-02)·`renameGroup`(GR-03)·`getGroupSavedPlaces`(GR-05)
+2. **그룹**: 앱을 다시 열어도 "내 그룹 목록"이 보여야 함(`getMyGroups` 필요 → 사용자가 유스케이스부터) + **GR-05 그룹 멤버 저장 장소 지도 포함**. 그룹별 `memberCount` N+1을 그대로 둘지는 사용자 결정
+3. **PF-02 회원 탈퇴 = 범위 안(1번 B안). 정책: 리뷰와 리뷰 이미지는 자산이라 탈퇴해도 보존.** ⚠️ 지금 설계와 충돌 — reviews가 users 삭제 시 CASCADE, erd.md 스토리지 키에 회원 ID, D6-3 정리의 "모든 데이터 삭제" 전제. 설계를 다시 해야 함(아래 "미결 결정" PF-02 묶음)
+   - 추가 답변(같은 날): 탈퇴 회원 리뷰의 작성자는 **"탈퇴한 사용자"**로 표시. 단 **한 탈퇴 회원의 리뷰끼리 묶어 볼 수 있으면 안 됨**(연결 불가). 지금 응답에서 리뷰끼리 이어 주는 단서: PL-02 `ReviewAuthorView.Id`(`GetPlaceReviews.cs:30`), 이미지 `Key`(`ReviewImageView`, erd.md 스토리지 키에 회원 ID)
+4. **R-RV-03: 리뷰를 지우면 같은 날 다시 써도 된다.** 현재 동작 유지(`Delete_ThenCreateSameDay_Returns201`). 할 일: ADR-009 · usecases.md RV-03의 "미결" 표시를 확정으로 바꾸기(사용자)
 
 ## 미결 결정
 - ~~응답 `version` + `If-Match`~~ → 바디 필드 `Version`, ADR-011(D6-2)
-- **PF-02 착수 전 결정 묶음** (D6-3 사용자 결정: PF-02 구현 때로 미룸. 일정 여부는 "PM 확인 항목" 3)
-  - ① 탈퇴 트랜잭션도 처음에 users 행을 잠그는가 — 안 잠그면 탈퇴 중 같은 회원의 합류가 끼어들어 users DELETE가 RESTRICT 오류(500). 정합성은 RESTRICT가 지키므로 실패 표시 문제. 잠근다면 잠금 순서 users → groups(ADR-010 후속)와 같게. 근거: R-GR-02에 닿는 경로는 같은 users 잠금을 거쳐야 줄이 선다(D6-1 변이: 합류만 빼도 5개)
-  - ② 탈퇴 후 남은 60분 액세스 토큰의 좋아요·북마크 요청 → `fk_likes_users` 등 FK 위반 500 (원래 "확정된 결정 (D5)" 하위 미결)
-  - ③ 오래된 prefix의 탈퇴 회원 스토리지 이미지 정리 — "모든 데이터 삭제" 충족 여부(erd.md 스토리지 키 "회원 ID" 행)
+- **PF-02 착수 전 결정 묶음** (범위 확정 2026-10-27 PM. 정책: 리뷰·이미지 보존)
+  - ~~⓪ 보존 방식~~ → **(가) users 행 DELETE + `reviews.user_id` `ON DELETE SET NULL`**(2026-10-27 사용자 결정, Claude 추천 채택)
+    - 근거: 연결 불가(PM)를 DB가 보장(고리 자체가 없음) · 특수 값 없음 · 영향 범위(nullable `Review.UserId`)를 컴파일러가 드러냄
+    - 기각: (나) users 행 남김 — 연결 불가를 응답에서만 지킴, 이메일·닉네임 UNIQUE/CHECK 수정, 남은 토큰 요청이 성공함, 모든 회원 쿼리에 제외 조건 / (다) 센티널 회원 — 두 번째 탈퇴 회원이 같은 장소·날짜 리뷰를 가지면 R-RV-03 UNIQUE 위반으로 탈퇴 불가(500) → 부분 인덱스 필요, 센티널 제외 규칙
+    - 대가: 복구 불가(탈퇴 철회·재가입 시 리뷰 복구 없음 → PM 확인 권장). PG 15+ `NULLS NOT DISTINCT`를 R-RV-03 UNIQUE에 쓰면 안 됨
+    - PF-02 설계 때 할 것(사용자): `Review.UserId` nullable 표현, 수정·삭제 권한 검사(`EditReview.cs:47`)가 NULL 작성자에서 거절되는지, PL-02 응답 `author`(Id 없음 + "탈퇴한 사용자"), erd.md·마이그레이션 FK 변경, 이미지 `Key`의 회원 ID
+    - 아직 남은 질문: 좋아요·북마크·그룹 멤버십은 지우는가(탈퇴 회원이 누른 좋아요를 지우면 남의 리뷰 좋아요 수가 줄어듦 → PM), 같은 이메일 재가입 = 새 회원
+  - ① 탈퇴 트랜잭션도 처음에 users 행을 잠그는가 — 안 잠그면 탈퇴 중 같은 회원의 합류가 끼어들어 users DELETE가 RESTRICT 오류(500). 정합성은 RESTRICT가 지키므로 실패 표시 문제. 잠근다면 잠금 순서 users → groups(ADR-010 후속)와 같게. 근거: R-GR-02에 닿는 경로는 같은 users 잠금을 거쳐야 줄이 선다(D6-1 변이: 합류만 빼도 5개). ⓪에서 users 행을 남기면 질문 자체가 바뀜
+  - ② 탈퇴 후 남은 60분 액세스 토큰의 좋아요·북마크 요청 → `fk_likes_users` 등 FK 위반 500 (원래 "확정된 결정 (D5)" 하위 미결). ⓪에서 행을 남기면 FK 위반 대신 "탈퇴 회원 요청을 어디서 거절하나"로 바뀜
+  - ~~③ 오래된 prefix의 탈퇴 회원 스토리지 이미지 정리~~ → 이미지 보존(PM)으로 정리 대상 아님. 남는 질문: 스토리지 키에 들어간 회원 ID가 탈퇴 뒤에도 남아도 되는가(erd.md 스토리지 키 "회원 ID" 행)
 - ~~일정 변경안 보류~~ → 채택(2026-10-20, "확정된 결정 (D5)")
 - ~~매직 링크 TOCTOU 보완 조합~~ → "확정된 결정 (D5)" ② A3 + Q2 + A1
 - 프론트 호스팅 위치: 같은 EC2(Caddy가 Next.js도 프록시) vs Vercel 등 별도 — FE 끝날 때. 별도면 CORS·쿠키 도메인 영향
+- **공개 배포 전 필수: `web/` Next.js 14.2.35 → 16 메이저 업그레이드** — `npm audit` critical(RCE 포함 25건, 2026-10-26). 수정판이 16.x뿐(React 19·비동기 요청 API 등 호환성 깨짐). Supabase → API 교체 diff와 섞지 않게 별도 브랜치·커밋 — DEP 전, FE 끝난 뒤
 - 운영 메일 발송기 선택(예: AWS SES — 샌드박스는 검증된 수신자만 발송 가능, 데모 계정 운영과 연결) — DEP 5일째
 - 운영 DB: EC2 안 postgres 컨테이너(compose) vs RDS — DEP 2일째. 컨테이너면 백업·디스크 책임이 본인
 - 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")

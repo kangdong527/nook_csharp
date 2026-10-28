@@ -13,11 +13,11 @@
 erDiagram
     users ||--o{ bookmarks : "user_id · CASCADE"
     places ||--o{ bookmarks : "place_id · RESTRICT"
-    users ||..o{ reviews : "user_id · CASCADE"
+    users |o..o{ reviews : "user_id · SET NULL"
     places ||..o{ reviews : "place_id · RESTRICT"
     reviews ||..o{ review_images : "review_id · CASCADE (0~3장)"
     reviews ||--o{ likes : "review_id · CASCADE"
-    users ||--o{ likes : "user_id · CASCADE"
+    users |o..o{ likes : "user_id · SET NULL"
     groups ||--o{ group_members : "group_id · CASCADE"
     users ||--o{ group_members : "user_id · RESTRICT"
 
@@ -25,6 +25,9 @@ erDiagram
         uuid id PK "UUID v7, 앱 발급"
         varchar(12) nickname UK "lower() 식 UNIQUE"
         varchar(254) email UK "lower() 식 UNIQUE"
+        varchar(6) gender "female·male·none"
+        date birthdate "NULL 허용"
+        varchar(56) avatar_key "NULL = 기본 이미지"
     }
 
     places {
@@ -48,7 +51,7 @@ erDiagram
         uuid place_id FK, UK "IX (place_id, created_at DESC)"
         varchar(50) content "trim 후 10~50자"
         timestamptz created_at
-        date review_date UK "created_at의 UTC 날짜"
+        date review_date UK "created_at의 KST 날짜"
     }
 
     review_images {
@@ -105,7 +108,7 @@ erDiagram
 
 ### users
 
-관련 규칙: R-US-01 · R-US-02 · R-US-03 · R-GR-04
+관련 규칙: R-US-01 · R-US-02 · R-US-03 · R-US-04 · R-US-05 · R-GR-04
 
 [이 테이블을 읽는 쿼리]
 
@@ -123,6 +126,9 @@ erDiagram
 | id | `uuid` | NOT NULL | 없음 | 앱이 `UserId.New()`(UUID v7)로 발급(ADR-006). DB 기본값을 두면 발급 주체가 둘이 된다 |
 | nickname | `varchar(12)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-02). PostgreSQL `varchar(n)`은 글자(코드 포인트) 단위라 `Nickname.MaxLength`(rune 수)와 단위가 같다 |
 | email | `varchar(254)` | NOT NULL | 없음 | 입력 표기 그대로 저장(R-US-03). `Email.MaxLength`와 같은 상한 |
+| gender | `varchar(6)` | NOT NULL | 없음 | `female`·`male`·`none`(R-US-04). 가입 폼 필수. 추가 마이그레이션(`AddUserGenderBirthdate`)이 기존 행을 `'none'`으로 채운 뒤 기본값을 지운다 *(FE-1 Claude 작성)* |
+| avatar_key | `varchar(56)` | NULL | 없음 | 프로필 사진 스토리지 키(PF-01). NULL = 기본 이미지(FE 몫). 키 규칙은 review_images.storage_key와 같은 모양에 prefix `avatars/`(§3.1) *(FE-2 Claude 작성)* |
+| birthdate | `date` | NULL | 없음 | 선택 입력(R-US-05). 원본 `text 'YY-MM-DD'` → `date`(세기 모호 제거, FE-1 사용자 결정) |
 
 - 시각 컬럼(`created_at`)은 두지 않는다. 가입일을 쓰는 규칙·화면이 없다(ADR-007 "결과", `User` 주석)
 - 인증 관련 컬럼은 두지 않는다. 인증 방식이 매직 링크로 정해졌고(D5) 링크는 `magic_link_tokens`가 맡는다. 가입자는 링크를 요청할 때 닉네임이 없어 users 행을 만들 수 없기 때문이다
@@ -135,6 +141,9 @@ erDiagram
 | UNIQUE (식) | `ux_users_email_lower ON users (lower(email))` | Q4. 대소문자만 다른 이메일 중복 가입을 막는다 | R-US-03 |
 | CHECK | `ck_users_nickname`: `char_length(nickname) >= 2 AND nickname ~ '^[가-힣A-Za-z0-9]+$' AND nickname IS NFC NORMALIZED` | 앱을 거치지 않은 쓰기(SQL 직접 수정, 시드 스크립트)로 형식이 깨진 닉네임. 공백을 허용하지 않으므로 trim도 함께 보장된다. 상한 12는 `varchar(12)`가 맡는다 | R-US-01, CLAUDE.md "DB CHECK로 이중화" |
 | CHECK | `ck_users_email`: `email ~ '^[^@[:space:]]+@[^@[:space:]]+$'` | 빈 문자열, `@` 0개·2개 이상, `@` 앞뒤가 빔, 공백 포함 | R-US-03 |
+| CHECK | `ck_users_avatar_key`: `btrim(avatar_key) <> ''` | 빈 문자열 키. NULL은 통과(기본 이미지) — `ck_review_images_storage_key`와 같은 최소 이중화 | PF-01 |
+| CHECK | `ck_users_gender`: `gender IN ('female', 'male', 'none')` | 3값 밖의 표기(대문자 포함) | R-US-04 |
+| CHECK | `ck_users_birthdate`: `birthdate >= DATE '1900-01-01'` | 하한 아래. 상한(오늘)은 넣지 않는다 — `current_date`는 비결정적이라 CHECK에 쓰면 재검증 시점마다 결과가 달라질 수 있다. 상한은 `Birthdate.Create`가 가입 시점에 검사 | R-US-05 |
 | FK (나가는 것) | 없음 | users는 다른 테이블을 참조하지 않는다 | |
 | FK (들어오는 것) | bookmarks·reviews·likes·group_members `.user_id → users` — `ON DELETE`는 **각 자식 테이블에서** 정한다 | 탈퇴(PF-02) 때 users 행 DELETE가 자식마다 FK 검사를 한다. PostgreSQL은 FK 쪽 인덱스를 자동으로 만들지 않으므로 자식 테이블마다 `user_id`로 시작하는 인덱스(PK 포함)가 있는지 확인한다 | ADR-005, PF-02 |
 
@@ -229,11 +238,11 @@ erDiagram
 | 컬럼 | 타입 | NULL | 기본값 | 비고 |
 |---|---|---|---|---|
 | id | `uuid` | NOT NULL | 없음 | 앱이 `ReviewId.New()`(UUID v7)로 발급(ADR-006) |
-| user_id | `uuid` | NOT NULL | 없음 | 작성자. `Review.UserId` |
+| user_id | `uuid` | NULL | 없음 | 작성자. `Review.UserId`. **NULL = 탈퇴한 작성자**(PF-02, PM: 리뷰는 남긴다) *(FE-2)* |
 | place_id | `uuid` | NOT NULL | 없음 | 리뷰 대상 장소. `Review.PlaceId`. 수정으로 바뀌지 않는다(RV-02) |
 | content | `varchar(50)` | NOT NULL | 없음 | trim된 본문(`ReviewContent.Value`). 상한은 `ReviewContent.MaxLength`와 같다 |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
-| review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 UTC 날짜로 계산한 `Review.ReviewDate`를 그대로 저장한다 |
+| review_date | `date` | NOT NULL | 없음 | R-RV-03 기준 날짜. Domain이 `created_at`의 KST 날짜로 계산한 `Review.ReviewDate`(`ReviewDay`)를 그대로 저장한다 *(FE-2: UTC → KST)* |
 | version | `integer` | NOT NULL | `0` | 낙관적 동시성 토큰(`Review.Version`). `Review.Edit` 성공마다 +1, EF가 `UPDATE … WHERE version = <읽은 값>`으로 저장한다. 동시 수정의 늦은 쪽은 0행 → 409(RV-02 6c). *(2026-10-24 사용자 결정, Claude 작성, incident 002)* API로도 나간다: 응답 `version`(불투명 값) → RV-02 폼 `Version`으로 돌아와 화면을 연 사이의 수정을 409로 거절(RV-02 4d). 그래서 이 값은 `Review.Edit` 성공 말고는 바뀌면 안 된다 — 다른 갱신이 올리면 거짓 충돌 *(2026-10-26, ADR-011)* |
 
 - 수정 시각(`updated_at`)은 두지 않는다. `Review`에 없고, 수정 시각을 쓰는 규칙·화면이 없다(ADR-007 기준)
@@ -245,13 +254,13 @@ erDiagram
 | PK | `pk_reviews (id)` | Q1. review_images·likes FK가 가리키는 대상 | ADR-006 |
 | UNIQUE | `ux_reviews_user_place_date (user_id, place_id, review_date)` | Q5. 같은 회원·장소·날짜의 두 번째 리뷰를 막는다(동시 작성도 이 인덱스가 직렬화). 앞 컬럼이 `user_id`, `(user_id, place_id)`라서 Q4·Q6과 Q3의 필터도 받는다 | R-RV-03 |
 | 보조 인덱스 | `ix_reviews_place_created (place_id, created_at DESC)` | Q2. 장소 상세마다 실행되는 조회라 정렬까지 인덱스로 받는다. places 삭제 시 RESTRICT 검사(`WHERE place_id = ?`)도 받는다 | PL-02 |
-| FK | `fk_reviews_users`: `user_id → users(id) ON DELETE CASCADE` | 탈퇴 시 users 행 DELETE 한 문장으로 리뷰까지 지워진다(bookmarks와 같은 근거). 리뷰가 지워지면 review_images·likes도 아래 CASCADE로 따라 지워진다. 스토리지 이미지는 트랜잭션 밖 정리 배치가 맡는다 | PF-02, ADR-005 |
+| FK | `fk_reviews_users`: `user_id → users(id) ON DELETE SET NULL` | 탈퇴해도 리뷰·이미지는 남고 작성자만 끊긴다(PF-02 ⓪ (가), PM). UNIQUE `(user_id, place_id, review_date)`는 NULL끼리 다르다고 보므로 탈퇴 회원들의 리뷰가 공존한다 — `NULLS NOT DISTINCT`로 바꾸지 말 것. 이전: CASCADE("모든 데이터 삭제" 전제, D6-3) *(FE-2)* | PF-02, ADR-005 |
 | FK | `fk_reviews_places`: `place_id → places(id) ON DELETE RESTRICT` | 리뷰가 남은 장소의 삭제를 거부한다(bookmarks와 같은 근거) | ADR-005 |
 | CHECK | `ck_reviews_version`: `version >= 0` | 앱을 거치지 않은 쓰기로 음수 버전이 들어오는 것 | RV-02 6c |
 | CHECK | `ck_reviews_content`: `char_length(btrim(content)) >= 10` | 앱을 거치지 않은 쓰기로 10자 미만 본문이 들어오는 것. 상한 50은 `varchar(50)`이 맡는다. `btrim`은 ASCII 공백만 지우는 최소 이중화(users 메모와 같음) | R-RV-01 |
 
 메모
-- `review_date`와 `created_at`이 어긋나지 않게 하는 CHECK(`review_date = (created_at AT TIME ZONE 'UTC')::date`)는 두지 않는다. 표현식 인덱스를 기각한 이유와 같다: 같은 계산이 SQL에도 생겨 규칙이 두 곳이 된다(progress D2 결정)
+- `review_date`와 `created_at`이 어긋나지 않게 하는 CHECK(`review_date = (created_at AT TIME ZONE 'Asia/Seoul')::date`)는 두지 않는다. 표현식 인덱스를 기각한 이유와 같다: 같은 계산이 SQL에도 생겨 규칙이 두 곳이 된다(progress D2 결정)
 - Q3의 정렬·Keyset 페이지네이션용 인덱스(`(user_id, created_at DESC, id)` 등)는 D8에서 `EXPLAIN (ANALYZE, BUFFERS)`로 Before를 재고 정한다
 
 
@@ -315,16 +324,18 @@ erDiagram
 | 컬럼 | 타입 | NULL | 기본값 | 비고 |
 |---|---|---|---|---|
 | review_id | `uuid` | NOT NULL | 없음 | 좋아요 대상 리뷰. `Like.ReviewId` |
-| user_id | `uuid` | NOT NULL | 없음 | 좋아요한 회원. `Like.UserId` |
+| id | `uuid` | NOT NULL | 없음 | 대리 키(PF-02). 앱이 UUIDv7로(`GuidV7Generator`, ADR-006). 도메인 `Like`는 모른다(EF 섀도 속성) *(FE-2)* |
+| user_id | `uuid` | NULL | 없음 | 좋아요한 회원. `Like.UserId`. **NULL = 탈퇴한 회원**(PM: 좋아요는 지우지 않는다) *(FE-2)* |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007) |
 
 - "좋아요 여부" 컬럼은 두지 않는다. 행이 있으면 좋아요한 것이다(bookmarks와 같은 근거)
 
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
 |---|---|---|---|
-| PK | `pk_likes (review_id, user_id)` | Q1·Q2·Q3·Q4. 같은 (회원, 리뷰) 두 번째 행을 막는다. `review_id`를 앞에 둔 이유: 리뷰 단독 조회(Q3 좋아요 수)는 장소 상세마다 실행되고, 회원 단독 조회(Q5)는 탈퇴 때만 실행된다 | R-LK-01, ADR-005(복합 PK) |
+| PK | `pk_likes (id)` | 대리 키. 이전 PK `(review_id, user_id)`는 user_id가 NULL이 될 수 있게 되어(PF-02) UNIQUE로 옮겼다 *(FE-2)* | PF-02 |
+| UNIQUE | `ux_likes_review_user (review_id, user_id)` | Q1·Q2·Q3·Q4. 같은 (회원, 리뷰) 두 번째 행을 막는다(이전 PK와 같은 컬럼 순서 — 리뷰 단위 좋아요 수가 앞 컬럼을 탄다). NULL끼리는 다르다 → 탈퇴 회원 여러 명의 좋아요가 한 리뷰에 남는다. LK-01의 `ON CONFLICT (review_id, user_id)`가 이 인덱스로 판정 | R-LK-01 |
 | 보조 인덱스 | `ix_likes_user_id (user_id)` | Q5. 탈퇴 시 users DELETE의 CASCADE·FK 검사가 likes 전체를 읽지 않게 한다(users 표 "자식 테이블마다 `user_id`로 시작하는 인덱스" 확인 항목) | PF-02 |
-| FK | `fk_likes_users`: `user_id → users(id) ON DELETE CASCADE` | 탈퇴 시 그 회원의 좋아요도 함께 지워진다 | PF-02, ADR-005 |
+| FK | `fk_likes_users`: `user_id → users(id) ON DELETE SET NULL` | 탈퇴해도 좋아요는 남는다 — 리뷰의 좋아요 수가 줄지 않는다(PM). 이전: CASCADE *(FE-2)* | PF-02, ADR-005 |
 | FK | `fk_likes_reviews`: `review_id → reviews(id) ON DELETE CASCADE` | 리뷰가 지워지면 그 리뷰의 좋아요는 의미가 없다. places와 달리 리뷰 삭제는 정상 유스케이스(RV-03)라 RESTRICT를 걸면 삭제 자체가 막힌다 | RV-03 "좋아요는?", ADR-005 |
 | CHECK | 없음 | 두 ID는 FK가, 중복은 PK가 막는다. `created_at`의 UTC는 Domain `TimeGuard`와 Npgsql이 보장한다 | ADR-007 |
 
@@ -349,6 +360,7 @@ erDiagram
 | name | `varchar(6)` | NOT NULL | 없음 | NFC·trim된 그룹명(`GroupName.Value`). 상한은 `GroupName.MaxLength`와 같다. 유일하지 않다 |
 | invite_code | `varchar(6)` | NOT NULL | 없음 | 대문자로 정규화된 초대 코드(`InviteCode.Value`). 길이는 `InviteCode.Length` |
 | created_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007). 첫 멤버의 `joined_at`과 같은 값(R-GR-08) |
+| owner_id | `uuid` | NOT NULL | 없음 | 방장(R-GR-11). 만든 회원, 나가면 가장 먼저 합류한 멤버로 넘어간다 *(FE-2, ADR-012)* |
 
 - 방장(`owner_id`) 컬럼은 두지 않는다. 읽는 유스케이스가 없고, 원본의 `owner_id ... on delete cascade`는 방장 탈퇴 시 다른 멤버가 남은 그룹까지 지웠다(ADR-004 결정 6)
 - 인원 수 컬럼은 두지 않는다. 인원은 group_members 행 수이고, Group 로딩(group_members Q1) 뒤 메모리에서 센다
@@ -359,7 +371,8 @@ erDiagram
 | UNIQUE | `ux_groups_invite_code (invite_code)` | Q1·Q4. 두 그룹이 같은 코드를 갖는 것을 막는다. 생성 경합에서 앱 미리 검사는 TOCTOU라 최종 보장은 이 인덱스, 위반 시 재생성 | R-GR-06 |
 | CHECK | `ck_groups_invite_code`: `invite_code ~ '^[A-HJ-NP-Z2-9]{6}$'` | 소문자, I·O·0·1, 6자가 아닌 코드. `A-H J-N P-Z`가 I·O를 뺀 24자, `2-9`가 8자 | R-GR-05, `InviteCode.Alphabet` |
 | CHECK | `ck_groups_name`: `char_length(name) >= 2 AND name = btrim(name) AND name ~ '^[가-힣A-Za-z0-9 ]+$' AND name IS NFC NORMALIZED` | 하한 2자 미만, 앞뒤 공백, 허용 밖 문자(전각 공백·U+3164 등). 허용 공백이 ASCII 공백뿐이라 `btrim`이 Domain `Trim()`과 같은 결과를 내므로 users·places와 달리 trim까지 완전히 이중화된다. 상한 6은 `varchar(6)`이 맡는다 | R-GR-10 |
-| FK (나가는 것) | 없음 | groups는 다른 테이블을 참조하지 않는다(방장 없음) | ADR-004 |
+| FK (나가는 것) | `fk_groups_owner`: `owner_id → users(id) ON DELETE RESTRICT` | 방장 회원을 지우려면 먼저 그룹에서 나가 방장이 넘어가야 한다. 원본의 CASCADE(방장 탈퇴 = 남은 멤버 그룹 삭제)를 되풀이하지 않는다 *(FE-2)* | ADR-012 |
+| 보조 인덱스 | `ix_groups_owner_id (owner_id)` | 회원 삭제(PF-02) 때 `fk_groups_owner` 검사가 groups 전체를 읽지 않게 한다 | ADR-012, PF-02 |
 | FK (들어오는 것) | group_members `.group_id → groups` — `ON DELETE CASCADE` (group_members FK 행·메모 참고) | 정상 경로(R-GR-09)는 멤버 0명일 때만 삭제하므로 따라 지워지는 행이 없다. 버그로 멤버가 남은 그룹을 지우면 멤버십이 조용히 지워진다 — 애그리거트 경계 표현을 우선하고 앱 테스트(D4)로 막는다 | ADR-004, R-GR-09 |
 
 메모
@@ -385,10 +398,13 @@ erDiagram
 | group_id | `uuid` | NOT NULL | 없음 | 부모 그룹. Domain에는 없는 OwnsMany 섀도 키(D2 결정) |
 | user_id | `uuid` | NOT NULL | 없음 | 멤버 회원. `GroupMember.UserId` |
 | joined_at | `timestamptz` | NOT NULL | 없음 | 앱이 `TimeProvider`로 정해 넣는다(ADR-007). 첫 멤버는 `groups.created_at`과 같다 |
+| color_slot | `smallint` | NOT NULL | 없음 | 그룹 안 고유 색 슬롯 0~3(R-GR-12). 색 값은 FE가 매긴다 *(FE-2, ADR-012)* |
 
 | 제약·인덱스 | 정의 | 받는 쿼리 / 막는 것 | 근거 |
 |---|---|---|---|
 | PK | `pk_group_members (group_id, user_id)` | Q1·Q3. 같은 (그룹, 회원) 두 번째 행을 막는다. Group 로딩(Q1)이 이 테이블의 주 접근 경로라 `group_id`가 앞이다 | R-GR-07, ADR-005(복합 PK) |
+| UNIQUE | `ux_group_members_group_color_slot (group_id, color_slot)` | 같은 그룹에서 두 멤버가 같은 색. 합류가 그룹 행 잠금 안에서 고르므로(ADR-010) 이중화 | R-GR-12, ADR-012 |
+| CHECK | `ck_group_members_color_slot`: `color_slot BETWEEN 0 AND 3` | 슬롯 4개(= 정원) 밖의 값 | R-GR-12 |
 | 보조 인덱스 | `ix_group_members_user_id (user_id)` | Q2·Q4. PK 순서로는 `user_id` 단독 조건을 범위로 좁힐 수 없다(leftmost prefix) | R-GR-02, PF-02 |
 | FK | `fk_group_members_groups`: `group_id → groups(id) ON DELETE CASCADE` | 내부 엔티티라 루트와 생애가 같다(review_images와 같은 근거). R-GR-09로 그룹이 지워질 때는 이미 멤버가 0명이라 실제로 지워지는 행은 없고, 애그리거트 경계를 스키마에 드러내는 의미다 | ADR-004 |
 | FK | `fk_group_members_users`: `user_id → users(id) ON DELETE RESTRICT` | 멤버십이 남은 회원의 삭제를 거부한다. CASCADE로 두면 탈퇴한 회원이 마지막 멤버였던 그룹이 **멤버 0명으로 남는다**(R-GR-09 위반, 원본의 고아 그룹 결함). 탈퇴(PF-02)는 먼저 참여 그룹마다 `Group.RemoveMember`를 거쳐 `GroupEmptied`면 그룹을 지우고, 그 다음 users 행을 지워야 한다. 이 순서를 빠뜨리면 RESTRICT가 오류로 드러낸다 | R-GR-09, ADR-004, PF-02 |
@@ -528,7 +544,7 @@ erDiagram
 | `users` 시각·프로필 | `created_at`, `gender`, `birth`(`text` 'YY-MM-DD'), `avatar_url` | 없음(`id`·`nickname`·`email`만) | `created_at`: 쓰는 규칙·화면이 없음(ADR-007). 프로필 3개: MVP 범위 밖(D3-2 사용자 확인) |
 | `places` 부가 정보 | `category`, `road_address`, `phone`, `place_url`, `created_at`. `address`는 NULL 허용 | 없음. `address`는 NOT NULL | MVP 범위 밖(D3-2 사용자 확인) |
 | `reviews.updated_at` | 있음 | 없음 | 쓰는 규칙·화면이 없음 — ADR-007 |
-| `reviews.review_date` | 없음 | `date` NOT NULL | R-RV-03 UNIQUE의 기준 날짜(UTC). 표현식 인덱스 대신 컬럼 |
+| `reviews.review_date` | 없음 | `date` NOT NULL | R-RV-03 UNIQUE의 기준 날짜(KST, FE-2에서 UTC → KST). 표현식 인덱스 대신 컬럼 |
 | 리뷰 이미지 값 | `url text` | `storage_key varchar(56)` | URL은 도메인·CDN이 바뀌면 전부 고쳐야 한다. 키만 저장하고 URL 변환은 한 곳(D2). 형식·길이는 §3.1 |
 | 리뷰 이미지 순서 | `order_index int default 0` | `sort_order smallint`, 기본값 없음 | `Review.Create`가 목록 인덱스로 항상 넣는다. 기본값 0이 있으면 값을 빠뜨린 INSERT가 조용히 0번이 된다 |
 | `groups.owner_id` | `owner_id ... on delete cascade` | 없음 | 읽는 유스케이스가 없고, CASCADE가 방장 탈퇴 시 다른 멤버가 남은 그룹까지 지웠다 — ADR-004 결정 6 |

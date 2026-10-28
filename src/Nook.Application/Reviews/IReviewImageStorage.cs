@@ -8,4 +8,10 @@ public interface IReviewImageStorage
 
     // RV-02·RV-03: DB 커밋 후에만 부른다. 실패해도 배치가 잡는다(erd.md §3).
     Task DeleteAsync(string storageKey, CancellationToken ct);
+
+    // GET /images/{key}(FE-2 이미지 A안). 없으면 null. 키 형식은 호출 쪽이 ReviewImageKeys.IsValid로 먼저 거른다.
+    Task<StoredImageStream?> OpenAsync(string storageKey, CancellationToken ct);
 }
+
+// 읽은 이미지. Content는 받은 쪽이 닫는다(응답 스트림으로 넘기면 프레임워크가 닫는다).
+public sealed record StoredImageStream(Stream Content, string ContentType);

@@ -51,10 +51,13 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .IsDescending(false, true)
             .HasDatabaseName("ix_reviews_place_created");
 
+        // PF-02: 탈퇴해도 리뷰는 남는다(PM) → SET NULL(PF-02 ⓪ (가)). UNIQUE(user_id, place_id, review_date)는 NULL끼리 다르다고 보므로
+        // 탈퇴 회원 여러 명의 같은 날 리뷰가 공존할 수 있다 — NULLS NOT DISTINCT로 바꾸면 안 된다(erd.md reviews 메모).
         builder.HasOne<User>().WithMany()
             .HasForeignKey(r => r.UserId)
             .HasConstraintName("fk_reviews_users")
-            .OnDelete(DeleteBehavior.Cascade);
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne<Place>().WithMany()
             .HasForeignKey(r => r.PlaceId)

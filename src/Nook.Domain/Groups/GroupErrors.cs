@@ -33,4 +33,10 @@ public static class GroupErrors
     "Group.TooManyGroups",
     $"이미 최대 그룹 수({Group.MaxGroupsPerUser}개)에 참여 중입니다.",
     ErrorType.Conflict);
+
+    // GR-03(R-GR-11). 403 — 멤버는 그룹을 볼 수 있지만 이름은 방장만 바꾼다.
+    public static readonly Error NotOwner = new(
+        "Group.NotOwner",
+        "그룹 이름은 방장만 바꿀 수 있습니다.",
+        ErrorType.Forbidden);
 }

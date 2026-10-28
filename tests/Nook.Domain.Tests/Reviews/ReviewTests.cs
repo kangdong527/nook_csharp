@@ -23,6 +23,9 @@ public class ReviewTests
     // - Create_WhenThreeImages_KeepsOrder                   (이미지 상한: 3장 성공, SortOrder 0·1·2)
     // - Create_WhenTooManyImages_ReturnsTooManyImages       (상한 + 1: 4장. 아래 테스트의 기준선이기도 하다)
     // - Create_WhenCreatedAtIsDefaultAndTooManyImages_Throws (예외 먼저 — 버그가 검증 실패로 위장되지 않는다)
+    //
+    // Create — 작성일(R-RV-03, 하루의 기준 = KST 00:00, FE-2 사용자 결정)
+    // - Create_ReviewDate_IsKstDate                          (KST 23:59:59 / 00:00:00 경계, UTC 날짜와 갈리는 시각)
 
     private static readonly DateTimeOffset Now = new(2026, 10, 16, 0, 0, 0, TimeSpan.Zero);
 
@@ -111,6 +114,24 @@ public class ReviewTests
             () => Review.Create(UserId.New(), PlaceId.New(), ValidContent(), FourKeys(), default));
 
         Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    // (UTC 작성 시각, 기대 작성일). KST = UTC+9, 서머타임 없음.
+    public static TheoryData<DateTimeOffset, DateOnly> KstDays => new()
+    {
+        { new DateTimeOffset(2026, 10, 22, 14, 59, 59, TimeSpan.Zero), new DateOnly(2026, 10, 22) },  // KST 10-22 23:59:59
+        { new DateTimeOffset(2026, 10, 22, 15, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 23) },    // KST 10-23 00:00:00 — UTC로는 아직 10-22
+        { new DateTimeOffset(2026, 10, 22, 23, 59, 59, TimeSpan.Zero), new DateOnly(2026, 10, 23) },  // KST 10-23 08:59:59
+    };
+
+    [Theory]
+    [MemberData(nameof(KstDays))]
+    public void Create_ReviewDate_IsKstDate(DateTimeOffset createdAt, DateOnly expected)
+    {
+        var review = Review.Create(UserId.New(), PlaceId.New(), ValidContent(), [], createdAt);
+
+        Assert.True(review.TryGetValue(out var created, out _));
+        Assert.Equal(expected, created.ReviewDate);
     }
 
     private static string ValidKey(int n) => $"{KeyPrefix}{KeyId[..^1]}{n}.jpg";

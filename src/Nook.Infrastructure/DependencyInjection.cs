@@ -66,4 +66,12 @@ public static class DependencyInjection
         services.AddSingleton<IReviewImageStorage>(sp => sp.GetRequiredService<InMemoryReviewImageStorage>());
         return services;
     }
+
+    // 개발 전용(FE-2 이미지 A안). 재시작해도 남아 화면 확인에 쓴다. 운영은 DEP에서 S3 구현체로 교체.
+    public static IServiceCollection AddLocalDiskReviewImageStorage(this IServiceCollection services, string root) =>
+        services.AddSingleton<IReviewImageStorage>(new LocalDiskReviewImageStorage(root));
+
+    // 키 → URL 기준 주소(IReviewImageUrls). 저장소 구현과 따로 둔다 — 같은 저장소라도 앞단(BFF·CDN)에 따라 주소가 다르다.
+    public static IServiceCollection AddReviewImageUrls(this IServiceCollection services, string baseUrl) =>
+        services.AddSingleton<IReviewImageUrls>(new PrefixReviewImageUrls(baseUrl));
 }

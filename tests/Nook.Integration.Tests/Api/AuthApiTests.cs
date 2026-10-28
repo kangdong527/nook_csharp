@@ -72,6 +72,7 @@ public sealed class AuthApiTests : IntegrationTestBase, IDisposable
         var body = await ConsumeOkAsync(token, nickname: null);
 
         Assert.True(body.NeedsNickname);
+        Assert.Equal(NewEmail, body.Email);   // 가입 폼 표시용 — 링크의 이메일
         Assert.Null(body.AccessToken);
     }
 
@@ -121,7 +122,7 @@ public sealed class AuthApiTests : IntegrationTestBase, IDisposable
     }
 
     private Task<HttpResponseMessage> PostConsumeAsync(string token, string? nickname) =>
-        _client.PostAsJsonAsync("/auth/magic-link/consume", new ConsumeMagicLinkRequest(token, nickname));
+        _client.PostAsJsonAsync("/auth/magic-link/consume", new ConsumeMagicLinkRequest(token, nickname, Gender: "none"));
 
     private async Task<ConsumeMagicLinkResponse> ConsumeOkAsync(string token, string? nickname)
     {

@@ -23,6 +23,7 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
     //
     // 장소 상세
     // - Get_ReturnsPlaceWithMyStar                          (북마크만 → gray)
+    // - Get_WhenReviewed_StarIsFillAndIsBookmarkedTellsApart (리뷰만 / 리뷰+북마크 → 둘 다 fill, IsBookmarked로 구분)
     // - Get_UnknownPlace_Returns404
     //
     // 리뷰 목록
@@ -63,7 +64,21 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
 
         var view = await _client.GetFromJsonAsync<PlaceDetailView>($"/places/{_place.Id.Value}");
 
-        Assert.Equal(new PlaceDetailView(_place.Id.Value, "8130394", "누크 카페", "서울", 37.5665, 126.978, "gray"), view);
+        Assert.Equal(new PlaceDetailView(_place.Id.Value, "8130394", "누크 카페", "서울", 37.5665, 126.978, "gray", IsBookmarked: true), view);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Get_WhenReviewed_StarIsFillAndIsBookmarkedTellsApart(bool bookmarked)
+    {
+        await SaveAsync(NewReview(_me, Now));
+        if (bookmarked)
+            await SaveAsync(Bookmark.Create(_me.Id, _place.Id, Now));
+
+        var view = await _client.GetFromJsonAsync<PlaceDetailView>($"/places/{_place.Id.Value}");
+
+        Assert.Equal(("fill", bookmarked), (view!.Star, view.IsBookmarked));
     }
 
     [Fact]
@@ -91,7 +106,7 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
             first =>
             {
                 Assert.Equal(others.Id.Value, first.Id);
-                Assert.Equal(new ReviewAuthorView(other.Id.Value, "회원1"), first.Author);
+                Assert.Equal(new ReviewAuthorView(other.Id.Value, "회원1", AvatarUrl: null), first.Author);
                 Assert.Equal((2, true, false), (first.LikeCount, first.LikedByMe, first.Mine));
             },
             second =>
@@ -184,7 +199,7 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
         await db.SaveChangesAsync();
     }
 
-    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"));
+    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), Gender.None, null);
 
     private Review NewReview(User author, DateTimeOffset at, params string[] images) =>
         Review.Create(

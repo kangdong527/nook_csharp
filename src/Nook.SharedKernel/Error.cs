@@ -7,7 +7,10 @@ public enum ErrorType
     Validation,
     NotFound,
     Conflict,
-    Forbidden
+    Forbidden,
+    // 토큰 검증(미들웨어)은 통과했지만 그 주체를 인정할 수 없을 때 — 예: 회원 행 없음(AU-04).
+    // D2-1에선 "401은 미들웨어 몫"이라 뺐다가 FE-1에서 추가. ErrorOr 등 널리 쓰는 Result 라이브러리와 같은 분류다.
+    Unauthorized
 }
 
 public sealed record Error(string Code, string Description, ErrorType Type)

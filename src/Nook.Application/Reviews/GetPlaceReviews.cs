@@ -18,7 +18,7 @@ public sealed record ReviewPageView(IReadOnlyList<PlaceReviewView> Items, string
 // Version: 수정 화면이 RV-02에 그대로 돌려보낼 불투명 값(ReviewView.Version과 같다).
 public sealed record PlaceReviewView(
     Guid Id,
-    ReviewAuthorView Author,
+    ReviewAuthorView? Author,
     string Content,
     IReadOnlyList<ReviewImageView> Images,
     DateTimeOffset CreatedAt,
@@ -27,7 +27,8 @@ public sealed record PlaceReviewView(
     bool LikedByMe,
     bool Mine);
 
-public sealed record ReviewAuthorView(Guid Id, string Nickname);
+// AvatarUrl: null = 기본 이미지(FE-2 PF-01).
+public sealed record ReviewAuthorView(Guid Id, string Nickname, string? AvatarUrl);
 
 public static class ReviewQueryErrors
 {
@@ -72,7 +73,7 @@ public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
     }
 }
 
-public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepository reviews)
+public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepository reviews, IReviewImageUrls urls)
 {
     public const int DefaultLimit = 10;
     public const int MaxLimit = 30;
@@ -101,14 +102,17 @@ public sealed class GetPlaceReviewsHandler(IPlaceRepository places, IReviewRepos
             ? new ReviewCursor(page[^1].Review.CreatedAt, page[^1].Review.Id.Value).Encode()
             : null;
 
-        return new ReviewPageView([.. page.Select(row => ToView(row, me))], nextCursor);
+        return new ReviewPageView([.. page.Select(row => ToView(row, me, urls))], nextCursor);
     }
 
-    private static PlaceReviewView ToView(PlaceReview row, UserId me) => new(
+    private static PlaceReviewView ToView(PlaceReview row, UserId me, IReviewImageUrls urls) => new(
         row.Review.Id.Value,
-        new ReviewAuthorView(row.Review.UserId.Value, row.AuthorNickname),
+        // 탈퇴한 작성자 = null(FE가 "탈퇴한 사용자"로 표시). ID·닉네임·사진을 하나도 주지 않는다 — 한 탈퇴 회원의 리뷰끼리 이어지면 안 된다(PM).
+        row.Review.UserId is { } authorId
+            ? new ReviewAuthorView(authorId.Value, row.AuthorNickname!, row.AuthorAvatarKey is { } key ? urls.For(key) : null)
+            : null,
         row.Review.Content.Value,
-        [.. row.Review.Images.Select(i => new ReviewImageView(i.Id.Value, i.StorageKey))],
+        [.. row.Review.Images.Select(i => ReviewImageView.From(i.Id.Value, i.StorageKey, urls))],
         row.Review.CreatedAt,
         row.Review.Version,
         row.LikeCount,

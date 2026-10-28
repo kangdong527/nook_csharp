@@ -13,18 +13,25 @@ public sealed class GroupMember
     public UserId UserId { get; }
     public DateTimeOffset JoinedAt { get; }
 
-    private GroupMember(UserId userId, DateTimeOffset joinedAt)
+    // R-GR-12 그룹 안 고유 색 슬롯(0 ~ Group.ColorSlotCount-1). 모든 멤버에게 같은 색으로 보여야 해 저장한다(PM).
+    public short ColorSlot { get; }
+
+    private GroupMember(UserId userId, DateTimeOffset joinedAt, short colorSlot)
     {
         UserId = userId;
         JoinedAt = joinedAt;
+        ColorSlot = colorSlot;
     }
 
     // 합류·그룹 생성(R-GR-08) 때 Group만 부른다.
-    internal static GroupMember Create(UserId userId, DateTimeOffset joinedAt)
+    internal static GroupMember Create(UserId userId, DateTimeOffset joinedAt, short colorSlot)
     {
         // null·default·비UTC는 회원 입력이 아니라 호출 코드(Group)의 실수이므로 예외로 알린다.
         ArgumentNullException.ThrowIfNull(userId);
 
-        return new GroupMember(userId, TimeGuard.Utc(joinedAt));
+        ArgumentOutOfRangeException.ThrowIfNegative(colorSlot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(colorSlot, Group.ColorSlotCount);
+
+        return new GroupMember(userId, TimeGuard.Utc(joinedAt), colorSlot);
     }
 }

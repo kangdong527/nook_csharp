@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nook.Api.Auth;
+using Nook.Api.Http;
 using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
 using Nook.Application.Groups;
 using Nook.Application.Likes;
 using Nook.Application.Places;
 using Nook.Application.Reviews;
+using Nook.Application.Users;
 using Nook.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,8 +25,13 @@ builder.Services.AddInfrastructure(connectionString);
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddConsoleEmailTransport();
-    builder.Services.AddInMemoryReviewImageStorage();
+    // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남아 화면 확인에 쓴다. 통합 테스트(Testing)는 메모리 구현을 따로 등록한다.
+    builder.Services.AddLocalDiskReviewImageStorage(
+        builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
 }
+
+// 키 → URL 기준 주소. 기본값은 BFF 중계 경로(브라우저는 Next를 거친다). DEP에서 S3·CDN 주소로 바꾼다.
+builder.Services.AddReviewImageUrls(builder.Configuration["ImageStorage:PublicBaseUrl"] ?? "/api/nook/images/");
 
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -37,10 +44,20 @@ builder.Services.AddScoped<GetPlaceReviewsHandler>();
 builder.Services.AddScoped<SaveBookmarkHandler>();
 builder.Services.AddScoped<RemoveBookmarkHandler>();
 builder.Services.AddScoped<GetMyPlacesHandler>();
+builder.Services.AddScoped<GetMeHandler>();
+builder.Services.AddScoped<GetMyReviewsHandler>();
+builder.Services.AddScoped<ChangeNicknameHandler>();
+builder.Services.AddScoped<ChangeAvatarHandler>();
+builder.Services.AddScoped<RemoveAvatarHandler>();
+builder.Services.AddScoped<RenameGroupHandler>();
+builder.Services.AddScoped<GetMyGroupsHandler>();
+builder.Services.AddScoped<GetGroupPlacesHandler>();
+builder.Services.AddScoped<WithdrawHandler>();
 builder.Services.AddScoped<AddLikeHandler>();
 builder.Services.AddScoped<RemoveLikeHandler>();
 builder.Services.AddScoped<CreateReviewHandler>();
 builder.Services.AddScoped<EditReviewHandler>();
+builder.Services.AddScoped<GetReviewForEditHandler>();
 builder.Services.AddScoped<DeleteReviewHandler>();
 builder.Services.AddScoped<CreateGroupHandler>();
 builder.Services.AddScoped<JoinGroupHandler>();
@@ -80,10 +97,15 @@ builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
 builder.Services.AddControllers();
+// 처리되지 않은 예외 → ProblemDetails. 회원 FK 위반(탈퇴 후 남은 토큰)만 401로 바꾸고 나머지는 500(PF-02).
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<UnknownUserExceptionHandler>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
