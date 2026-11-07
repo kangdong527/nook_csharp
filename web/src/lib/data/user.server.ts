@@ -33,7 +33,7 @@ type MeResponse = { id: string; email: string; nickname: string; avatarUrl: stri
  *    page.tsx 에서 한 번 받아 props 로 내린다.
  */
 export async function getCurrentUser(): Promise<CurrentUser> {
-  if (cookies().get(AUTH_COOKIE)) {
+  if ((await cookies()).get(AUTH_COOKIE)) {
     const res = await apiFetch("/me");
     if (res.ok) return { status: "ready", user: toUser((await res.json()) as MeResponse) };
     // 401 = 미들웨어(만료·위조) 또는 핸들러(Auth.UnknownUser) — 프론트는 둘을 구분하지 않는다(AU-04 결정).
@@ -41,7 +41,7 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     if (res.status !== 401) throw new Error(`/me 실패: ${res.status}`);
   }
 
-  const pending = readSignupPending();
+  const pending = await readSignupPending();
   if (pending) return { status: "no_profile", email: pending.email };
 
   return { status: "signed_out" };

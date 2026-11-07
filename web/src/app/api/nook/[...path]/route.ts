@@ -55,10 +55,10 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/images\/(reviews|avatars)\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/[0-9a-f]{32}\.(jpg|png|webp)$/ },
 ];
 
-type Context = { params: { path: string[] } };
+type Context = { params: Promise<{ path: string[] }> }; // Next 15+: Promise
 
 async function relay(request: NextRequest, { params }: Context): Promise<NextResponse> {
-  const segments = params.path;
+  const segments = (await params).path;
   if (segments.some((s) => s === "" || s === "." || s === ".." || /[/\\]/.test(s))) {
     return NextResponse.json({ status: 404 }, { status: 404 });
   }

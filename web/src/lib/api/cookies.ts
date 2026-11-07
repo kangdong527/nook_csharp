@@ -4,7 +4,7 @@
 // 브라우저 ↔ Next 서버는 httpOnly 쿠키, Next 서버 → C# API 는 Bearer.
 // 토큰이 브라우저 자바스크립트에 닿지 않는다(XSS 로 훔칠 수 없다).
 //
-// next/headers 를 import 하지 않는다 — middleware(Edge 런타임)도 이 파일을 쓴다.
+// next/headers 를 import 하지 않는다 — proxy(구 middleware)도 이 파일을 쓴다(요청 쿠키는 request.cookies 로 읽는다).
 // =========================================================
 
 /** C# API 가 발급한 Access 토큰(JWT, 60분). */

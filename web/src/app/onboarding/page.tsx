@@ -1,4 +1,4 @@
-// 온보딩은 **공개 화면**이다(middleware 보호 대상이 아니다).
+// 온보딩은 **공개 화면**이다(proxy 보호 대상이 아니다).
 // 서버가 하는 일은 하나뿐: 이미 로그인한 사용자를 지도로 돌려보낸다.
 //
 // `?from=signup` 은 가입 직후 1회 노출 경로이므로 그때는 돌려보내지 않는다.
@@ -10,9 +10,9 @@ import { OnboardingSlides } from "./OnboardingSlides";
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: { from?: string };
+  searchParams: Promise<{ from?: string }>; // Next 15+: Promise
 }) {
-  const fromSignup = searchParams.from === "signup";
+  const fromSignup = (await searchParams).from === "signup";
 
   if (!fromSignup) {
     const current = await getCurrentUser();
