@@ -22,7 +22,7 @@
 | # | 단계 | 핵심 | 작성 | 상태 |
 |---|---|---|---|---|
 | 1 | Next 16 보안 업그레이드 | critical RCE 해소, 별도 브랜치 `fix/next16-security` | Claude(사용자 요청) | ✅ `37de343` · 브라우저 확인은 2단계 compose에서 통과 |
-| 2 | 컨테이너화 | api·web Dockerfile(multi-stage, non-root), compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너, 로컬 3흐름 | Claude 초안 → **ADR-003 사용자** | ✅ 초안·로컬 compose 기동·curl 스모크(Origin·401/403·API 비노출) · 브라우저 compose 전용 확인(2026-11-07, 3300 리스너 Docker만 실측): 가입·닉네임 POST, 지도, 장소·리뷰 작성, 프로필 사진 → 볼륨에 UID 1654 소유로 저장·표시. 앱 로직 A·B는 같은 날 dev 서버에서 통과. 주의: dev(`npm run dev`)와 compose가 같은 3300에 IPv6/IPv4로 함께 뜰 수 있음 — 확인 전 `netstat`으로 리스너 확인 / ⏳ ADR-003 |
+| 2 | 컨테이너화 | api·web Dockerfile(multi-stage, non-root), compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너, 로컬 3흐름 | Claude 초안 → **ADR-003 사용자** | ✅ 초안·로컬 compose 기동·curl 스모크(Origin·401/403·API 비노출) · 브라우저 compose 전용 확인(2026-11-07, 3300 리스너 Docker만 실측): 가입·닉네임 POST, 지도, 장소·리뷰 작성, 프로필 사진 → 볼륨에 UID 1654 소유로 저장·표시. 앱 로직 A·B는 같은 날 dev 서버에서 통과. 주의: dev(`npm run dev`)와 compose가 같은 3300에 IPv6/IPv4로 함께 뜰 수 있음 — 확인 전 `netstat`으로 리스너 확인 / ✅ ADR-003(Claude 작성, 사용자 요청) |
 | 3 | CI (PR 게이트) | build·test(Testcontainers), `next build`, `npm audit --omit=dev`·`dotnet list package --vulnerable`, Trivy, `main` 보호. lint 실패 조건 여부 결정 | Claude | |
 | 4 | AWS 계정 보안 기본 | 루트 MFA·루트 키 없음, IAM Identity Center, Budgets 알림, CloudTrail, 서울 리전 | 사용자(콘솔) + 가이드 | |
 | 5 | 인프라 | EC2 t4g.small(ARM), IMDSv2 강제, EBS 기본 암호화, SG 80·443만(22 닫음) — **처음엔 내 IP만(결정 6)**, SSM 에이전트·인스턴스 역할, 탄력적 IP, 도메인 DNS, S3(이미지·백업, 퍼블릭 차단, SSE) | 사용자 + 가이드 | |
