@@ -6,24 +6,24 @@
     "dev": "next dev -p 3300",
     "build": "next build",
     "start": "next start -p 3300",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "next": "14.2.35",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "next": "16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
-  "//overrides": "next@14.2.35 가 postcss@8.4.31 을 중첩 고정해 high 취약점 7건이 남는다. postcss 8.x 는 semver 호환이라 최신 8.5.x 로 통일한다. next 를 major(16)로 올리는 대신 선택한 조치이며, next 업그레이드 시 이 항목이 불필요해지는지 재확인할 것.",
+  "//overrides": "next@16.4.5 는 postcss@8.5.23 을 고정한다(14.2.35 의 8.4.31 high 취약점은 해소). 직접 의존 8.5.x 와 한 벌로 통일하려고 override 를 유지한다. next 를 올릴 때 다시 확인할 것.",
   "overrides": {
     "postcss": "$postcss"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.5.4",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.5",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.13",
     "typescript": "^5"

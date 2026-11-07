@@ -1,11 +1,21 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **FE 진행 중** (2026-10-28, FE-2 이어서 — 원본 함수 28/28·Supabase 제거 완료, 브라우저 확인 중 **그룹 지도 버그 재현부터**). 브랜치 `feat/fe-connect`(미푸시). D6은 PR #8로 `main` 병합. 원본 프론트를 `web/`에 그대로 가져옴(`73a14db`), 아직 Supabase판. 테스트 348개 통과. 달력 기준 약 7일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1단계(Next 16 보안 업그레이드) 코드 완료, 미커밋** (2026-11-05). 브랜치 `fix/next16-security`(`feat/dep`에서 분기, 작업 트리에 변경 있음 — 커밋 전). DEP 실행 계획·결정·Pillar 점검표는 **`docs/design/dep-plan.md`**. FE는 PR #9 `main` 병합 `8c639ba`로 완료. 달력 기준 약 8일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **FE** (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
+  1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정, Pillar 점검표, 함정). 보안 1순위·비용 2순위
+     - 확정(2026-11-05, 사용자): 프론트 = 같은 EC2 · 운영 DB = EC2 안 postgres 컨테이너 · 업로드 사진 = S3로 교체 · 레지스트리 **GHCR → ECR** · 배포 **SSH → SSM**(22번 닫음) · 도메인 = **구매(A안)**, 5단계 전까지
+     - 1단계 Next 16 ✅ 코드·빌드 — next 16.4.5(정확 고정)·react 19.3, 운영 의존성 취약점 critical 1·high 3·moderate 6 → **0**, `tsc`·`next build` 통과, `/_next/image` 외부 URL 차단 실측(400). 상세·변경 파일 목록은 dep-plan.md §3
+     - **세션 시작하면 할 일 (순서대로)**
+       1. 브랜치 `fix/next16-security` 확인(`git status` — `web/` 변경 + `docs/design/dep-plan.md` + 이 문서·learning-log 미커밋)
+       2. 사용자 결정 2개: ① 브라우저 3흐름 확인을 **지금**(Docker·`dotnet run`·`npm --prefix web run dev`, `fe-manual-checklist.md`) vs **2단계 compose에서 한 번에**(Claude 추천 — 중복 적음) ② 커밋 진행 여부 — 제안 메시지 `fix(web): upgrade Next 16 to clear critical advisories` + 문서 커밋 별도
+       3. 2단계 컨테이너화 시작 — api·web Dockerfile(multi-stage, non-root), `deploy/` compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너. **BFF Origin 검사 × 프록시 함정**(dep-plan.md §4)을 여기서 처리. ADR-003은 사용자 작성
+     - 1단계 남은 부채: 새 lint 오류 5건(react-hooks v7 `set-state-in-effect`·`immutability` — `MapScreen`·`ProfileScreen`·`auth/magic-link`) — 동작 변화 아님, 3단계 CI에서 lint 실패 조건 여부 결정. dev 전용 moderate 8건(typescript-eslint → minimatch)
+     - 여전히 미결(DEP 중 결정): `web/` 테스트 러너(incident 004 §7), 토큰 수명 60분 유지 vs 7일/refresh, `web/.github`·`.githooks` 정리(3단계)
+     - 실행 메모: Next 16부터 `npm run lint` = `eslint .`(`next lint` 제거). 번들 크기 표가 안 나옴(Turbopack) → 비교는 `.next/static` JS 합계(gzip 246.0 kB, 2026-11-05)
+  2. **FE** (완료 — PR #9, 2026-10-28) (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
      - 결정(사용자): 같은 리포 `web/`(원본 리포는 Supabase판으로 보존), TypeScript + Next.js 14 그대로, React Native 변환 안 함. 개발 포트 **3300**(카카오 도메인 등록 기준 → CORS도 3300)
      - 연결 구조: 브라우저 → C# API → Docker PostgreSQL. 프론트는 DB를 모른다. 끝나면 `@supabase/*`·`NEXT_PUBLIC_SUPABASE_*` 전부 제거
      - ~~`web/.env.local`은 원본 Supabase 것~~ → FE-2에서 Supabase 제거. `NEXT_PUBLIC_SUPABASE_*` 줄은 쓰이지 않으니 사용자가 지운다(남아도 동작 영향 없음)
@@ -29,10 +39,11 @@
      - ~~그룹 지도 버그~~ ✅ 2026-10-28 `0bf1e24` · `docs/incidents/004`(Claude 작성, 사용자 요청) — H1(응답에 있음)·H2(슬롯 0도 정상 그림) 기각, **H3 확정**: 다른 멤버의 변경을 다시 불러오는 경로가 없었음(원본도 같음). 해결 A안(사용자 결정): `visibilitychange`+`focus` 때 다시 불러오기, 1초 안 중복 1회(탭 복귀 1번 = 요청 1건 실측). 미확인: 중복 방지 변이, `reloadSaved` 늦은 응답 덮어쓰기 경합, `web/` 테스트 러너 없음(DEP 때 결정)
        - ~~jamME 탈퇴 뒤 옛 "쥑쥑"이 없어진 것~~ 정상 — 탈퇴 때 방장이 hwi로 넘어온 것 사용자 확인, 그 뒤 그룹이 정리됨
      - ~~브라우저 확인~~ ✅ 2026-10-28 — 이전 A1~9·B10~16 전부 정상(사용자), 회색 별만 버그였음. 회귀 확인용 목록 `docs/design/fe-manual-checklist.md`(재구성)
-     - **▶ 다음 (여기서 시작)**: `feat/fe-connect` 푸시·PR(사용자) → DEP
+     - ~~`feat/fe-connect` 푸시·PR~~ ✅ PR #9 병합, 브랜치 정리(사용자). 병합 전 검증: `dotnet build` 경고·오류 0, `dotnet test` 348(1·124·7·216), `next build` 성공
+     - ~~다음: DEP 1일째~~ → 2026-11-05 ①(Next 업그레이드 먼저) 선택, 위 "DEP"로 이동. 당시 기록: 첫 결정(사용자): ① Next 보안 업그레이드 먼저(npm audit critical next 1·high glob 3 — 공개 서버에 취약 버전을 안 올림) vs ② CI 골격 먼저(업그레이드 PR부터 자동 빌드·테스트 보호). 업그레이드 뒤 비교할 기준선: First Load JS 공통 87.3 kB · `/review/new` 96.3 kB · Middleware 26.6 kB. 함께 정할 것: `web/` 테스트 러너(incident 004 §7), 토큰 수명 7일/refresh, `web/.github`·`.githooks` 정리
        - 실행: Docker → `dotnet run --project src/Nook.Api --launch-profile http` → `npm --prefix web run dev`(루트에서 `npx next` 금지 — next@16을 받아 실행) → 메일 링크는 API 콘솔. 사진은 `src/Nook.Api/App_Data/images/`(git 제외). 로컬 DB에 Supabase 데이터 없음(이관한 적 없음 — 회원 10명: 확인용 `@nook.test` 9 + 사용자 `jam`)
        - 알려진 빈 곳: 저장 장소 다시 열면 카테고리·전화 비어 보임(D3-2 `places` 부가 정보 없음), 그룹 색은 임시 팔레트(디자인 대기), 고아 이미지 정리 배치 미구현(`reviews/`·`avatars/`)
-       - 그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드 — npm audit critical next 1·high glob 3, 토큰 수명 7일/refresh 재검토)
+       - ~~그다음: `feat/fe-connect` 푸시·PR(사용자) → DEP(Next 업그레이드)~~ ✅
      - 결정(FE-2, 사용자): BFF라 브라우저가 C# API를 직접 부르지 않음 → CORS 설정 불필요할 가능성(이미지 `<img>`는 CORS 대상 아님). 토큰 수명 60분 유지(refresh 없음, DEP 전에 7일 연장 또는 refresh 재검토)
      - 정리 대상: `web/.github`·`web/.githooks`는 하위 폴더라 동작 안 함(원본 GitHub과도 무관) → DEP에서 CI를 루트로 합칠 때 정리
   - **D6 남은 것** (완료, PR #8)
@@ -411,6 +422,16 @@ Claude가 작성(FE-1): 원본 대조 표, `web/` 가져오기, `.gitignore`, `p
 커밋: `0ed2936` /me · `7a3aba2` ErrorResults · `19aca13` RV-04 · `81d42bd`·`4ad7883` 백로그 · `a0d5ac3` IsBookmarked · `40277eb` 링크 포트 · `e8f1590` 성별·생일 · `52bf45f` progress · `5a36a5d` 가입 이메일 · `47e8ffd` BFF 인증 · `06dd87d` BFF 중계·지도 · `805cb16` progress · `7f93f8f` 이미지 표시 · `863cea1` 리뷰 흐름 · `e663bfb` KST 하루 · `3a531ad` progress · `b1a6e79` PF-04·03 · `a5a6f0e` PF-01 · `ed28fbc` 방장·슬롯 · `ea94b3f` GR-03·06 · `1f13faa` progress · `237d1f8` GR-05 · `403bdd6` FE 그룹 · `cb31f42` progress · `9d4440e`·`33f84cd`·`2683756` 탈퇴 · `795dbb3` Supabase 제거 · 이 progress 커밋 (`feat/fe-connect`, 미푸시)
 Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절차·예외 처리기·FE), 그룹·프로필 전체, web/ BFF 전부(route handler·중계·`store.ts` 교체·화면 수정), AU-04·RV-04·R-US-04·05 유스케이스 줄과 규칙, `GetMe`·`GetReviewForEdit` 핸들러 본문(`GetMe`는 사용자 작성), `ErrorResults`, 백로그 문서, `Gender`·`Birthdate`·`User` 변경·마이그레이션·erd.md(도메인·스키마도 위임), 테스트 전부. 결정은 사용자·PM
 
+### 2026-11-05 (DEP-1)
+1. 세션 시작: FE 완료 확인 → DEP 진행. 사용자 요구 — 언어·구동 방식·아키텍처에 맞게, **보안 1순위·비용 2순위**, AWS EC2, CI/CD는 GitHub Actions 권장, AWS 보안 Pillar 5개(IAM·Detection·Infrastructure protection·Data protection·Incident response) 검토
+2. 계획 10단계 + Pillar 점검표 → `docs/design/dep-plan.md`(지난번 대화에만 있던 목록을 잃은 일이 있어 파일로 남김)
+3. 결정(사용자): 프론트 같은 EC2 · DB 컨테이너 · 사진 S3 · GHCR→ECR · SSH→SSM · 도메인 구매. 사용자 질문 "ECR의 이미지 = 리뷰 사진?" → 아님(컨테이너 이미지 = 코드, 업로드 사진 = 데이터. 수명 주기가 반대)
+4. 도메인 없음의 영향: HTTPS(쿠키 `Secure`)·SES DKIM/DMARC(매직 링크 도착)·카카오 도메인 등록 → A안 구매
+5. 1단계 Next 14.2.35 → 16.4.5: Promise 요청 API 6곳, `middleware`→`proxy`, ESLint flat, 운영 취약점 0. 막은 critical 중 하나가 "Image Optimization API SVG RCE"인데 `remotePatterns: "**"`로 열려 있었음 → 사용처(온보딩 로컬 3장)만 남기고 닫음, 실측 200/400/400
+6. 발견(2단계 함정): BFF Origin 검사가 프록시 뒤에서 모든 POST를 403으로 만듦 / ForwardedHeaders 없으면 IP RateLimiter가 전원을 한 명으로 봄
+커밋: 없음(`fix/next16-security` 작업 트리 — 다음 세션 첫 결정)
+Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `next.config.js` 이미지 설정(사용자: "Next.js는 아직 학습 전"), progress·learning-log 갱신. 결정은 사용자
+
 ## 체크리스트
 
 진행 순서(2026-10-20 변경): D5 → D6 → FE → DEP → README 최소판 → D7 → D8 → D9 → D10 → D11 → D13 → D14
@@ -422,8 +443,8 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
 - [x] D4 테스트 설계(단위 + Testcontainers 통합) — Domain 84·Integration 18, DB CHECK 11개 전부, 시각 가드(ADR-007), 맞바꾸기(DEFERRED), 리뷰 본문 정규화·`joinedAt` 결정
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
 - [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
-- [ ] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅. 남음: 브라우저 화면 확인 → 푸시·PR
-- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업
+- [x] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅, 브라우저 확인 ✅, PR #9 병합(2026-10-28)
+- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업 — 계획 `docs/design/dep-plan.md` 단계 1~10. 1단계(Next 16) 코드 ✅·커밋 전
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
 
@@ -467,10 +488,10 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
   - ~~③ 오래된 prefix의 탈퇴 회원 스토리지 이미지 정리~~ → 이미지 보존(PM)으로 정리 대상 아님. 남는 질문: 스토리지 키에 들어간 회원 ID가 탈퇴 뒤에도 남아도 되는가(erd.md 스토리지 키 "회원 ID" 행)
 - ~~일정 변경안 보류~~ → 채택(2026-10-20, "확정된 결정 (D5)")
 - ~~매직 링크 TOCTOU 보완 조합~~ → "확정된 결정 (D5)" ② A3 + Q2 + A1
-- 프론트 호스팅 위치: 같은 EC2(Caddy가 Next.js도 프록시) vs Vercel 등 별도 — FE 끝날 때. 별도면 CORS·쿠키 도메인 영향
-- **공개 배포 전 필수: `web/` Next.js 14.2.35 → 16 메이저 업그레이드** — `npm audit` critical(RCE 포함 25건, 2026-10-26). 수정판이 16.x뿐(React 19·비동기 요청 API 등 호환성 깨짐). Supabase → API 교체 diff와 섞지 않게 별도 브랜치·커밋 — DEP 전, FE 끝난 뒤
-- 운영 메일 발송기 선택(예: AWS SES — 샌드박스는 검증된 수신자만 발송 가능, 데모 계정 운영과 연결) — DEP 5일째
-- 운영 DB: EC2 안 postgres 컨테이너(compose) vs RDS — DEP 2일째. 컨테이너면 백업·디스크 책임이 본인
+- ~~프론트 호스팅 위치~~ → 같은 EC2(2026-11-05 사용자, dep-plan.md §0)
+- ~~**공개 배포 전 필수: `web/` Next.js 14.2.35 → 16 메이저 업그레이드**~~ → 2026-11-05 16.4.5 완료(운영 취약점 0, 커밋 전). 당시 기록: — `npm audit` critical(RCE 포함 25건, 2026-10-26). 수정판이 16.x뿐(React 19·비동기 요청 API 등 호환성 깨짐). Supabase → API 교체 diff와 섞지 않게 별도 브랜치·커밋 — DEP 전, FE 끝난 뒤
+- 운영 메일 발송기 선택 — SES 기울어짐(도메인 구매 A안으로 DKIM 가능, 2026-11-05). (예: AWS SES — 샌드박스는 검증된 수신자만 발송 가능, 데모 계정 운영과 연결) — DEP 5일째
+- ~~운영 DB~~ → EC2 안 postgres 컨테이너(2026-11-05 사용자). 백업·디스크 책임 본인 → dep-plan.md 9단계 복원 리허설
 - 복원용 `From`(`UserId`·`Nickname`·`Email` 등) 호출 제한 — `internal` + `InternalsVisibleTo`(컴파일 시점, Domain이 Infrastructure 어셈블리 이름을 앎) vs ArchUnitNET(메서드 호출 규칙, 계층 규칙과 묶을 때 가치) vs 이름·주석만. 막을 Application 코드가 생기는 D5에 결정(ADR-008 "결과")
 - 중복 저장/미저장 해제 요청을 오류로 볼지 성공(멱등)으로 볼지 — D5
 - ~~마지막 멤버의 탈퇴 두 번째 요청~~ → 성공(멱등), "확정된 결정 (D6)"

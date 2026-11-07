@@ -16,7 +16,7 @@ export type Problem = { status: number; title?: string; detail?: string };
 
 /** 쿠키의 Access 토큰을 Bearer 로 붙여 C# API 를 부른다. 응답 해석은 호출한 쪽 몫. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = cookies().get(AUTH_COOKIE)?.value;
+  const token = (await cookies()).get(AUTH_COOKIE)?.value;
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -34,8 +34,9 @@ export async function readProblem(res: Response): Promise<Problem> {
   }
 }
 
-export function readSignupPending(): SignupPending | null {
-  const raw = cookies().get(SIGNUP_COOKIE)?.value;
+// Next 15+: cookies() 는 Promise 다(요청 API 비동기화) → 이 함수도 async.
+export async function readSignupPending(): Promise<SignupPending | null> {
+  const raw = (await cookies()).get(SIGNUP_COOKIE)?.value;
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<SignupPending>;

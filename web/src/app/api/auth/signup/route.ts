@@ -9,7 +9,7 @@ import { AUTH_COOKIE, AUTH_MAX_AGE_SECONDS, SIGNUP_COOKIE, cookieOptions } from 
 type SignupRequest = { nickname?: string; gender?: string; birthdate?: string | null };
 
 export async function POST(request: Request) {
-  const pending = readSignupPending();
+  const pending = await readSignupPending();
   if (!pending) {
     // 가입 대기 쿠키 만료(15분) 또는 없음 — 매직 링크부터 다시.
     return NextResponse.json({ status: 401, title: "Signup.NotPending" }, { status: 401 });

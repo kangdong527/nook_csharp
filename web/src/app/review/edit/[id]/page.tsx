@@ -7,8 +7,8 @@ import { EditReviewScreen } from "./EditReviewScreen";
 export default async function EditReviewPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>; // Next 15+: Promise
 }) {
-  const user = await requireProfile();
-  return <EditReviewScreen user={user} reviewId={params.id} />;
+  const [user, { id }] = await Promise.all([requireProfile(), params]);
+  return <EditReviewScreen user={user} reviewId={id} />;
 }
