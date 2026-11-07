@@ -1,0 +1,12 @@
+# 앞단 프록시. DEP 2단계, Claude 초안. 보안 헤더(HSTS 등)는 7단계에서 추가한다.
+#
+# SITE_ADDRESS
+#   - 로컬: http://localhost:3300 — http:// 를 붙이면 Caddy 가 인증서를 만들지 않는다. 포트는 카카오 플랫폼에 등록한 3300 과 맞춘다
+#   - 운영: nook.example.com — 스킴 없이 도메인만 주면 Let's Encrypt 인증서 발급·갱신·HTTP→HTTPS 리다이렉트가 자동
+#
+# 바깥에 여는 것은 web 하나뿐. C# API 는 여기에 경로가 없다 — 브라우저는 BFF(/api/nook)로만 API 에 닿는다(FE-2 결정).
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy web:3300
+	header -Server
+}

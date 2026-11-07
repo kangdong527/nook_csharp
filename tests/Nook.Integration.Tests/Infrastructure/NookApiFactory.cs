@@ -34,6 +34,10 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
         builder.UseSetting("ConnectionStrings:Nook", connectionString);
         builder.UseSetting("Jwt:SigningKey", SigningKey);
         builder.UseSetting("MagicLink:LinkBaseUrl", "http://localhost/auth/magic-link");
+        // Development 밖에서는 구현체 설정이 필수(fail-fast). 워커가 발송기 없이는 시작하지 않으므로 콘솔로 채운다 — 큐가 비어 실제로 쓰이지 않는다.
+        // 이미지 저장소는 아래에서 메모리 구현으로 덮어쓴다(마지막 등록이 이긴다). LocalDisk 생성자는 디스크를 건드리지 않는다.
+        builder.UseSetting("Email:Provider", "Console");
+        builder.UseSetting("ImageStorage:Provider", "LocalDisk");
 
         builder.ConfigureTestServices(services =>
         {
@@ -41,8 +45,6 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
             services.AddSingleton<RecordingMailQueue>();
             services.RemoveAll<IMagicLinkMailQueue>();
             services.AddSingleton<IMagicLinkMailQueue>(sp => sp.GetRequiredService<RecordingMailQueue>());
-            // 워커가 발송기 없이는 시작하지 않으므로(운영 보호 장치) 콘솔 발송기로 채운다. 큐가 비어 있어 실제로 쓰이지 않는다.
-            services.AddConsoleEmailTransport();
             // 리뷰 이미지는 메모리에 — 테스트가 ImageStorage.Objects로 올라간 것을 확인한다.
             services.AddInMemoryReviewImageStorage();
 
