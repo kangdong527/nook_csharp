@@ -1,0 +1,49 @@
+# 의존성 갱신 알림 — DEP 3단계, Claude 작성(원본 web/.github/dependabot.yml 을 루트로 옮겨 Next 16 기준으로 정리).
+# 1인 개발이라 월간 + 묶음. 보안 업데이트(Dependabot security updates)는 이 일정과 별개로 바로 온다.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: monthly, timezone: Asia/Seoul }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: chore, include: scope }
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    # ⚠️ ignore 는 해당 의존성의 보안 업데이트도 억제한다 → CI audit job 이 안전망. 해제 조건을 적어 둔다
+    ignore:
+      # v4 는 설정 형식이 전면 변경 → 화면 전수 확인이 필요한 별도 작업. 해제: UI 작업이 적은 시기
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
+      # 런타임(Node 24 — CI·web.Dockerfile)과 같은 세대로만. 해제: Node 를 올릴 때 함께
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # eslint-config-next 는 next 와 버전을 맞춘다. 해제: next major 와 같은 PR
+      - dependency-name: eslint-config-next
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule: { interval: monthly, timezone: Asia/Seoul }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: chore, include: scope }
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly, timezone: Asia/Seoul }
+    open-pull-requests-limit: 2
+    commit-message: { prefix: chore }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # 베이스 이미지(sdk·aspnet·runtime-deps·node) 태그 갱신
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule: { interval: monthly, timezone: Asia/Seoul }
+    open-pull-requests-limit: 2
+    commit-message: { prefix: chore }

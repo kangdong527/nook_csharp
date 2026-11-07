@@ -31,14 +31,19 @@ export function ProfileScreen({ initialUser }: { initialUser: User }) {
     [userId, user.nickname, user.avatarUrl]
   );
 
-  // 첫 페이지(PF-04 기본 5개)와 별 개수(PF-03). 삭제 뒤에도 이걸로 처음부터 다시 받는다.
-  const load = useCallback(async () => {
-    const [page, c] = await Promise.all([getMyReviews(), getStarCounts()]);
-    setReviews(asMine(page.items));
-    setNextCursor(page.nextCursor);
-    setCounts(c);
-    setLoading(false);
-  }, [asMine]);
+  // 첫 페이지(PF-04 기본 5개)와 별 개수(PF-03). 받기(fetchFirst)와 반영(applyFirst)을 나눠
+  // 첫 로드 effect 는 응답 콜백에서만 setState 하고(react-hooks/set-state-in-effect), 삭제 뒤엔 load 로 처음부터 다시 받는다.
+  const fetchFirst = () => Promise.all([getMyReviews(), getStarCounts()]);
+  const applyFirst = useCallback(
+    ([page, c]: Awaited<ReturnType<typeof fetchFirst>>) => {
+      setReviews(asMine(page.items));
+      setNextCursor(page.nextCursor);
+      setCounts(c);
+      setLoading(false);
+    },
+    [asMine]
+  );
+  const load = useCallback(async () => applyFirst(await fetchFirst()), [applyFirst]);
 
   // "리뷰 더 보기" — 서버 키셋 다음 페이지(원본은 전부 받아 화면에서 5개씩 잘랐다).
   const loadMore = async () => {
@@ -56,9 +61,16 @@ export function ProfileScreen({ initialUser }: { initialUser: User }) {
     }
   };
 
+  // 첫 로드 — setState 는 응답을 받은 비동기 콜백 안에서만(react-hooks/set-state-in-effect). 화면을 떠난 뒤 온 응답은 버린다.
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    void fetchFirst().then((result) => {
+      if (alive) applyFirst(result);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [applyFirst]);
 
   return (
     <div className="flex flex-1 flex-col">

@@ -1,0 +1,110 @@
+# PR 게이트 — DEP 3단계, Claude 작성.
+# 리포가 private + GitHub Free 라 브랜치 보호로 "통과해야 병합"을 강제할 수 없다(사용자 결정 2026-11-07).
+# → 결과는 PR 에 체크로 보이고, 병합은 사람이 초록불을 보고 한다. main 직접 커밋은 로컬 훅(.githooks)이 막는다.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 같은 브랜치에 새 푸시가 오면 진행 중인 실행을 취소(Actions 분 절약)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 최소 권한 — 코드 읽기만. 배포(8단계)는 별도 워크플로에서 OIDC 권한을 따로 준다
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: api — build / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore
+      # 경고도 막는다 — 로컬 기준(경고 0)을 CI 에서도 유지
+      - run: dotnet build --no-restore -c Release -warnaserror
+      # 통합 테스트는 Testcontainers 로 PostgreSQL 컨테이너를 띄운다(ubuntu 러너에 Docker 가 있다)
+      - run: dotnet test --no-build -c Release
+
+  web:
+    name: web — typecheck / lint / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # web.Dockerfile 의 node:24 와 같은 세대
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      # lint 오류 = 실패(사용자 결정 2026-11-07). 경고는 통과
+      - run: npm run lint
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      # 운영 의존성만(--omit=dev). 브라우저·서버에 실리지 않는 개발 도구 취약점으로 PR 을 막지 않는다
+      - name: npm audit (production deps)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=moderate
+      # dotnet 은 취약 패키지가 있어도 종료 코드 0 → JSON 에서 vulnerabilities 항목 수로 판정(출력 언어와 무관)
+      - name: NuGet vulnerable packages (incl. transitive)
+        run: |
+          dotnet restore
+          dotnet list package --vulnerable --include-transitive --format json > vuln.json
+          count=$(jq '[.. | objects | .vulnerabilities? // empty | .[]] | length' vuln.json)
+          echo "취약 항목: $count"
+          if [ "$count" -ne 0 ]; then
+            jq '.' vuln.json
+            echo "::error::취약한 NuGet 패키지가 $count 건 있습니다"
+            exit 1
+          fi
+
+  images:
+    name: images — build / Trivy scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.2
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build images
+        run: |
+          docker build -f deploy/api.Dockerfile --target api     -t nook-api:ci .
+          docker build -f deploy/api.Dockerfile --target migrate -t nook-migrate:ci .
+          docker build -f deploy/web.Dockerfile                  -t nook-web:ci .
+      # 고칠 버전이 나온(--ignore-unfixed) CRITICAL·HIGH 만 실패. 고칠 수 없는 것으로 PR 을 영구히 막지 않는다
+      # trivy-action 대신 버전 고정한 공식 이미지를 직접 실행한다(서드파티 액션 태그 변조 위험을 줄임)
+      - name: Trivy scan
+        run: |
+          for img in nook-api:ci nook-migrate:ci nook-web:ci; do
+            echo "::group::$img"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \
+              "$TRIVY_IMAGE" image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress "$img"
+            echo "::endgroup::"
+          done

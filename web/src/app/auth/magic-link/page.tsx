@@ -28,8 +28,9 @@ export default function MagicLinkPage() {
     // 주소창·방문 기록에서 토큰을 지운다(뒤로 가기·화면 공유로 새지 않게).
     window.history.replaceState(null, "", window.location.pathname);
 
+    // 토큰이 없으면 요청 없이 실패 — setState 는 effect 본문이 아니라 비동기 콜백에서(react-hooks/set-state-in-effect)
     if (!token) {
-      setFailed(true);
+      void Promise.resolve().then(() => setFailed(true));
       return;
     }
 

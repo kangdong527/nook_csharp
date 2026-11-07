@@ -13,7 +13,7 @@
 | 4a | 컨테이너 레지스트리 | **GHCR → ECR** (원래 계획 변경) | private GHCR pull엔 서버에 GitHub PAT(장기 비밀값) 필요. ECR은 인스턴스 역할로 pull |
 | 4b | 배포 경로 | **SSH → SSM Run Command** (원래 계획 변경) | 22번 포트를 닫고 SSH 키를 GitHub에 두지 않음. 접속도 Session Manager |
 | 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지) | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각 |
-| 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
+| 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료(보안 + 개인정보 처리방침·수집 동의) 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
 
 "이미지" 용어 주의: 4a는 **컨테이너 이미지**(앱 실행 묶음), 3은 **사용자 업로드 사진**. 서로 무관하다.
 
@@ -23,11 +23,11 @@
 |---|---|---|---|---|
 | 1 | Next 16 보안 업그레이드 | critical RCE 해소, 별도 브랜치 `fix/next16-security` | Claude(사용자 요청) | ✅ `37de343` · 브라우저 확인은 2단계 compose에서 통과 |
 | 2 | 컨테이너화 | api·web Dockerfile(multi-stage, non-root), compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너, 로컬 3흐름 | Claude 초안 → **ADR-003 사용자** | ✅ 초안·로컬 compose 기동·curl 스모크(Origin·401/403·API 비노출) · 브라우저 compose 전용 확인(2026-11-07, 3300 리스너 Docker만 실측): 가입·닉네임 POST, 지도, 장소·리뷰 작성, 프로필 사진 → 볼륨에 UID 1654 소유로 저장·표시. 앱 로직 A·B는 같은 날 dev 서버에서 통과. 주의: dev(`npm run dev`)와 compose가 같은 3300에 IPv6/IPv4로 함께 뜰 수 있음 — 확인 전 `netstat`으로 리스너 확인 / ✅ ADR-003(Claude 작성, 사용자 요청) |
-| 3 | CI (PR 게이트) | build·test(Testcontainers), `next build`, `npm audit --omit=dev`·`dotnet list package --vulnerable`, Trivy, `main` 보호. lint 실패 조건 여부 결정 | Claude | |
+| 3 | CI (PR 게이트) | build·test(Testcontainers), `next build`, `npm audit --omit=dev`·`dotnet list package --vulnerable`, Trivy, `main` 보호. lint 실패 조건 여부 결정 | Claude | 🟡 `feat/dep-ci`(2026-11-07) — 결정: lint 오류 = 실패(5건 수정), `main` 보호는 규칙 없이 CI 표시 + 로컬 훅(private·Free 제약), `web/.github`·`.githooks` → 루트로. Trivy 대응으로 chiseled·npm 제거. 로컬 재현: Release `-warnaserror`·NuGet/npm audit 0·`next build`·Trivy 3이미지 exit 0. ✅ 첫 Actions 실행 4 job(api·web·audit·images) 통과(2026-11-07, 사용자 확인) / ⏳ 화면 확인 3건·병합 |
 | 4 | AWS 계정 보안 기본 | 루트 MFA·루트 키 없음, IAM Identity Center, Budgets 알림, CloudTrail, 서울 리전 | 사용자(콘솔) + 가이드 | |
 | 5 | 인프라 | EC2 t4g.small(ARM), IMDSv2 강제, EBS 기본 암호화, SG 80·443만(22 닫음) — **처음엔 내 IP만(결정 6)**, SSM 에이전트·인스턴스 역할, 탄력적 IP, 도메인 DNS, S3(이미지·백업, 퍼블릭 차단, SSE) | 사용자 + 가이드 | |
 | 6 | 비밀값 | SSM Parameter Store SecureString, 배포 시 인스턴스 역할로 읽기. 리포·이미지·로그 금지 | 협업 | |
-| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | |
+| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`, **개인정보 처리방침·수집 동의(아래 §5)**. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | |
 | 8 | CD | `main` push → arm64 이미지 → ECR(sha 태그) → GitHub OIDC(신뢰 정책 `main` 한정) → SSM → pull·마이그레이션·`compose up`·헬스체크 → 실패 시 직전 태그 롤백 | Claude | |
 | 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북 | 협업 | |
 | 10 | 게이트 + Pillar 점검 | `개발_프로세스.md` DEP 게이트 4개 + 아래 표를 측정값·화면으로 확인 | 사용자 확인 | |
@@ -68,3 +68,16 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 - **BFF Origin 검사 × 프록시**: `api/nook/[...path]/route.ts`가 `origin !== request.nextUrl.origin`이면 403. Caddy 뒤에선 Next가 보는 자기 주소(`http://web:3300` 류)와 브라우저 Origin(`https://도메인`)이 달라 **모든 POST가 403**. 검사를 풀면 CSRF 방어가 사라짐 → 허용 Origin을 설정값으로 명시(2·7단계)
 - **ForwardedHeaders**: Caddy 뒤에서 모든 요청 IP가 프록시 IP → IP 기준 RateLimiter가 전원을 한 명으로 봄. 반대로 `X-Forwarded-For`를 무조건 믿으면 IP 위조 우회 → 신뢰 프록시(KnownNetworks/KnownProxies) 명시(7단계)
 - **ARM 이미지**: t4g = arm64. Actions에서 arm64 빌드(arm 러너 또는 buildx) 필요(8단계)
+
+## 5. 개인정보 처리방침·수집 동의 (2026-11-07 추가, 7단계 · 공개 조건)
+
+원본 nook도 비어 있던 부분(원본 `NOOK_PRD_리뷰.md` P3, 설정 "서비스 약관 및 방침" = `RowDisabled`). 수집 항목: 이메일·닉네임·성별(필수, R-US-04)·생년월일(선택, R-US-05)·사진(리뷰·프로필). 실제 사용자를 받기 전(SG 전체 공개 전)에 끝낸다. 법률 검토는 Claude가 대신하지 못한다.
+
+| 영역 | 할 일 | 작성 |
+|---|---|---|
+| 문서 | 처리방침 본문 — 수집 항목·목적(성별 필수 근거 포함)·보관 기간·파기·처리 위탁(AWS·SES)·이용자 권리 | **사용자(PM)**, Claude는 항목 틀 |
+| 정책 결정 | 만 14세 미만 가입 처리(생년월일이 선택이라 확인 수단부터), 선택 항목 별도 동의, 탈퇴 후 파기 범위(PF-02와 연결) | **사용자(PM)** |
+| DB | 동의 기록 — 예: `users.privacy_consented_at`·`privacy_policy_version`(방침 개정 시 재동의 판단) | 협업 |
+| API | 가입 요청에 동의 필수, 없으면 400 | 협업 |
+| FE | 가입 동의 체크 + 처리방침 링크, `/privacy` 페이지, 설정 "약관 및 방침" 활성화 | Claude |
+

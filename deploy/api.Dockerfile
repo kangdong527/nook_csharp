@@ -22,6 +22,8 @@ FROM restore AS publish
 COPY .editorconfig ./
 COPY src/ src/
 RUN dotnet publish src/Nook.Api/Nook.Api.csproj -c Release --no-restore -o /app/publish /p:UseAppHost=false
+# 이미지 저장소(LocalDisk) 볼륨 자리. 실행 이미지(chiseled)엔 셸이 없어 RUN mkdir 를 못 하므로 여기서 만들어 소유자째 복사한다
+RUN mkdir -p /app/data/images
 
 # ---- 3. 마이그레이션 번들: EF 마이그레이션을 실행 파일 하나로. 운영 이미지에 SDK·dotnet-ef 를 넣지 않으려고 따로 만든다
 FROM restore AS bundle
@@ -41,20 +43,25 @@ RUN RID=$([ "$TARGETARCH" = "arm64" ] && echo linux-arm64 || echo linux-x64) \
       --configuration Release --runtime "$RID" --self-contained \
       --output /out/efbundle --verbose
 
+# ---- 실행 이미지 = chiseled(-extra): 셸·apt·패키지 관리자 없음 → 공격면이 작고 OS 취약점이 거의 없다(DEP 3단계 Trivy).
+#      기본 사용자가 이미 비루트 app(UID 1654). -extra = ICU·tzdata 포함. extra 가 아니면 세계화 불변 모드(InvariantGlobalization)로 돌아
+#      문화권별 문자열 비교·서식이 개발 환경과 달라진다 → 같게 유지하려고 extra. (ReviewDay 는 고정 +09:00 이라 tzdata 와 무관)
+#      대가: 컨테이너 안에서 sh·ls·find 를 못 쓴다. 파일 확인은 docker compose cp 나 볼륨으로.
+
 # ---- target: migrate — 연결 문자열은 실행 시 환경변수 ConnectionStrings__Nook 로만 받는다(이미지에 없음)
-FROM mcr.microsoft.com/dotnet/runtime-deps:${DOTNET_VERSION} AS migrate
+FROM mcr.microsoft.com/dotnet/runtime-deps:${DOTNET_VERSION}-noble-chiseled-extra AS migrate
 WORKDIR /migrate
 COPY --from=bundle /out/efbundle ./efbundle
 USER $APP_UID
 ENTRYPOINT ["./efbundle"]
 
 # ---- target: api (기본 — 마지막 스테이지)
-FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS api
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}-noble-chiseled-extra AS api
 WORKDIR /app
 COPY --from=publish /app/publish ./
-# 이미지 저장소(LocalDisk) 볼륨 자리. 이름 있는 볼륨은 처음 붙을 때 이 폴더의 소유자를 물려받는다 → 미리 app 소유로 만들지 않으면 비루트가 못 쓴다
-RUN mkdir -p /app/data/images && chown -R $APP_UID /app/data
-# .NET 8+ 공식 이미지에 있는 비루트 사용자(app, UID 1654). 포트 8080 은 비루트로 열 수 있다(1024 이상)
+# 이름 있는 볼륨은 처음 붙을 때 이 폴더의 소유자를 물려받는다 → app(1654) 소유로 복사해야 비루트가 쓸 수 있다
+COPY --from=publish --chown=1654:1654 /app/data ./data
+# 비루트 사용자(app, UID 1654). 포트 8080 은 비루트로 열 수 있다(1024 이상)
 USER $APP_UID
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
