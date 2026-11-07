@@ -14,6 +14,7 @@
 | 4b | 배포 경로 | **SSH → SSM Run Command** (원래 계획 변경) | 22번 포트를 닫고 SSH 키를 GitHub에 두지 않음. 접속도 Session Manager |
 | 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지) | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각 |
 | 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료(보안 + 개인정보 처리방침·수집 동의) 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
+| 7 | 계정 플랜·리전 (2026-11-07) | **A. Paid plan 업그레이드 → 서울(`ap-northeast-2`)**. 순서: 루트 MFA → Budgets 알림 → 업그레이드(크레딧 유지·되돌림 여부 화면 확인) → 서울 활성화 | Free plan은 시드니(`ap-southeast-2`) 고정, 다른 리전은 업그레이드 + 고급 기능 활성화 필요(실측 팝업). 시드니(B)는 지연·**개인정보 국외 이전**(§5 처리방침에 고지 필요)·약 6개월 기한·계획 수정 → 기각 |
 
 "이미지" 용어 주의: 4a는 **컨테이너 이미지**(앱 실행 묶음), 3은 **사용자 업로드 사진**. 서로 무관하다.
 
@@ -29,7 +30,7 @@
 | 6 | 비밀값 | SSM Parameter Store SecureString, 배포 시 인스턴스 역할로 읽기. 리포·이미지·로그 금지 | 협업 | |
 | 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`, **개인정보 처리방침·수집 동의(아래 §5)**. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | |
 | 8 | CD | `main` push → arm64 이미지 → ECR(sha 태그) → GitHub OIDC(신뢰 정책 `main` 한정) → SSM → pull·마이그레이션·`compose up`·헬스체크 → 실패 시 직전 태그 롤백 | Claude | |
-| 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북 | 협업 | |
+| 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북, **종료 런북 갱신(`aws-shutdown-runbook.md`)** | 협업 | |
 | 10 | 게이트 + Pillar 점검 | `개발_프로세스.md` DEP 게이트 4개 + 아래 표를 측정값·화면으로 확인 | 사용자 확인 | |
 
 ## 2. AWS 보안 Pillar 점검표 (계획 기준 — 10단계에서 실제로 확인)
@@ -81,3 +82,32 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 | API | 가입 요청에 동의 필수, 없으면 400 | 협업 |
 | FE | 가입 동의 체크 + 처리방침 링크, `/privacy` 페이지, 설정 "약관 및 방침" 활성화 | Claude |
 
+
+## 6. 4단계 진행 기록 (2026-11-07)
+
+> 전체 정리·용어(계정/프로젝트/팀/세션/신원) 구분은 **`aws-account-setup.md`**
+
+신규 가입이 **새 시작 경험**(Builder ID 가입 · 프로젝트 · Free plan · 시드니 고정)으로 진행돼 계획과 순서가 달라졌다. 결정 7 → Paid 업그레이드 → **고급 기능 활성화**(Organizations, 되돌릴 수 없음, **지출 한도 삭제**).
+
+계정 구조(고급 기능이 생성):
+
+| 계정 | 역할 | 비고 |
+|---|---|---|
+| nook Management Account | 결제·조직·Budgets·CloudTrail 조직 트레일 | 관리 계정. SCP 적용 안 됨. 워크로드 두지 않음 |
+| nook Identity Delegated Admin | IAM Identity Center(**`us-east-1`**) 위임 관리 | 팀 이름 `nook` |
+| nook-prod (구 Rubber Ducking) | nook 리소스 | 프로젝트 이름만 변경. 콘솔의 **계정 이름**은 Organizations → AWS 계정 → 작업 → 계정 이름 업데이트(반영 최대 4시간) |
+
+로그인 경로: 평소 = Builder ID → 계정별 `AccountFullAccessRole`, 비상 = 관리 계정 루트.
+
+| 항목 | 상태 |
+|---|---|
+| 루트 MFA | ✅ `root-phone-totp`·`root-pc-passkey`, 루트 액세스 키 없음, 재로그인 MFA 확인. 루트 비밀번호는 가입 때 없었음(Builder ID 비밀번호와 별개) → 재설정으로 생성 |
+| Builder ID MFA | ✅ `builderid-phone-totp`·`builderid-pc-passkey`. 복구 이메일 필수(로그인 이메일과 달라야 함) — 현재 같은 Gmail 별칭(독립 경로 아님, 추후 다른 메일 서비스로) |
+| Budgets | ✅ `nook-zero-spend`, `nook-monthly-20`(실제 50·85·100%, 예측 100%) |
+| CloudTrail | ✅ 조직 트레일 `nook-org-trail`(서울 홈, 다중 리전, 관리 이벤트만, KMS·CloudWatch·재귀 로깅 끔), 로깅 중 |
+| 지원 플랜 | ✅ Basic(유료 지원 없음) |
+| SCP | `ManagedAccountSecurityControlPolicy`(조직 이탈·관리 역할 보호) 유지 · `BudgetsSpendLimitDeny*` 4개 미연결 · **`AdvancedModeRegionRestrictionSecurityControlPolicy`의 `RegionFloor`에 `ap-northeast-2` 추가**(문서 공식 방법) → CloudShell `aws ec2 describe-instances --region ap-northeast-2` = `[]` 통과 |
+| ✅ 콘솔 리전 메뉴 | SCP 수정 후에도 서울이 "콘솔에서 제한" → 원인은 반영 지연이 아니라 **통합 설정 "표시되는 리전"**(SCP와 별도인 계정별 콘솔 표시 목록). nook-prod에 버지니아·오리건·서울·시드니로 저장 → 서울 표시. 상세 `aws-account-setup.md` 4절 17단계·5절 |
+| ⏳ 남음 | S3 계정 퍼블릭 액세스 차단(nook-prod), Identity Center 사용자·권한 세트, 로컬 AWS CLI + SSO |
+
+주의: `RegionFloor`는 AWS가 만든 정책이다. 서울이 다시 막히면 이 정책부터 본다. 시드니(`ap-southeast-2`)는 자원 조회 후 제거 검토.

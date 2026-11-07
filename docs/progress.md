@@ -1,15 +1,20 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **DEP 진행 중 — 1·2·3단계 완료(2026-11-07)**. PR #10(Next 16)·#11(컨테이너화) 병합, PR #12(CI) 병합 — CI 4 job 통과·화면 확인 3건 통과. 다음은 **4단계 AWS 계정 보안**(사용자 콘솔 + Claude 안내). DEP 계획·결정·Pillar 점검표는 **`docs/design/dep-plan.md`**. 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1·2·3단계 완료, 4단계(AWS 계정 보안) 대부분 완료(2026-11-07)**. ⚠️ 미병합·미커밋: 원격 브랜치 `docs/dep-session-2026-11-07`(`6832504`, PR 미병합)을 로컬 `docs/dep-stage4`로 빨리감기했고, 그 위에 4단계 문서 변경이 **미커밋**(사용자 지시로 보류). DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
      - **세션 시작하면 할 일 (순서대로)**
-       1. 이 문서 PR(`docs/dep-session-2026-11-07`) 병합 확인 → `main` 최신화, 로컬 브랜치 정리(`feat/dep`·`feat/dep-ci` 삭제 가능). 새 클론이면 `git config core.hooksPath .githooks`
-       2. **4단계 AWS 계정 보안**(사용자 콘솔, Claude 안내): 루트 MFA·루트 액세스 키 없음, IAM Identity Center 일상 계정, Budgets 알림, CloudTrail, 서울 리전
-       3. **도메인 구매**(결정 5, 5단계 전까지) — 카카오 플랫폼 도메인·SES 도메인 인증에 필요
+       1. `git status` — 브랜치 `docs/dep-stage4`. ① 지난 세션 문서 PR(`docs/dep-session-2026-11-07`)이 **미병합**이었음 → 이 브랜치에 포함됨(빨리감기). ② 4단계 문서(dep-plan 결정 7·§6, `aws-shutdown-runbook.md`, 이 문서, learning-log)가 **미커밋**. 커밋·PR 방식은 사용자에게 묻기(예: 이 브랜치 하나로 PR → 옛 docs PR은 닫기). 새 클론이면 `git config core.hooksPath .githooks`
+       2. ~~콘솔 서울 리전~~ ✅ 2026-11-07 — 원인은 통합 설정 → 계정 설정 → **"표시되는 리전"**(SCP와 별도). nook-prod에 버지니아·오리건·서울·시드니로 저장 → 서울 표시. 리전 바꿀 땐 SCP와 이 설정 둘 다(`aws-account-setup.md` 5절)
+       3. 4단계: ~~S3 차단~~ ✅ · ~~Identity Center / CLI~~ ✅ 대안(권한 세트 메뉴 없음 → nook-prod IAM 역할 `nook-readonly` + `aws login`, CLI 읽기 검증 완료 — `aws-account-setup.md` 9절). 남은 것: 멤버 루트 확인·7단계 전 권한 축소(같은 문서 7절). 원래 계획 문구: **Identity Center**(Delegated Admin 계정, `us-east-1`) 일상 사용자·권한 세트(관리자 + ReadOnly) → **로컬 AWS CLI 설치 + `aws configure sso`**(region `ap-northeast-2`) → Claude가 CLI 읽기 명령으로 4단계 전체 검증
+       4. ~~콘솔 계정 이름~~ ✅ 이미 `nook-prod`(프로젝트 이름 = 계정 이름). 세션 우측 위 표시만 "Rubber Ducking" — 기능 영향 없음, 계정은 ID로 구분
+       5. **Dependabot PR 정리**: 첫 실행으로 npm·NuGet PR들이 열림 — **typescript 7·eslint 10 같은 major**도 포함(루트 dependabot.yml에서 ignore를 뺐기 때문). 묶음(minor-and-patch)은 CI 초록이면 병합, major는 ignore 추가 vs 별도 작업 결정
+       6. **도메인 구매**(결정 5, 5단계 전까지)
+     - AWS 구성 전체 정리: **`docs/design/aws-account-setup.md`**(계정·프로젝트·팀·세션·신원 구분, 작업별 어디로 가나, 오늘 한 일, SCP 현황)
+     - AWS 작업 원칙(이번 세션 교훈): 콘솔이 새 시작 경험이라 Claude가 아는 화면과 다름 → **한 단계씩, 화면 문구를 먼저 받고** 안내. 비밀값·MFA 코드·시크릿 키는 대화에 붙이지 않음. 리소스를 만들면 `aws-shutdown-runbook.md` "실제로 만든 과금 대상" 표에 추가. 리소스 작업 전 **계정·리전** 확인
      - 완료(2026-11-07): 1단계 Next 16(`37de343`, PR #10) · 2단계 컨테이너화(PR #11, ADR-003 Claude 작성 — Provider 설정값 선택·migrate 1회성 컨테이너·edge/backend 네트워크·비루트·Origin `NOOK_PUBLIC_ORIGIN`) · 3단계 CI(`.github/workflows/ci.yml` api·web·audit·images, Dependabot 루트, `.githooks/pre-commit`, lint 오류 5건 수정, Trivy 대응으로 api·migrate chiseled-extra·web npm 제거)
      - 결정(2026-11-07, 사용자): **결정 6** 5단계 SG는 내 IP만 → 7단계(보안 + 개인정보 처리방침·수집 동의) 완료 뒤 전체 공개 · lint 오류 = CI 실패 · `main` 보호는 규칙 없이 CI 표시 + 로컬 훅(private·Free 제약) · Claude 커밋 전 스테이징 경고 훅(`.claude/hooks/staged-check.js`)
      - 로컬 compose 사용: `cp deploy/.env.example deploy/.env`(값 채우기) → `docker compose -f deploy/compose.yaml up -d --build` → http://localhost:3300. **`npm run dev`를 끄고**(같은 3300을 IPv6로 가로챔) `netstat -ano | findstr :3300`에 127.0.0.1만 남는지 확인. 로그인 링크는 `docker compose -f deploy/compose.yaml logs api`. api 컨테이너는 셸 없음(chiseled) → 파일은 `docker compose -f deploy/compose.yaml cp api:/app/data/images ./tmp-images`
@@ -445,7 +450,7 @@ Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `n
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
 - [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
 - [x] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅, 브라우저 확인 ✅, PR #9 병합(2026-10-28)
-- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업 — 계획 `docs/design/dep-plan.md` 단계 1~10. 단계 1·2·3 ✅(2026-11-07), 다음 4단계
+- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업 — 계획 `docs/design/dep-plan.md` 단계 1~10. 단계 1·2·3 ✅, 4단계 대부분(2026-11-07)
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
 

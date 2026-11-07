@@ -433,3 +433,22 @@
 - 사고·교훈(사실): ① dev(`npm run dev`)와 compose가 같은 3300에 IPv6/IPv4로 함께 떠 첫 A·B 확인이 dev로 갔다 — DB 행 수(compose users 0)로 발견 ② 앞서 스테이징한 파일이 lint 커밋(`06e26a4`)에 섞였다 → 훅 + `git commit -- <경로>` ③ 토큰 마스킹 정규식 실수로 로컬 테스트 토큰이 출력에 노출(15분 1회용, 로컬)
 - 면접 대비로 다시 볼 만한 것(Claude 제안): 이미지(코드) vs 볼륨(상태)의 수명 주기, migrate를 앱 시작과 분리한 이유, 비루트 + 볼륨 소유권, "버전 올리기"보다 "안 쓰는 도구 빼기"(chiseled), fail-fast/fail-closed 설정 설계, effect는 바깥 세계 동기화용(react-hooks v7)
 - 다음에 할 것: 4단계 AWS 계정 보안 → 도메인 구매
+
+---
+
+## 2026-11-07 (DEP-4) — AWS 계정 보안
+
+> 형식과 사실 항목은 Claude가 잡음. "배운 것"·"막힌 것"은 사용자 작성.
+
+- 한 일: AWS 가입(새 시작 경험·Free plan) → 결정 7(Paid 업그레이드, 서울) → 고급 기능 활성화(Organizations 3계정, 팀 `nook`) · 루트 비밀번호 생성 + 루트 MFA 2개 · Builder ID MFA 2개 · Budgets 2개 · CloudTrail 조직 트레일 · 리전 제한 SCP에 서울 추가(CloudShell로 API 통과 확인) · 종료·탈퇴 런북
+- 오늘 배운 것 3줄:
+  1. (사용자 작성)
+  2. (사용자 작성)
+  3. (사용자 작성)
+- 막힌 것: (사용자 작성)
+- 내가 결정한 것: Paid 업그레이드 + 서울(시드니 기각 — 지연·개인정보 국외 이전), 에이전트 툴킷 연결 보류, 팀 이름 `nook`, 프로젝트 `nook-prod`, 복구 이메일에 PM 메일 대신 본인 소유, Budgets 50% 추가
+- Claude가 대신 작성한 부분: dep-plan 결정 7·§6, `aws-shutdown-runbook.md`(AWS 어시스턴트 답변 정리 + 보충), 이 기록 형식
+- 사실·교훈: 새 시작 경험은 Claude가 아는 콘솔과 달라 안내가 여러 번 어긋남 → 화면 문구 우선 · 같은 이메일에 신원 둘(Builder ID / 루트, 비밀번호 별개) · MFA 추가는 MFA로 로그인한 세션 필요(step-up) · "화면이 보인다 ≠ 권한이 있다"(서울 EC2 SCP explicit deny) · 지출 한도의 정체 = Budgets + SCP · SCP는 관리 계정에 적용 안 됨
+- 면접 대비로 다시 볼 만한 것(Claude 제안): 다중 계정 구조(관리·신원·작업), 루트 보호와 로그인 경로 세기, IAM 평가 순서(명시적 Deny 우선), `NotAction`+`Deny` 허용 목록 패턴, 차단(fail-closed) vs 알림(fail-open) 비용 통제, 조직 트레일이 멤버 계정 침해에도 남는 이유
+- 다음에 할 것: 콘솔 서울 재확인 → S3 퍼블릭 액세스 차단 → Identity Center → CLI SSO → 도메인 구매
+
