@@ -1,6 +1,6 @@
 #!/bin/sh
-# main 브랜치 직접 커밋 차단 (CLAUDE.md "하지 말 것" 5번)
-# GitHub Free + private 저장소는 브랜치 보호 규칙을 쓸 수 없어 로컬 훅으로 대체한다.
+# main 브랜치 직접 커밋 차단 (CLAUDE.md "하지 말 것")
+# GitHub Free + private 저장소는 브랜치 보호 규칙을 쓸 수 없어 로컬 훅으로 대체한다(DEP 3단계 사용자 결정, 2026-11-07).
 # 활성화: git config core.hooksPath .githooks   (클론 후 1회)
 
 branch=$(git rev-parse --abbrev-ref HEAD)
