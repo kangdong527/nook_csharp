@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <!-- RV-02: 커밋 후 스토리지 삭제 실패를 삼키지 않고 기록한다(배치가 안전망, ADR-009). -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
   </ItemGroup>
 
   <PropertyGroup>
