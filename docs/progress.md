@@ -1,20 +1,21 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **DEP 진행 중 — 1단계(Next 16 보안 업그레이드) 코드 완료, 미커밋** (2026-11-05). 브랜치 `fix/next16-security`(`feat/dep`에서 분기, 작업 트리에 변경 있음 — 커밋 전). DEP 실행 계획·결정·Pillar 점검표는 **`docs/design/dep-plan.md`**. FE는 PR #9 `main` 병합 `8c639ba`로 완료. 달력 기준 약 8일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1·2·3단계 완료(2026-11-07)**. PR #10(Next 16)·#11(컨테이너화) 병합, PR #12(CI) 병합 — CI 4 job 통과·화면 확인 3건 통과. 다음은 **4단계 AWS 계정 보안**(사용자 콘솔 + Claude 안내). DEP 계획·결정·Pillar 점검표는 **`docs/design/dep-plan.md`**. 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
-  1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정, Pillar 점검표, 함정). 보안 1순위·비용 2순위
-     - 확정(2026-11-05, 사용자): 프론트 = 같은 EC2 · 운영 DB = EC2 안 postgres 컨테이너 · 업로드 사진 = S3로 교체 · 레지스트리 **GHCR → ECR** · 배포 **SSH → SSM**(22번 닫음) · 도메인 = **구매(A안)**, 5단계 전까지
-     - 1단계 Next 16 ✅ 코드·빌드 — next 16.4.5(정확 고정)·react 19.3, 운영 의존성 취약점 critical 1·high 3·moderate 6 → **0**, `tsc`·`next build` 통과, `/_next/image` 외부 URL 차단 실측(400). 상세·변경 파일 목록은 dep-plan.md §3
+  1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
      - **세션 시작하면 할 일 (순서대로)**
-       1. 브랜치 `fix/next16-security` 확인(`git status` — `web/` 변경 + `docs/design/dep-plan.md` + 이 문서·learning-log 미커밋)
-       2. 사용자 결정 2개: ① 브라우저 3흐름 확인을 **지금**(Docker·`dotnet run`·`npm --prefix web run dev`, `fe-manual-checklist.md`) vs **2단계 compose에서 한 번에**(Claude 추천 — 중복 적음) ② 커밋 진행 여부 — 제안 메시지 `fix(web): upgrade Next 16 to clear critical advisories` + 문서 커밋 별도
-       3. 2단계 컨테이너화 시작 — api·web Dockerfile(multi-stage, non-root), `deploy/` compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너. **BFF Origin 검사 × 프록시 함정**(dep-plan.md §4)을 여기서 처리. ADR-003은 사용자 작성
-     - 1단계 남은 부채: 새 lint 오류 5건(react-hooks v7 `set-state-in-effect`·`immutability` — `MapScreen`·`ProfileScreen`·`auth/magic-link`) — 동작 변화 아님, 3단계 CI에서 lint 실패 조건 여부 결정. dev 전용 moderate 8건(typescript-eslint → minimatch)
-     - 여전히 미결(DEP 중 결정): `web/` 테스트 러너(incident 004 §7), 토큰 수명 60분 유지 vs 7일/refresh, `web/.github`·`.githooks` 정리(3단계)
-     - 실행 메모: Next 16부터 `npm run lint` = `eslint .`(`next lint` 제거). 번들 크기 표가 안 나옴(Turbopack) → 비교는 `.next/static` JS 합계(gzip 246.0 kB, 2026-11-05)
+       1. 이 문서 PR(`docs/dep-session-2026-11-07`) 병합 확인 → `main` 최신화, 로컬 브랜치 정리(`feat/dep`·`feat/dep-ci` 삭제 가능). 새 클론이면 `git config core.hooksPath .githooks`
+       2. **4단계 AWS 계정 보안**(사용자 콘솔, Claude 안내): 루트 MFA·루트 액세스 키 없음, IAM Identity Center 일상 계정, Budgets 알림, CloudTrail, 서울 리전
+       3. **도메인 구매**(결정 5, 5단계 전까지) — 카카오 플랫폼 도메인·SES 도메인 인증에 필요
+     - 완료(2026-11-07): 1단계 Next 16(`37de343`, PR #10) · 2단계 컨테이너화(PR #11, ADR-003 Claude 작성 — Provider 설정값 선택·migrate 1회성 컨테이너·edge/backend 네트워크·비루트·Origin `NOOK_PUBLIC_ORIGIN`) · 3단계 CI(`.github/workflows/ci.yml` api·web·audit·images, Dependabot 루트, `.githooks/pre-commit`, lint 오류 5건 수정, Trivy 대응으로 api·migrate chiseled-extra·web npm 제거)
+     - 결정(2026-11-07, 사용자): **결정 6** 5단계 SG는 내 IP만 → 7단계(보안 + 개인정보 처리방침·수집 동의) 완료 뒤 전체 공개 · lint 오류 = CI 실패 · `main` 보호는 규칙 없이 CI 표시 + 로컬 훅(private·Free 제약) · Claude 커밋 전 스테이징 경고 훅(`.claude/hooks/staged-check.js`)
+     - 로컬 compose 사용: `cp deploy/.env.example deploy/.env`(값 채우기) → `docker compose -f deploy/compose.yaml up -d --build` → http://localhost:3300. **`npm run dev`를 끄고**(같은 3300을 IPv6로 가로챔) `netstat -ano | findstr :3300`에 127.0.0.1만 남는지 확인. 로그인 링크는 `docker compose -f deploy/compose.yaml logs api`. api 컨테이너는 셸 없음(chiseled) → 파일은 `docker compose -f deploy/compose.yaml cp api:/app/data/images ./tmp-images`
+     - 백로그(원본 범위 밖, PM 결정): X1 리뷰 사진 순서 바꾸기 · X2 그룹원 보기 → `docs/design/fe-backend-backlog.md` §5
+     - 여전히 미결: `web/` 테스트 러너(incident 004 §7), 토큰 수명 60분 유지 vs 7일/refresh, 개인정보 정책 결정(만 14세 미만·선택 항목 동의·파기 범위, dep-plan §5), 이미지 저장소 인터페이스 이름(`IReviewImageStorage` → 프로필 사진도 씀)
+     - 7단계 메모: `/api/auth/{signup,logout,magic-link}`에 Origin 검사 없음 · `UseHttpsRedirection` 경고(프록시 뒤) · DataProtection 경고(JWT만 써서 무영향) · IP RateLimiter 전 ForwardedHeaders 필수
   2. **FE** (완료 — PR #9, 2026-10-28) (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
      - 결정(사용자): 같은 리포 `web/`(원본 리포는 Supabase판으로 보존), TypeScript + Next.js 14 그대로, React Native 변환 안 함. 개발 포트 **3300**(카카오 도메인 등록 기준 → CORS도 3300)
      - 연결 구조: 브라우저 → C# API → Docker PostgreSQL. 프론트는 DB를 모른다. 끝나면 `@supabase/*`·`NEXT_PUBLIC_SUPABASE_*` 전부 제거
@@ -444,7 +445,7 @@ Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `n
 - [x] D5 핵심 API(장소·북마크·리뷰·좋아요·JWT) — 게이트 충족(API 테스트 정상·실패 흐름), `main` 병합은 사용자
 - [x] D6 트랜잭션·동시성(그룹 합류) — PR #8 병합(2026-10-26) — incident 001 ✅·002 ✅(D5에서 선행)·003 ✅, ADR-010·011, GR-01·02·04 + R-GR-02/04 ✅(게이트 충족), incident 002 미결 2건 ✅, 그룹 API 3개 ✅. 남음: 푸시·PR·병합(사용자)
 - [x] FE 프론트 연결(원본 화면 전체 — PM 2026-10-27) — 함수 28/28 ✅(BFF·지도·리뷰·프로필·그룹·탈퇴), Supabase 제거 ✅, 브라우저 확인 ✅, PR #9 병합(2026-10-28)
-- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업 — 계획 `docs/design/dep-plan.md` 단계 1~10. 1단계(Next 16) 코드 ✅·커밋 전
+- [ ] DEP 배포 주간(1주) — Docker·compose·AWS EC2·Caddy HTTPS·GitHub Actions·ADR-003·공개 전 필수 보안(RateLimiter·메일 상한·실제 발송기)·백업 — 계획 `docs/design/dep-plan.md` 단계 1~10. 단계 1·2·3 ✅(2026-11-07), 다음 4단계
 - [ ] README 최소판(D14 일부)
 - [ ] D7 DSA #1 근처 장소 검색(Geohash) — dsa/01 · 🚀 운영 반영
 
