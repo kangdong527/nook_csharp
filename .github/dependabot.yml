@@ -22,6 +22,12 @@ updates:
       # eslint-config-next 는 next 와 버전을 맞춘다. 해제: next major 와 같은 PR
       - dependency-name: eslint-config-next
         update-types: ["version-update:semver-major"]
+      # 7 은 컴파일러 전면 교체(Go 네이티브) → next 의 지원 확인이 먼저. 해제: next 가 TS 7 지원을 명시한 뒤, DEP 이후 별도 PR
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # 10 은 eslint-config-next 와 함께 올려야 함(플러그인 호환). 해제: eslint-config-next 가 eslint 10 을 지원할 때, 위 항목과 같은 PR
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: nuget
     directory: /
