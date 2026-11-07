@@ -35,6 +35,27 @@ const ACTIVE_GROUP_KEY = "nook.activeGroup";
 
 type MarkerPlace = SavedPlace | GroupSavedPlace;
 
+// 현재 위치로 이동. 상태·props 를 쓰지 않으므로 컴포넌트 밖 함수 — 지도 초기화 effect 가 선언 전 변수를 부르지 않게(react-hooks/immutability).
+// notify: 실패 안내(useToast 의 toast). 없으면 조용히 실패한다(첫 로드).
+function moveToCurrentLocation(map: any, notify?: (message: string) => void) {
+  if (!navigator.geolocation || !map || !window.kakao) {
+    notify?.("위치 정보를 사용할 수 없어요.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const loc = new window.kakao.maps.LatLng(latitude, longitude);
+      map.setLevel(5);
+      map.panTo(loc);
+    },
+    () => {
+      notify?.("위치 권한이 없어 기본 위치로 표시해요.");
+    },
+    { enableHighAccuracy: true, timeout: 5000 }
+  );
+}
+
 function MapView({ user }: { user: User }) {
   // 훅 의존성에는 객체가 아니라 id 를 넣는다 — user 는 서버가 렌더마다 새로
   // 만든 객체이므로, 그대로 deps 에 두면 참조가 달라져 불필요한 재실행이 된다.
@@ -84,7 +105,7 @@ function MapView({ user }: { user: User }) {
         mapRef.current = map;
         setKakaoReady(true);
         // 현재 위치로 이동 시도
-        moveToCurrentLocation(false);
+        moveToCurrentLocation(map);
       })
       .catch(() => toast("지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."));
     return () => {
@@ -198,23 +219,27 @@ function MapView({ user }: { user: User }) {
     selectedPinRef.current = overlay;
   }, [selected, kakaoReady]);
 
-  // 내 그룹 목록 로드 + 저장된 활성 그룹 복원
-  const reloadGroups = useCallback(async () => {
-    setGroups(await getMyGroups());
-  }, [userId]);
+  // 내 그룹 목록 로드 + 활성 그룹 정리 — 받아 온 뒤(비동기 콜백 안)에서 한 번에 정한다(react-hooks/set-state-in-effect).
+  //   처음: 저장된 활성 그룹 복원. 다시 불러올 때: 지금 활성 그룹 유지. 어느 쪽이든 더 이상 속하지 않으면 내 지도(null)로.
+  const applyGroups = useCallback((list: Group[]) => {
+    setGroups(list);
+    setActiveGroupId((prev) => {
+      const id = prev ?? window.localStorage.getItem(ACTIVE_GROUP_KEY);
+      return id && list.some((g) => g.id === id) ? id : null;
+    });
+  }, []);
+  const reloadGroups = useCallback(async () => applyGroups(await getMyGroups()), [applyGroups]);
 
+  // 첫 로드(회원이 바뀌면 다시). 화면을 떠난 뒤 온 응답은 버린다.
   useEffect(() => {
-    const saved = window.localStorage.getItem(ACTIVE_GROUP_KEY);
-    if (saved) setActiveGroupId(saved);
-    reloadGroups();
-  }, [reloadGroups]);
-
-  // 그룹 목록 로드 후, 더 이상 속하지 않는 그룹이면 내 지도로 복귀
-  useEffect(() => {
-    if (activeGroupId && !groups.some((g) => g.id === activeGroupId)) {
-      setActiveGroupId(null);
-    }
-  }, [groups, activeGroupId]);
+    let alive = true;
+    void getMyGroups().then((list) => {
+      if (alive) applyGroups(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [applyGroups, userId]);
 
   const selectGroup = useCallback((id: string | null) => {
     setActiveGroupId(id);
@@ -240,25 +265,6 @@ function MapView({ user }: { user: User }) {
       router.replace("/map");
     })();
   }, [focusPlaceId, focusReviewId, configured, kakaoReady, router]);
-
-  const moveToCurrentLocation = (notify = true) => {
-    if (!navigator.geolocation || !mapRef.current || !window.kakao) {
-      if (notify) toast("위치 정보를 사용할 수 없어요.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const loc = new window.kakao.maps.LatLng(latitude, longitude);
-        mapRef.current.setLevel(5);
-        mapRef.current.panTo(loc);
-      },
-      () => {
-        if (notify) toast("위치 권한이 없어 기본 위치로 표시해요.");
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
-  };
 
   // 검색창 아래 안내 문구 (없으면 null). 잠시 후 자동으로 사라짐.
   const showNotice = (message: string) => {
@@ -403,7 +409,7 @@ function MapView({ user }: { user: User }) {
         {/* GPS 버튼 */}
         {configured && (
           <button
-            onClick={() => moveToCurrentLocation(true)}
+            onClick={() => moveToCurrentLocation(mapRef.current, toast)}
             className="absolute bottom-4 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white text-ink shadow-card transition active:scale-95"
             aria-label="현재 위치"
           >
