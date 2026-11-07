@@ -1,18 +1,18 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **DEP 진행 중 — 1·2·3단계 완료, 4단계(AWS 계정 보안) 대부분 완료(2026-11-07)**. 4단계 문서는 `docs/dep-stage4`(`b65e226`)로 커밋·푸시, PR은 사용자가 웹에서 생성. 옛 원격 브랜치 `docs/dep-session-2026-11-07`(`6832504`)은 **PR이 열린 적 없음**, 커밋은 새 브랜치에 포함 → 원격 브랜치 삭제만 남음. DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1·2·3·4단계 완료(4단계 2026-11-07~08)**. 다음은 도메인 구매 → 5단계(인프라). DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6), AWS 구성은 **`docs/design/aws-account-setup.md`**, 종료 절차는 **`docs/design/aws-shutdown-runbook.md`**(서비스 완전 종료 전체 프로세스, 2026-11-08 재구성). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
      - **세션 시작하면 할 일 (순서대로)**
-       1. `git status` — 브랜치 `docs/dep-stage4`. ① 지난 세션 문서 PR(`docs/dep-session-2026-11-07`)이 **미병합**이었음 → 이 브랜치에 포함됨(빨리감기). ② 4단계 문서(dep-plan 결정 7·§6, `aws-shutdown-runbook.md`, 이 문서, learning-log)가 **미커밋**. 커밋·PR 방식은 사용자에게 묻기(예: 이 브랜치 하나로 PR → 옛 docs PR은 닫기). 새 클론이면 `git config core.hooksPath .githooks`
-       2. ~~콘솔 서울 리전~~ ✅ 2026-11-07 — 원인은 통합 설정 → 계정 설정 → **"표시되는 리전"**(SCP와 별도). nook-prod에 버지니아·오리건·서울·시드니로 저장 → 서울 표시. 리전 바꿀 땐 SCP와 이 설정 둘 다(`aws-account-setup.md` 5절)
-       3. 4단계: ~~S3 차단~~ ✅ · ~~Identity Center / CLI~~ ✅ 대안(권한 세트 메뉴 없음 → nook-prod IAM 역할 `nook-readonly` + `aws login`, CLI 읽기 검증 완료 — `aws-account-setup.md` 9절). 남은 것: 멤버 루트 확인·7단계 전 권한 축소(같은 문서 7절). 원래 계획 문구: **Identity Center**(Delegated Admin 계정, `us-east-1`) 일상 사용자·권한 세트(관리자 + ReadOnly) → **로컬 AWS CLI 설치 + `aws configure sso`**(region `ap-northeast-2`) → Claude가 CLI 읽기 명령으로 4단계 전체 검증
-       4. ~~콘솔 계정 이름~~ ✅ 이미 `nook-prod`(프로젝트 이름 = 계정 이름). 세션 우측 위 표시만 "Rubber Ducking" — 기능 영향 없음, 계정은 ID로 구분
-       5. **Dependabot PR 정리**: 첫 실행으로 npm·NuGet PR들이 열림 — **typescript 7·eslint 10 같은 major**도 포함(루트 dependabot.yml에서 ignore를 뺐기 때문). 묶음(minor-and-patch)은 CI 초록이면 병합, major는 ignore 추가 vs 별도 작업 결정
-       6. **도메인 구매**(결정 5, 5단계 전까지)
+       1. `git status` — `main`에서 시작(PR #19·#20·#21 병합됨). 이 세션 마지막 브랜치 `docs/shutdown-runbook`(런북 재구성 + 이 문서) PR 병합 여부 확인. 새 클론이면 `git config core.hooksPath .githooks`
+       2. ~~4단계 AWS 계정 보안~~ ✅ — 서울 리전(원인: 통합 설정 "표시되는 리전", SCP와 별도) · S3 계정 퍼블릭 차단 · Identity Center 권한 세트 없음(Builder ID 소스) → 대안 nook-prod IAM 역할 `nook-readonly` + `aws login`(CLI 2.39.5) · CLI 읽기 검증 9항목(`aws-account-setup.md` 9절) · nook-prod 루트 자격 증명 "없음" · 계정 이름은 이미 `nook-prod`(세션 표시만 옛 이름). 남은 것: 7단계 전 `nook-readonly` 권한 축소, 시드니 정리(같은 문서 7절)
+          - CLI 사용: 조회는 `--profile nook-readonly`, 만료 시 `aws login --profile nook-prod`. Claude는 읽기 명령만
+       3. **Dependabot 마무리**: #16(NuGet 묶음)·#13(npm 묶음) 병합, typescript 7·eslint 10은 ignore 추가(PR #21) 후 Dependabot이 자동으로 닫음. 남은 #17 coverlet 10·#18 Test.Sdk 18은 **열어 둔 채 미룸**(2026-11-08 사용자 결정 — #16과 충돌, `@dependabot rebase` 👍 받았으나 미반영. 테스트 전용·비보안이라 급하지 않음. **닫지 않는다**: 닫으면 그 버전은 다시 안 옴). 다음에 충돌이 풀렸으면 병합, 안 풀렸으면 `@dependabot recreate` 또는 두 버전을 한 PR로 직접 올리기. 둘 다 CI 초록 + api job 테스트 개수 약 348(1·124·7·216) 확인. 로컬에선 둘 다 올려 빌드·단위 테스트 132 통과(2026-11-08, 통합은 Docker 꺼져 CI로)
+       4. **도메인 구매**(결정 5, 5단계 전까지) — 안내 완료, 사용자 결정 대기: ① 등록처(Claude 추천 Route 53 — `.com` $16/년 실측 + 호스팅 영역 $0.50/월, SCP가 `route53domains` 허용 확인 / Cloudflare 약 $10~11) ② 이름(`.com` 권장 — 싼 확장자는 메일 평판 낮아 매직 링크 스팸함 위험). 구매 직후: 개인정보 보호 켜기, 자동 갱신 켜기, **등록자 이메일 인증 15일 내**, 런북 과금 표에 추가. 일찍 시작할 것: SES 도메인 인증·운영 승인 요청(약 24시간 대기), 카카오 도메인 등록
+       5. 일정 추정(2026-11-08, Claude): 남은 DEP 약 8~10.5 작업일(5단계 1.5~2 · 6단계 0.5 · S3 이미지 저장소 구현 0.5~1 · 7단계 2.5~3.5 · 8단계 1~1.5 · 9단계 1 · 10단계 0.5). ⚠️ **S3 이미지 저장소 구현(결정 3)이 dep-plan 단계 표에 없음** → 5단계 또는 7단계에 넣을지 사용자 결정
      - AWS 구성 전체 정리: **`docs/design/aws-account-setup.md`**(계정·프로젝트·팀·세션·신원 구분, 작업별 어디로 가나, 오늘 한 일, SCP 현황)
      - AWS 작업 원칙(이번 세션 교훈): 콘솔이 새 시작 경험이라 Claude가 아는 화면과 다름 → **한 단계씩, 화면 문구를 먼저 받고** 안내. 비밀값·MFA 코드·시크릿 키는 대화에 붙이지 않음. 리소스를 만들면 `aws-shutdown-runbook.md` "실제로 만든 과금 대상" 표에 추가. 리소스 작업 전 **계정·리전** 확인
      - 완료(2026-11-07): 1단계 Next 16(`37de343`, PR #10) · 2단계 컨테이너화(PR #11, ADR-003 Claude 작성 — Provider 설정값 선택·migrate 1회성 컨테이너·edge/backend 네트워크·비루트·Origin `NOOK_PUBLIC_ORIGIN`) · 3단계 CI(`.github/workflows/ci.yml` api·web·audit·images, Dependabot 루트, `.githooks/pre-commit`, lint 오류 5건 수정, Trivy 대응으로 api·migrate chiseled-extra·web npm 제거)
