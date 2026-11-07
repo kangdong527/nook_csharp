@@ -170,7 +170,7 @@ SCP = 계정 안에서 어떤 권한을 받아도 넘을 수 없는 **상한선*
 - [ ] Builder ID 복구 이메일을 다른 메일 서비스로 교체
 - [ ] 같은 Gmail에 예전 Builder ID가 있는지 확인(복구 이메일 "이미 사용 중" 단서) — 있으면 MFA 또는 삭제
 - [ ] 도메인 구매(5단계 전)
-- [ ] nook-prod 루트: `AccountMFAEnabled 0`(9절). 멤버 계정 루트는 보통 비밀번호 없음 → Management → IAM → **루트 액세스 관리**(중앙 관리)로 멤버 루트 자격 증명 없음 확인·고정
+- [x] nook-prod 루트: `AccountMFAEnabled 0`(9절)이었으나 Management → IAM → 루트 액세스 관리에서 nook-prod 루트 자격 증명 **"없음"** 확인(2026-11-07) → 루트로 로그인할 경로 자체가 없어 MFA 불필요
 - [ ] **7단계(개인정보) 전**: S3에 사용자 데이터가 들어가기 전 `nook-readonly`를 `ReadOnlyAccess` → `ViewOnlyAccess + SecurityAudit`로 축소(데이터 읽기 제거)
 - [ ] 시드니 정리 시 SCP `RegionFloor`와 "표시되는 리전" **둘 다** 수정
 
@@ -201,7 +201,7 @@ SCP = 계정 안에서 어떤 권한을 받아도 넘을 수 없는 **상한선*
 | 도쿄 EC2 (SCP 차단) | `ec2 describe-instances --region ap-northeast-1` | `explicit deny in a service control policy` ✅ |
 | CloudTrail | `cloudtrail describe-trails` | `nook-org-trail`: 서울 홈, 조직, 다중 리전, 로그 검증 켬 ✅ |
 | IAM 역할 | `iam list-roles`(서비스 역할 제외) | `managed/` 3개(AccountFullAccessRole 등, SCP `ProtectManagedRoles` 보호) + `nook-readonly` ✅ |
-| IAM 사용자·키 | `iam list-users`, `get-account-summary` | 사용자 0, 루트 액세스 키 0 ✅ · 루트 MFA 0 ⚠️(7절) |
+| IAM 사용자·키 | `iam list-users`, `get-account-summary` | 사용자 0, 루트 액세스 키 0 ✅ · 루트 MFA 0 → 루트 자격 증명 자체가 "없음"(루트 액세스 관리) ✅ |
 | 쓰기 차단 | `iam create-user`, `ec2 create-security-group --dry-run` | `no identity-based policy allows` ✅ |
 
 nook-prod에서 볼 수 없는 것(관리 계정 소관): Budgets 2개, SCP 본문, 관리 계정 루트 MFA → 관리 계정 콘솔에서 확인(4절 기록 기준).
