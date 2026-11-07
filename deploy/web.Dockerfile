@@ -26,6 +26,10 @@ RUN npm run build
 FROM node:${NODE_VERSION} AS web
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3300 HOSTNAME=0.0.0.0
+# 실행엔 node 만 필요하다. 이미지에 딸려 오는 npm·corepack·yarn 은 지운다 — 그 자체의 의존성(undici·brace-expansion 등)이
+# Trivy HIGH 로 잡히고, 침입자가 쓸 수 있는 도구도 줄인다(DEP 3단계)
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 # node 이미지에 있는 비루트 사용자(node, UID 1000). 파일 소유자도 node 로
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
