@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // DEP 2단계: 실행에 필요한 파일만 .next/standalone 에 모은다(server.js + 쓰는 node_modules) → 이미지가 작고 공격면이 줄어든다
+  output: "standalone",
+  // X-Powered-By: Next.js 헤더를 보내지 않는다 — 프레임워크·버전 노출을 줄인다(Caddy 의 Server 헤더 제거와 같은 이유)
+  poweredByHeader: false,
   // 이미지 최적화(/_next/image) 허용 범위 — DEP 보안(Infrastructure protection), Claude 작성(사용자 요청).
   // next/image 사용처는 onboarding 슬라이드 3장(public/onboarding/*.png)뿐이다.
   // 리뷰·프로필 사진은 <img src="/api/nook/images/..."> 로 BFF 를 거친다(next/image 아님).

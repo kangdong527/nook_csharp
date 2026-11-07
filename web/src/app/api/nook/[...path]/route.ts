@@ -17,6 +17,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { apiFetch } from "@/lib/api/server";
+import { isAllowedOrigin } from "@/lib/api/origin";
 
 const GUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
@@ -69,7 +70,7 @@ async function relay(request: NextRequest, { params }: Context): Promise<NextRes
     return NextResponse.json({ status: 404 }, { status: 404 });
   }
 
-  if (method !== "GET" && request.headers.get("origin") !== request.nextUrl.origin) {
+  if (method !== "GET" && !isAllowedOrigin(request)) {
     return NextResponse.json({ status: 403, title: "Bff.CrossOrigin" }, { status: 403 });
   }
 

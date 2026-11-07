@@ -22,12 +22,23 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Nook")
     ?? throw new InvalidOperationException("연결 문자열 'Nook'이 설정되지 않았습니다.");
 builder.Services.AddInfrastructure(connectionString);
-if (builder.Environment.IsDevelopment())
+
+// 바깥 경계 구현체는 환경 이름이 아니라 설정값으로 고른다(DEP 2단계, 사용자 결정) — compose(Production)에서도 콘솔·로컬 디스크로 띄우고,
+// 7단계에서 Ses·S3 를 값 하나로 추가한다. 개발만 기본값이 있고, 그 밖의 환경은 값이 없거나 모르는 값이면 시작에서 실패한다(fail-fast).
+var devDefault = builder.Environment.IsDevelopment();
+switch (builder.Configuration["Email:Provider"] ?? (devDefault ? "Console" : null))
 {
-    builder.Services.AddConsoleEmailTransport();
-    // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남아 화면 확인에 쓴다. 통합 테스트(Testing)는 메모리 구현을 따로 등록한다.
-    builder.Services.AddLocalDiskReviewImageStorage(
-        builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
+    case "Console": builder.Services.AddConsoleEmailTransport(); break;
+    case var other: throw new InvalidOperationException($"Email:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: Console)");
+}
+switch (builder.Configuration["ImageStorage:Provider"] ?? (devDefault ? "LocalDisk" : null))
+{
+    // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남는다. 컨테이너에서는 LocalRoot 를 볼륨 경로로 준다. 통합 테스트는 메모리 구현으로 덮어쓴다.
+    case "LocalDisk":
+        builder.Services.AddLocalDiskReviewImageStorage(
+            builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
+        break;
+    case var other: throw new InvalidOperationException($"ImageStorage:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: LocalDisk)");
 }
 
 // 키 → URL 기준 주소. 기본값은 BFF 중계 경로(브라우저는 Next를 거친다). DEP에서 S3·CDN 주소로 바꾼다.

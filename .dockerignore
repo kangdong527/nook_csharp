@@ -1,0 +1,25 @@
+# 빌드 컨텍스트 = 리포 루트(deploy/*.Dockerfile 이 src/·web/ 를 모두 본다).
+# 여기서 빼는 것: 비밀값(이미지 레이어에 영구히 남는다), 로컬 빌드 산출물(호스트 OS용 바이너리), 큰 폴더.
+**/.env
+**/.env.*
+!**/.env.example
+**/bin/
+**/obj/
+**/App_Data/
+**/*.user
+**/secrets.json
+
+web/node_modules/
+web/.next/
+web/tsconfig.tsbuildinfo
+
+.git/
+.github/
+web/.github/
+web/.githooks/
+.vs/
+.vscode/
+.claude/
+cs_trainning/
+docs/
+tests/
