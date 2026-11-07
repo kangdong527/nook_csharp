@@ -13,6 +13,7 @@
 | 4a | 컨테이너 레지스트리 | **GHCR → ECR** (원래 계획 변경) | private GHCR pull엔 서버에 GitHub PAT(장기 비밀값) 필요. ECR은 인스턴스 역할로 pull |
 | 4b | 배포 경로 | **SSH → SSM Run Command** (원래 계획 변경) | 22번 포트를 닫고 SSH 키를 GitHub에 두지 않음. 접속도 Session Manager |
 | 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지) | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각 |
+| 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
 
 "이미지" 용어 주의: 4a는 **컨테이너 이미지**(앱 실행 묶음), 3은 **사용자 업로드 사진**. 서로 무관하다.
 
@@ -20,13 +21,13 @@
 
 | # | 단계 | 핵심 | 작성 | 상태 |
 |---|---|---|---|---|
-| 1 | Next 16 보안 업그레이드 | critical RCE 해소, 별도 브랜치 `fix/next16-security` | Claude(사용자 요청) | ✅ 코드·빌드 / ⏳ 브라우저 3흐름·커밋 |
-| 2 | 컨테이너화 | api·web Dockerfile(multi-stage, non-root), compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너, 로컬 3흐름 | Claude 초안 → **ADR-003 사용자** | |
+| 1 | Next 16 보안 업그레이드 | critical RCE 해소, 별도 브랜치 `fix/next16-security` | Claude(사용자 요청) | ✅ `37de343` · 브라우저 확인은 2단계 compose에서 통과 |
+| 2 | 컨테이너화 | api·web Dockerfile(multi-stage, non-root), compose(api·web·postgres·caddy), 마이그레이션 1회성 컨테이너, 로컬 3흐름 | Claude 초안 → **ADR-003 사용자** | ✅ 초안·로컬 compose 기동·브라우저 A·B 흐름 통과(2026-11-07, Caddy 경유 :3300) / ⏳ ADR-003 |
 | 3 | CI (PR 게이트) | build·test(Testcontainers), `next build`, `npm audit --omit=dev`·`dotnet list package --vulnerable`, Trivy, `main` 보호. lint 실패 조건 여부 결정 | Claude | |
 | 4 | AWS 계정 보안 기본 | 루트 MFA·루트 키 없음, IAM Identity Center, Budgets 알림, CloudTrail, 서울 리전 | 사용자(콘솔) + 가이드 | |
-| 5 | 인프라 | EC2 t4g.small(ARM), IMDSv2 강제, EBS 기본 암호화, SG 80·443만(22 닫음), SSM 에이전트·인스턴스 역할, 탄력적 IP, 도메인 DNS, S3(이미지·백업, 퍼블릭 차단, SSE) | 사용자 + 가이드 | |
+| 5 | 인프라 | EC2 t4g.small(ARM), IMDSv2 강제, EBS 기본 암호화, SG 80·443만(22 닫음) — **처음엔 내 IP만(결정 6)**, SSM 에이전트·인스턴스 역할, 탄력적 IP, 도메인 DNS, S3(이미지·백업, 퍼블릭 차단, SSE) | 사용자 + 가이드 | |
 | 6 | 비밀값 | SSM Parameter Store SecureString, 배포 시 인스턴스 역할로 읽기. 리포·이미지·로그 금지 | 협업 | |
-| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health` | 협업 | |
+| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | |
 | 8 | CD | `main` push → arm64 이미지 → ECR(sha 태그) → GitHub OIDC(신뢰 정책 `main` 한정) → SSM → pull·마이그레이션·`compose up`·헬스체크 → 실패 시 직전 태그 롤백 | Claude | |
 | 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북 | 협업 | |
 | 10 | 게이트 + Pillar 점검 | `개발_프로세스.md` DEP 게이트 4개 + 아래 표를 측정값·화면으로 확인 | 사용자 확인 | |
