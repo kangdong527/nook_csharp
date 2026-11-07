@@ -398,3 +398,20 @@
 - 남은 빈 곳: `web/` 테스트 러너 없음(DEP에서 CI와 함께 결정), 1초 중복 방지 변이 확인 안 함, `reloadSaved` 취소 장치 없음(그룹을 빠르게 바꿀 때 늦은 응답이 덮어쓸 수 있음)
 - 기준선(DEP Next 업그레이드 뒤 비교용): First Load JS 공통 87.3 kB, `/review/new` 96.3 kB, Middleware 26.6 kB
 - 다음에 할 것: DEP 1일째 — 순서 결정(Next 보안 업그레이드 먼저 vs CI 골격 먼저)
+
+---
+
+## 2026-11-05 (DEP-1) — 배포 계획, Next 16 보안 업그레이드
+
+> 형식과 사실 항목은 Claude가 잡음. "배운 것"·"막힌 것"은 사용자 작성.
+
+- 한 일: DEP 계획 10단계·AWS 보안 Pillar 점검표(`docs/design/dep-plan.md`) · 배포 결정 6개 · Next 14.2.35 → 16.4.5(운영 의존성 취약점 critical 1·high 3·moderate 6 → 0) · `/_next/image` 외부 URL 차단
+- 오늘 배운 것 3줄:
+  1. (사용자 작성)
+  2. (사용자 작성)
+  3. (사용자 작성)
+- 막힌 것: (사용자 작성)
+- 내가 결정한 것: 프론트 같은 EC2, DB 컨테이너, 사진 S3, GHCR→ECR, SSH→SSM, 도메인 구매, Next 업그레이드 먼저
+- Claude가 대신 작성한 부분: dep-plan.md, web/ 업그레이드 코드 전부, `next.config.js` 이미지 설정(Next.js 학습 전이라 위임), progress 갱신
+- 면접 대비로 다시 볼 만한 것(Claude 제안): 장기 비밀값 0개 설계(OIDC·인스턴스 역할·ECR·SSM), 컨테이너 이미지 vs 업로드 사진의 수명 주기, 도메인이 매직 링크 신뢰 사슬(DKIM·TLS)에 걸린 이유, 쓰지 않는 기능(`remotePatterns: "**"`)이 곧 공격 표면
+- 다음에 할 것: 브라우저 확인 시점·커밋 결정 → 2단계 컨테이너화
