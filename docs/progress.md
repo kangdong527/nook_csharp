@@ -1,26 +1,28 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **DEP 진행 중 — 1·2·3·4단계 완료(4단계 2026-11-07~08)**. **다음 세션: 도메인 결정·구매 → 5단계(인프라)**. DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6), AWS 구성은 **`docs/design/aws-account-setup.md`**, 종료 절차는 **`docs/design/aws-shutdown-runbook.md`**(서비스 완전 종료 전체 프로세스, 2026-11-08 재구성). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1·2·3·4단계 완료, 7단계 중 도메인 무관 코드 완료(2026-11-09, PR #33·#34·#35)**. **다음 세션: 도메인 이름(PM 확인 대기, 후보 `nookmap.app`) → 구매 → 5단계(인프라)**. 도메인이 계속 늦으면 8단계(CD — ECR·OIDC·SSM) 중 도메인 무관 부분을 먼저 할 수 있다. DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6), AWS 구성은 **`docs/design/aws-account-setup.md`**, 종료 절차는 **`docs/design/aws-shutdown-runbook.md`**(서비스 완전 종료 전체 프로세스, 2026-11-08 재구성). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
      - **세션 시작하면 할 일 (순서대로)**
-       1. `git status` — `main`에서 시작(마지막 병합 PR #31, `6054da9`). 작업 트리 깨끗. 새 클론이면 `git config core.hooksPath .githooks`. GitHub 배너 "main branch isn't protected"는 무시(3단계 결정 — private·Free라 규칙 강제 불가, 공개 전환 시 켬)
+       0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35). 7단계 남은 것은 dep-plan 단계 표 7행
+       1. `git status` — `main`에서 시작(마지막 병합 PR #35, `519f3fa`). 작업 트리 깨끗. 새 클론이면 `git config core.hooksPath .githooks`. GitHub 배너 "main branch isn't protected"는 무시(3단계 결정 — private·Free라 규칙 강제 불가, 공개 전환 시 켬)
        2. ~~4단계 AWS 계정 보안~~ ✅ — 서울 리전(원인: 통합 설정 "표시되는 리전", SCP와 별도) · S3 계정 퍼블릭 차단 · Identity Center 권한 세트 없음(Builder ID 소스) → 대안 nook-prod IAM 역할 `nook-readonly` + `aws login`(CLI 2.39.5) · CLI 읽기 검증 9항목(`aws-account-setup.md` 9절) · nook-prod 루트 자격 증명 "없음" · 계정 이름은 이미 `nook-prod`(세션 표시만 옛 이름). 남은 것: 7단계 전 `nook-readonly` 권한 축소, 시드니 정리(같은 문서 7절)
           - CLI 사용: 조회는 `--profile nook-readonly`, 만료 시 `aws login --profile nook-prod`. Claude는 읽기 명령만
-       3. ~~Dependabot 정리~~ ✅ 2026-11-08 — #16(NuGet 묶음)·#13(npm 묶음) 병합, typescript 7·eslint 10은 ignore 추가(#21, 해제 조건 주석) → Dependabot이 자동으로 닫음. Test.Sdk 18·coverlet 10은 #16과 충돌 후 `rebase`/`recreate` 명령에 Dependabot이 프로젝트별 8개(#22~#29)로 쪼개 다시 열어서 → **Claude가 한 PR(#30)로 직접 올려 병합**(로컬 빌드·단위 132, CI 통합 포함). 원격에 Dependabot 브랜치 2개 남음(#17·#18 추정) — 자동으로 닫히는지 확인, 남아 있으면 손으로 닫기(이미 반영됨)
-       4. **도메인 구매**(결정 5, 5단계 전까지) — **▶ 다음 세션 첫 작업**. 안내 완료, 사용자 결정 대기: ① 등록처(Claude 추천 Route 53 — `.com` $16/년 실측 + 호스팅 영역 $0.50/월, SCP가 `route53domains` 허용 확인 / Cloudflare 약 $10~11) ② 이름(`.com` 권장 — 싼 확장자는 메일 평판 낮아 매직 링크 스팸함 위험). 구매 직후: 개인정보 보호 켜기, 자동 갱신 켜기, **등록자 이메일 인증 15일 내**, 런북 과금 표에 추가. 일찍 시작할 것: SES 도메인 인증·운영 승인 요청(약 24시간 대기), 카카오 도메인 등록
-       5. 일정 추정(2026-11-08, Claude): 남은 DEP 약 8~10.5 작업일(5단계 1.5~2 · 6단계 0.5 · S3 이미지 저장소 구현 0.5~1 · 7단계 2.5~3.5 · 8단계 1~1.5 · 9단계 1 · 10단계 0.5). ⚠️ **S3 이미지 저장소 구현(결정 3)이 dep-plan 단계 표에 없음** → 5단계 또는 7단계에 넣을지 사용자 결정
+       3. ~~Dependabot 정리~~ ✅ 2026-11-08 — #16(NuGet 묶음)·#13(npm 묶음) 병합, typescript 7·eslint 10은 ignore 추가(#21, 해제 조건 주석) → Dependabot이 자동으로 닫음. Test.Sdk 18·coverlet 10은 #16과 충돌 후 `rebase`/`recreate` 명령에 Dependabot이 프로젝트별 8개(#22~#29)로 쪼개 다시 열어서 → **Claude가 한 PR(#30)로 직접 올려 병합**(로컬 빌드·단위 132, CI 통합 포함). 남은 Dependabot 브랜치 2개(#17·#18, 내용은 이미 `main`)는 2026-11-09 사용자가 닫고 브랜치 삭제 ✅
+       4. **도메인 구매**(결정 5, 5단계 전까지) — **▶ 다음 세션 첫 작업**. ① 등록처 **Route 53 확정**(2026-11-09) ② 이름 **PM 확인 대기** — 후보 `nookmap.app`(RDAP 미등록, HSTS 프리로드라 HTTPS만, Route 53 판매). `nook.com`·`nookmap.com` 등 `nook*.com` 10개는 등록됨(RDAP 실측). 이름은 나중에 바꿀 수 없음(새로 사서 옮김). 콘솔 구매는 사용자, Claude는 한 단계씩 안내(Register domains에서 가격 확인 후 멈춤). CLI 조회는 `--region us-east-1`(route53domains 전용), `aws`는 `C:\Program Files\Amazon\AWSCLIV2\aws.exe`(PowerShell PATH에 없음). 구매 직후: 개인정보 보호 켜기, 자동 갱신 켜기, **등록자 이메일 인증 15일 내**, 런북 과금 표에 추가. 일찍 시작할 것: SES 도메인 인증·운영 승인 요청(약 24시간 대기), 카카오 도메인 등록
+       5. 일정 추정(2026-11-08, Claude): 남은 DEP 약 8~10.5 작업일 → 2026-11-09에 S3 구현(결정 3a, 코드)과 7단계 코드 일부 완료. 남은 7단계: SES 발송기·메일 상한(도메인 필요), 개인정보 처리방침·수집 동의(§5), BFF `/api/auth/*` Origin 검사, 429 화면 문구, CSP nonce
+       6. 5단계 때 챙길 것(dep-plan §4, 2026-11-09 추가): compose `ImageStorage__Provider: S3` + **api만** egress 네트워크 · EC2 IMDSv2 **홉 제한 2** · 인스턴스 역할 `s3:ListBucket`(없으면 없는 키 403 → 500) · compose 네트워크 설정을 바꾸면 `down` 후 `up`(DNS 별칭 빠짐) · 배포 헬스체크는 `docker run --rm --network nook-deploy_backend curlimages/curl http://api:8080/health/ready`
      - AWS 구성 전체 정리: **`docs/design/aws-account-setup.md`**(계정·프로젝트·팀·세션·신원 구분, 작업별 어디로 가나, 오늘 한 일, SCP 현황)
      - AWS 작업 원칙(이번 세션 교훈): 콘솔이 새 시작 경험이라 Claude가 아는 화면과 다름 → **한 단계씩, 화면 문구를 먼저 받고** 안내. 비밀값·MFA 코드·시크릿 키는 대화에 붙이지 않음. 리소스를 만들면 `aws-shutdown-runbook.md` "실제로 만든 과금 대상" 표에 추가. 리소스 작업 전 **계정·리전** 확인
      - 완료(2026-11-07): 1단계 Next 16(`37de343`, PR #10) · 2단계 컨테이너화(PR #11, ADR-003 Claude 작성 — Provider 설정값 선택·migrate 1회성 컨테이너·edge/backend 네트워크·비루트·Origin `NOOK_PUBLIC_ORIGIN`) · 3단계 CI(`.github/workflows/ci.yml` api·web·audit·images, Dependabot 루트, `.githooks/pre-commit`, lint 오류 5건 수정, Trivy 대응으로 api·migrate chiseled-extra·web npm 제거)
      - 결정(2026-11-07, 사용자): **결정 6** 5단계 SG는 내 IP만 → 7단계(보안 + 개인정보 처리방침·수집 동의) 완료 뒤 전체 공개 · lint 오류 = CI 실패 · `main` 보호는 규칙 없이 CI 표시 + 로컬 훅(private·Free 제약) · Claude 커밋 전 스테이징 경고 훅(`.claude/hooks/staged-check.js`)
      - 로컬 compose 사용: `cp deploy/.env.example deploy/.env`(값 채우기) → `docker compose -f deploy/compose.yaml up -d --build` → http://localhost:3300. **`npm run dev`를 끄고**(같은 3300을 IPv6로 가로챔) `netstat -ano | findstr :3300`에 127.0.0.1만 남는지 확인. 로그인 링크는 `docker compose -f deploy/compose.yaml logs api`. api 컨테이너는 셸 없음(chiseled) → 파일은 `docker compose -f deploy/compose.yaml cp api:/app/data/images ./tmp-images`
      - 백로그(원본 범위 밖, PM 결정): X1 리뷰 사진 순서 바꾸기 · X2 그룹원 보기 → `docs/design/fe-backend-backlog.md` §5
-     - 여전히 미결: `web/` 테스트 러너(incident 004 §7), 토큰 수명 60분 유지 vs 7일/refresh, 개인정보 정책 결정(만 14세 미만·선택 항목 동의·파기 범위, dep-plan §5), 이미지 저장소 인터페이스 이름(`IReviewImageStorage` → 프로필 사진도 씀)
-     - 7단계 메모: `/api/auth/{signup,logout,magic-link}`에 Origin 검사 없음 · `UseHttpsRedirection` 경고(프록시 뒤) · DataProtection 경고(JWT만 써서 무영향) · IP RateLimiter 전 ForwardedHeaders 필수
+     - 여전히 미결: `web/` 테스트 러너(incident 004 §7), 토큰 수명 60분 유지 vs 7일/refresh, 개인정보 정책 결정(만 14세 미만·선택 항목 동의·파기 범위, dep-plan §5). ~~이미지 저장소 인터페이스 이름~~ → `IImageStorage`(2026-11-09)
+     - 7단계 메모: `/api/auth/{signup,logout,magic-link}`에 Origin 검사 없음 · DataProtection 경고(JWT만 써서 무영향) · ~~`UseHttpsRedirection` 경고~~ 제거, 로그 0건 실측 · ~~ForwardedHeaders~~ ✅
   2. **FE** (완료 — PR #9, 2026-10-28) (순서 사용자 확정, 2026-10-26) — 범위 확정(2026-10-27 PM): **원본 화면 전체**. 백엔드 추가 API가 늘어 일정 재검토 필요(사용자). 진행 순서는 그대로 로그인·지도/별 상태·리뷰 작성부터
      - 결정(사용자): 같은 리포 `web/`(원본 리포는 Supabase판으로 보존), TypeScript + Next.js 14 그대로, React Native 변환 안 함. 개발 포트 **3300**(카카오 도메인 등록 기준 → CORS도 3300)
      - 연결 구조: 브라우저 → C# API → Docker PostgreSQL. 프론트는 DB를 모른다. 끝나면 `@supabase/*`·`NEXT_PUBLIC_SUPABASE_*` 전부 제거
@@ -437,6 +439,16 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
 6. 발견(2단계 함정): BFF Origin 검사가 프록시 뒤에서 모든 POST를 403으로 만듦 / ForwardedHeaders 없으면 IP RateLimiter가 전원을 한 명으로 봄
 커밋: 없음(`fix/next16-security` 작업 트리 — 다음 세션 첫 결정)
 Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `next.config.js` 이미지 설정(사용자: "Next.js는 아직 학습 전"), progress·learning-log 갱신. 결정은 사용자
+
+### 2026-11-09 (DEP — 7단계 코드)
+1. Dependabot 잔여 #17·#18: 내용이 이미 `main`(#30)이라 충돌 해결 대신 닫기 → 브랜치 삭제(사용자). 병합 버튼 비활성 = 충돌 PR 정상 동작
+2. 도메인: 등록처 Route 53(사용자). `nook.com`(1997~)·`nookmap.com`(2026-04~) 등록됨 — Verisign RDAP로 AWS 로그인 없이 조회. 후보 `nookmap.app`. **PM 부재로 이름 결정 보류** → 도메인 무관 작업 먼저(A안, 과금 시작 안 함)
+3. S3 이미지 저장소(PR #33): 결정 — 이름 `IImageStorage`·API 프록시 유지(버킷 비공개)·테스트 MinIO → **`adobe/s3mock`**(MinIO 공개 이미지 없음: Docker Hub 없음, quay 401). 처음부터 초록인 테스트를 변이로 점검하다 **약한 테스트 발견**: 형식 검사를 지워도 S3는 404 → null이라 통과 → "객체를 올려 둔 뒤에도 null"로 수정
+4. IP 요청 제한(PR #34): 실제 경로 Caddy → web(BFF) → api(dep-plan 가정과 다름) → 고리 3개(Caddy 덮어쓰기·BFF 맨 오른쪽 전달·api 신뢰 대역). **신뢰 목록이 비면 "모두 믿음"** — 변이로 실측. 한도(사용자): 전체 300/분, 매직 링크 요청·소비 각 5/10분(칸 = IP + 경로 — 가입 1회가 3칸 쓰는 문제). 테스트 설계 실수(전체 한도를 클래스 전체에 낮춤)로 두 한도가 모두 적용됨을 확인. compose 실측: 위조 XFF 6회 → 6번째 429. 서브넷 변경 후 migrate DNS 실패 → 가설(기존 컨테이너 이어 붙이기로 `db` 별칭 빠짐) → `down`/`up`으로 확인
+5. 헬스체크(PR #35): live/ready 분리·배포 스크립트가 임시 curl 컨테이너로(사용자). compose에서 db 정지 시 live 200·ready 503 실측. `IncludeErrorDetails` 운영 동작 테스트로 고정(D5 이월 해소), `UseHttpsRedirection` 제거
+6. 보안 헤더·CSP(PR #35): Report-Only 측정 → SDK는 `t1.kakaocdn.net`(추정 `daumcdn` 틀림), 로컬 http 때문에 스킴 불일치 617건 → 스킴 없는 출처 → 강제 모드에서 `'unsafe-eval'` 없이 전 기능 정상(사용자 브라우저 확인)
+커밋: `50431ca`·`567a885`·`fe4c337`(#33) · `c474a7a`·`17f78c6`(#34) · `398887c`·`8ab8a9d`·`119c90a`·`fc293ef`(#35) · 이 progress 커밋
+Claude가 작성(서비스·테스트 위임 기간): S3 구현·테스트·픽스처, ForwardedHeaders·RateLimiter·BFF XFF 전달, 헬스체크, Caddy 헤더·CSP, dep-plan 갱신. 결정은 사용자(등록처·도메인 보류·A안·이름·프록시·테스트 대상·제한 위치·범위·수치·헬스 모양·호출 주체)
 
 ## 체크리스트
 
