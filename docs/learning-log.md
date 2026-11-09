@@ -452,3 +452,19 @@
 - 면접 대비로 다시 볼 만한 것(Claude 제안): 다중 계정 구조(관리·신원·작업), 루트 보호와 로그인 경로 세기, IAM 평가 순서(명시적 Deny 우선), `NotAction`+`Deny` 허용 목록 패턴, 차단(fail-closed) vs 알림(fail-open) 비용 통제, 조직 트레일이 멤버 계정 침해에도 남는 이유
 - 다음에 할 것: 콘솔 서울 재확인 → S3 퍼블릭 액세스 차단 → Identity Center → CLI SSO → 도메인 구매
 
+
+## 2026-11-09 (DEP-7) — S3 저장소, IP 요청 제한, 헬스체크, 보안 헤더·CSP
+
+> 형식과 사실 항목은 Claude가 잡음. "배운 것"·"막힌 것"은 사용자 작성.
+
+- 한 일: Dependabot 잔여 PR 정리 · 등록처 Route 53 · S3 이미지 저장소(PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, `UseHttpsRedirection` 제거, 보안 헤더·강제 CSP(PR #35)
+- 오늘 배운 것 3줄 (내 질문 기준, Claude 작성 — 사용자 요청):
+  1. 도메인 이름은 산 뒤에 바꿀 수 없다 — 새로 사서 옮겨야 하고, 그때 SES 인증·인증서·`NOOK_PUBLIC_ORIGIN`·카카오 등록·쿠키 도메인을 다시 한다. 바꾸는 비용은 사용자가 생긴 뒤(북마크·받은 메일 링크)가 가장 크다
+  2. 충돌 난 PR의 병합 버튼은 꺼지는 게 정상이고, 내용이 이미 `main`에 있으면 해결하지 않고 닫는다. 브랜치를 쌓아 PR을 나누면(base = 앞 브랜치) 리뷰 범위가 맞고, 병합은 반드시 앞 PR부터 — squash 대신 병합 커밋
+  3. compose `stop`은 멈춤, `down`은 컨테이너·네트워크 삭제(볼륨은 남음 — Docker Desktop 목록에서만 사라짐), `down -v`는 DB 볼륨까지 삭제. 운영에서는 `-v`를 쓰지 않는다
+- 막힌 것: (사용자 작성)
+- 내가 결정한 것: Route 53 · 도메인 이름 PM 확인 후로 보류, 도메인 무관 코드 먼저 · `IImageStorage` · API 프록시 유지 · `adobe/s3mock` · 요청 제한은 C# API에서, 전체 + 인증 엄격(300/분, 5/10분) · 헬스 live/ready 분리, 배포 스크립트의 curl 컨테이너가 호출
+- Claude가 대신 작성한 부분: 위 코드·테스트 전부(서비스·테스트 위임 기간), dep-plan·progress 갱신, 이 기록 형식
+- 사실·교훈: 처음부터 초록인 테스트는 변이로 확인 — S3에서 형식 검사 테스트가 검사 없이도 통과하던 것 발견 · `ForwardedHeadersOptions` 신뢰 목록이 비면 "모두 믿음"(변이 실측) · 프록시가 2단(Caddy → BFF → api)이면 고리마다 신뢰 근거가 필요 · compose 네트워크 설정 변경 뒤 기존 컨테이너는 DNS 별칭이 빠짐 → `down`/`up` · CSP는 Report-Only로 측정 후 강제, 스킴 없는 출처 = 페이지 스킴 따라감 · 추정(daumcdn)은 측정(kakaocdn)으로 고침
+- 면접 대비로 다시 볼 만한 것(Claude 제안): X-Forwarded-For 위조와 신뢰 프록시, 고정 창 vs 슬라이딩 창 vs 토큰 버킷, liveness vs readiness(재시작 판단에 의존성 검사를 넣으면 생기는 일), CSP `unsafe-inline`/`unsafe-eval`/nonce, HSTS 프리로드, 최소 권한(egress·ListBucket)
+- 다음에 할 것: 도메인 이름 확정(PM) → 구매 → 5단계 인프라
