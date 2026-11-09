@@ -1,10 +1,11 @@
+using System.Diagnostics;
+using Nook.Application.Images;
 using Nook.Application.Places;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
 using Nook.Domain.Stars;
 using Nook.Domain.Users;
 using Nook.SharedKernel;
-using System.Diagnostics;
 
 namespace Nook.Application.Reviews;
 
@@ -20,7 +21,7 @@ public sealed record CreateReviewCommand(
 public sealed class CreateReviewHandler(
     IPlaceRepository places,
     IReviewRepository reviews,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     IReviewImageUrls urls,
     TimeProvider time)
 {

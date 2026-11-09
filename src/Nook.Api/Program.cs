@@ -35,13 +35,20 @@ switch (builder.Configuration["ImageStorage:Provider"] ?? (devDefault ? "LocalDi
 {
     // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남는다. 컨테이너에서는 LocalRoot 를 볼륨 경로로 준다. 통합 테스트는 메모리 구현으로 덮어쓴다.
     case "LocalDisk":
-        builder.Services.AddLocalDiskReviewImageStorage(
+        builder.Services.AddLocalDiskImageStorage(
             builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
         break;
-    case var other: throw new InvalidOperationException($"ImageStorage:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: LocalDisk)");
+    // 운영(dep-plan 결정 3). 버킷·리전은 필수 — 빠지면 시작에서 실패. ServiceUrl은 S3 호환 서버로 시험할 때만.
+    case "S3":
+        builder.Services.AddS3ImageStorage(
+            builder.Configuration["ImageStorage:S3:Bucket"] ?? throw new InvalidOperationException("ImageStorage:S3:Bucket 설정이 없습니다."),
+            builder.Configuration["ImageStorage:S3:Region"] ?? throw new InvalidOperationException("ImageStorage:S3:Region 설정이 없습니다."),
+            builder.Configuration["ImageStorage:S3:ServiceUrl"]);
+        break;
+    case var other: throw new InvalidOperationException($"ImageStorage:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: LocalDisk, S3)");
 }
 
-// 키 → URL 기준 주소. 기본값은 BFF 중계 경로(브라우저는 Next를 거친다). DEP에서 S3·CDN 주소로 바꾼다.
+// 키 → URL 기준 주소. BFF 중계 경로(브라우저 → Next → API → 저장소). S3여도 그대로 — 버킷은 비공개, API가 프록시(2026-11-09 결정).
 builder.Services.AddReviewImageUrls(builder.Configuration["ImageStorage:PublicBaseUrl"] ?? "/api/nook/images/");
 
 builder.Services.AddSingleton(TimeProvider.System);

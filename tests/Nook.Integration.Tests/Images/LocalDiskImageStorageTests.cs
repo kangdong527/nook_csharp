@@ -1,10 +1,9 @@
-using Nook.Application.Reviews;
-using Nook.Infrastructure.Reviews;
+using Nook.Infrastructure.Images;
 
-namespace Nook.Integration.Tests.Reviews;
+namespace Nook.Integration.Tests.Images;
 
 // 개발용 로컬 디스크 스토리지(FE-2). 실제 파일 시스템을 쓰므로 통합 테스트 쪽에 둔다(DB는 쓰지 않는다).
-public sealed class LocalDiskReviewImageStorageTests : IDisposable
+public sealed class LocalDiskImageStorageTests : IDisposable
 {
     // 테스트 목록
     //
@@ -17,9 +16,9 @@ public sealed class LocalDiskReviewImageStorageTests : IDisposable
     private static readonly byte[] Bytes = "RIFF\0\0\0\0WEBPdata"u8.ToArray();
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "nook-images-" + Guid.NewGuid().ToString("N"));
-    private readonly LocalDiskReviewImageStorage _storage;
+    private readonly LocalDiskImageStorage _storage;
 
-    public LocalDiskReviewImageStorageTests() => _storage = new LocalDiskReviewImageStorage(_root);
+    public LocalDiskImageStorageTests() => _storage = new LocalDiskImageStorage(_root);
 
     public void Dispose()
     {

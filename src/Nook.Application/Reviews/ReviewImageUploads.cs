@@ -1,3 +1,4 @@
+using Nook.Application.Images;
 using Nook.SharedKernel;
 
 namespace Nook.Application.Reviews;
@@ -31,7 +32,7 @@ internal static class ReviewImageUploads
 
     // 트랜잭션 밖에서 부른다(CLAUDE.md). 실패는 잡지 않는다 — 예외 → 500, 먼저 올라간 이미지는 배치가 정리(ADR-009).
     public static async Task UploadAsync(
-        IReviewImageStorage storage,
+        IImageStorage storage,
         IReadOnlyList<ReviewImageFile> images,
         IReadOnlyList<ReviewImageFormat> formats,
         IReadOnlyList<string> keys,

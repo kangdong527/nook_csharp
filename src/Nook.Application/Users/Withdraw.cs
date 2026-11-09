@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nook.Application.Auth;
 using Nook.Application.Common;
 using Nook.Application.Groups;
+using Nook.Application.Images;
 using Nook.Application.Reviews;
 using Nook.Domain.Groups;
 using Nook.Domain.Users;
@@ -24,7 +25,7 @@ public sealed class WithdrawHandler(
     IUserRepository users,
     IGroupRepository groups,
     IMagicLinkTokenStore tokens,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     ILogger<WithdrawHandler> logger)
 {
     public async Task<Result> HandleAsync(Guid userIdValue, CancellationToken ct)

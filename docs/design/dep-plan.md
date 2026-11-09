@@ -10,9 +10,10 @@
 | 1 | 프론트 위치 | **같은 EC2**(Caddy가 web·api 앞단) | BFF 쿠키가 같은 출처 → CORS 불필요, 추가 비용 0 |
 | 2 | 운영 DB | **EC2 안 postgres 컨테이너**(compose) | 비용 최소. 대가: 백업·디스크 책임 본인 → 9단계 복원 리허설 필수 |
 | 3 | 사용자 업로드 이미지 | **S3로 교체**(로컬 디스크 `App_Data/images` 구현체 → S3 구현체) | 컨테이너 교체 시 유실 방지, 암호화·백업 |
+| 3a | S3 구현 세부 (2026-11-09) | **코드는 5단계 전에 구현**(도메인 대기 중, `567a885`) · 인터페이스 `IImageStorage`(리뷰·프로필 공용, `50431ca`) · **API 프록시 유지**(버킷 완전 비공개, `GET /images/{key}`가 S3에서 읽음, FE 변경 없음) · 테스트는 **`adobe/s3mock`** Testcontainers | presigned URL은 만료로 immutable 캐시가 깨지고 FE·BFF 수정 필요, CloudFront+OAC는 리소스·도메인 결정과 엮임 → 기각. MinIO는 공개 이미지가 없어짐(Docker Hub 없음·quay 401 실측) |
 | 4a | 컨테이너 레지스트리 | **GHCR → ECR** (원래 계획 변경) | private GHCR pull엔 서버에 GitHub PAT(장기 비밀값) 필요. ECR은 인스턴스 역할로 pull |
 | 4b | 배포 경로 | **SSH → SSM Run Command** (원래 계획 변경) | 22번 포트를 닫고 SSH 키를 GitHub에 두지 않음. 접속도 Session Manager |
-| 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지) | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각 |
+| 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지). 등록처 **Route 53**(2026-11-09). 이름은 **PM 확인 대기** — 후보 `nookmap.app`(RDAP 미등록, HSTS 프리로드라 HTTPS만). `nook.com`(1997~)·`nookmap.com`(2026-04~) 등 `nook*.com` 10개는 등록됨 | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각. Route 53: 계정·비밀값이 늘지 않고 SES·ACM 레코드 연동(Cloudflare 연 ~$10 저렴하나 계정 추가) |
 | 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료(보안 + 개인정보 처리방침·수집 동의) 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
 | 7 | 계정 플랜·리전 (2026-11-07) | **A. Paid plan 업그레이드 → 서울(`ap-northeast-2`)**. 순서: 루트 MFA → Budgets 알림 → 업그레이드(크레딧 유지·되돌림 여부 화면 확인) → 서울 활성화 | Free plan은 시드니(`ap-southeast-2`) 고정, 다른 리전은 업그레이드 + 고급 기능 활성화 필요(실측 팝업). 시드니(B)는 지연·**개인정보 국외 이전**(§5 처리방침에 고지 필요)·약 6개월 기한·계획 수정 → 기각 |
 
@@ -69,6 +70,10 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 - **BFF Origin 검사 × 프록시**: `api/nook/[...path]/route.ts`가 `origin !== request.nextUrl.origin`이면 403. Caddy 뒤에선 Next가 보는 자기 주소(`http://web:3300` 류)와 브라우저 Origin(`https://도메인`)이 달라 **모든 POST가 403**. 검사를 풀면 CSRF 방어가 사라짐 → 허용 Origin을 설정값으로 명시(2·7단계)
 - **ForwardedHeaders**: Caddy 뒤에서 모든 요청 IP가 프록시 IP → IP 기준 RateLimiter가 전원을 한 명으로 봄. 반대로 `X-Forwarded-For`를 무조건 믿으면 IP 위조 우회 → 신뢰 프록시(KnownNetworks/KnownProxies) 명시(7단계)
 - **ARM 이미지**: t4g = arm64. Actions에서 arm64 빌드(arm 러너 또는 buildx) 필요(8단계)
+- **S3 × compose 네트워크** (2026-11-09): `backend`가 `internal: true`라 api가 S3에 못 나간다(연결 시간 초과). Provider를 `S3`로 바꿀 때 **api만** egress 네트워크에 추가(5단계). 로컬 compose는 LocalDisk라 지금은 열지 않음(최소 권한)
+- **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
+- **S3 없는 키 = 403**: 역할에 `s3:ListBucket`이 없으면 S3는 없는 키에 404 대신 403을 준다. `S3ImageStorage`는 404만 "없음"으로 보고 403은 설정 사고로 올려 500 → 인스턴스 역할 정책에 버킷 `s3:ListBucket` + 객체 `s3:GetObject`·`PutObject`·`DeleteObject`(5단계)
+- **route53domains는 us-east-1 전용**: 리전 제한 SCP를 걸면 이 서비스는 예외로 둬야 한다. CLI는 `--region us-east-1`
 
 ## 5. 개인정보 처리방침·수집 동의 (2026-11-07 추가, 7단계 · 공개 조건)
 

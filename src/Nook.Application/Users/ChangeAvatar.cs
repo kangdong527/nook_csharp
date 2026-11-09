@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Nook.Application.Auth;
+using Nook.Application.Images;
 using Nook.Application.Reviews;
 using Nook.Domain.Users;
 using Nook.SharedKernel;
@@ -12,7 +13,7 @@ public sealed record ChangeAvatarCommand(Guid UserId, ReviewImageFile Image);
 
 public sealed class ChangeAvatarHandler(
     IUserRepository users,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     IReviewImageUrls urls,
     TimeProvider time,
     ILogger<ChangeAvatarHandler> logger)
@@ -46,7 +47,7 @@ public sealed class ChangeAvatarHandler(
 
 public sealed class RemoveAvatarHandler(
     IUserRepository users,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     IReviewImageUrls urls,
     ILogger<RemoveAvatarHandler> logger)
 {
