@@ -126,11 +126,11 @@ SCP = 계정 안에서 어떤 권한을 받아도 넘을 수 없는 **상한선*
 | 정책 | 연결 | 내용 | 조치 |
 |---|---|---|---|
 | `FullAWSAccess` | 기본 | 모든 작업 허용(상한) | 유지 |
-| `AdvancedModeRegionRestrictionSecurityControlPolicy` | **Root** | `RegionFloor`: 허용 목록 밖 리전의 모든 작업 거부. `UsEast1Partitional`: 버지니아는 글로벌 서비스만. `UsWest2Partitional`: 오리건은 Identity Center 등 일부만 | **`RegionFloor`에 서울 추가** → 현재 허용: `ap-northeast-2`, `ap-southeast-2`, `unspecified`, `us-east-1`, `us-west-2`. 시드니는 자원 조회 후 제거 검토 |
+| `AdvancedModeRegionRestrictionSecurityControlPolicy` | **Root** | `RegionFloor`: 허용 목록 밖 리전의 모든 작업 거부. `UsEast1Partitional`: 버지니아는 글로벌 서비스만. `UsWest2Partitional`: 오리건은 Identity Center 등 일부만 | **`RegionFloor`에 서울 추가** → **시드니 제거(2026-11-09)**. 현재 허용: `ap-northeast-2`, `unspecified`, `us-east-1`, `us-west-2`. 제거 전 시드니 자원 0개 조회(EC2·EBS·EIP·SES·태그 API·S3), 제거 후 시드니 `ec2 describe-instances` → `UnauthorizedOperation … explicit deny in a service control policy` ✅, 서울 0건 정상 ✅. `NotAction` bedrock 예외는 AWS 것이라 유지 |
 | `ManagedAccountSecurityControlPolicy` | Root | `BlockOrgEscape`: 멤버 계정의 자체 해지·조직 탈퇴·Identity Center 인스턴스 생성 금지. `ProtectManagedRoles`: `role/managed/*` 변경 금지 | 유지(우리 계획을 막지 않음) |
 | `BudgetsSpendLimitDeny*` 4개 | **없음** | 사라진 "지출 한도"의 구현체(예측 지출이 한도에 닿으면 Budgets가 붙이던 SCP) | 그대로 둠(Budgets 서비스 관리) |
 
-⚠️ `RegionFloor`는 AWS가 만든 정책이다. 서울이 다시 막히면 이 정책부터 본다.
+⚠️ `RegionFloor`는 AWS가 만든 정책이다. 서울이 다시 막히거나 **시드니가 다시 목록에 생기면**(AWS가 덮어쓸 가능성) 이 정책부터 본다.
 
 **리전은 두 곳에서 따로 관리한다** — 바꿀 때 둘 다 고친다(시드니 정리 때 포함):
 
@@ -175,8 +175,8 @@ SCP = 계정 안에서 어떤 권한을 받아도 넘을 수 없는 **상한선*
   - [ ] **비용 이상 탐지(Cost Anomaly Detection)** 켜기: Management → Billing → 비용 이상 탐지 → 모니터(AWS 서비스) + 이메일 구독. 무료. 키 유출 같은 급격한 지출 대비
   - [ ] 캘린더 알림: ① **크레딧 만료일**(Billing → 크레딧에서 날짜 확인 — 가입 시 $100·182일. 만료 뒤부터 실제 청구가 체감됨) ② **도메인 갱신일**(구매 후, 갱신 2주 전)
 - [x] nook-prod 루트: `AccountMFAEnabled 0`(9절)이었으나 Management → IAM → 루트 액세스 관리에서 nook-prod 루트 자격 증명 **"없음"** 확인(2026-11-07) → 루트로 로그인할 경로 자체가 없어 MFA 불필요
-- [ ] **7단계(개인정보) 전**: S3에 사용자 데이터가 들어가기 전 `nook-readonly`를 `ReadOnlyAccess` → `ViewOnlyAccess + SecurityAudit`로 축소(데이터 읽기 제거)
-- [ ] 시드니 정리 시 SCP `RegionFloor`와 "표시되는 리전" **둘 다** 수정
+- [x] **7단계(개인정보) 전**: S3에 사용자 데이터가 들어가기 전 `nook-readonly`를 `ReadOnlyAccess` → `ViewOnlyAccess + SecurityAudit`로 축소(데이터 읽기 제거) — 2026-11-09 사용자 콘솔(연결 먼저 → `ReadOnlyAccess` 제거). 확인: `sts get-caller-identity` = `assumed-role/nook-readonly/…`, 서울 `ec2 describe-instances` 0건 조회 성공
+- [x] 시드니 정리 시 SCP `RegionFloor`와 "표시되는 리전" **둘 다** 수정 — 2026-11-09. SCP는 5절 표, nook-prod 표시 리전은 버지니아·오리건·서울 3개(사용자 확인). 계기: 같은 날 SES 이메일 자격 증명을 시드니에 잘못 만듦(콘솔이 마지막 리전 기억)
 
 ---
 
