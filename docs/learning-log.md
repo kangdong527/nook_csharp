@@ -458,10 +458,10 @@
 > 형식과 사실 항목은 Claude가 잡음. "배운 것"·"막힌 것"은 사용자 작성.
 
 - 한 일: Dependabot 잔여 PR 정리 · 등록처 Route 53 · S3 이미지 저장소(PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, `UseHttpsRedirection` 제거, 보안 헤더·강제 CSP(PR #35)
-- 오늘 배운 것 3줄:
-  1. (사용자 작성)
-  2. (사용자 작성)
-  3. (사용자 작성)
+- 오늘 배운 것 3줄 (내 질문 기준, Claude 작성 — 사용자 요청):
+  1. 도메인 이름은 산 뒤에 바꿀 수 없다 — 새로 사서 옮겨야 하고, 그때 SES 인증·인증서·`NOOK_PUBLIC_ORIGIN`·카카오 등록·쿠키 도메인을 다시 한다. 바꾸는 비용은 사용자가 생긴 뒤(북마크·받은 메일 링크)가 가장 크다
+  2. 충돌 난 PR의 병합 버튼은 꺼지는 게 정상이고, 내용이 이미 `main`에 있으면 해결하지 않고 닫는다. 브랜치를 쌓아 PR을 나누면(base = 앞 브랜치) 리뷰 범위가 맞고, 병합은 반드시 앞 PR부터 — squash 대신 병합 커밋
+  3. compose `stop`은 멈춤, `down`은 컨테이너·네트워크 삭제(볼륨은 남음 — Docker Desktop 목록에서만 사라짐), `down -v`는 DB 볼륨까지 삭제. 운영에서는 `-v`를 쓰지 않는다
 - 막힌 것: (사용자 작성)
 - 내가 결정한 것: Route 53 · 도메인 이름 PM 확인 후로 보류, 도메인 무관 코드 먼저 · `IImageStorage` · API 프록시 유지 · `adobe/s3mock` · 요청 제한은 C# API에서, 전체 + 인증 엄격(300/분, 5/10분) · 헬스 live/ready 분리, 배포 스크립트의 curl 컨테이너가 호출
 - Claude가 대신 작성한 부분: 위 코드·테스트 전부(서비스·테스트 위임 기간), dep-plan·progress 갱신, 이 기록 형식
