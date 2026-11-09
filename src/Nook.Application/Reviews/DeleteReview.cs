@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Nook.Application.Bookmarks;
+using Nook.Application.Images;
 using Nook.Domain.Reviews;
 using Nook.Domain.Stars;
 using Nook.Domain.Users;
@@ -23,7 +24,7 @@ public sealed record DeleteReviewView(bool Changed, string? Star)
 public sealed class DeleteReviewHandler(
     IReviewRepository reviews,
     IBookmarkRepository bookmarks,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     ILogger<DeleteReviewHandler> logger)
 {
     public async Task<Result<DeleteReviewView>> HandleAsync(DeleteReviewCommand command, CancellationToken ct)

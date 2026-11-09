@@ -1,11 +1,12 @@
+using Nook.Application.Images;
 using Nook.Application.Reviews;
 
-namespace Nook.Infrastructure.Reviews;
+namespace Nook.Infrastructure.Images;
 
 // 개발용 로컬 디스크 스토리지(FE-2 이미지 A안). 재시작해도 남는다 — 화면 확인용. 운영(S3)은 DEP 주간에 구현체만 교체한다.
 // 키 → 경로: {root}/{key}. 키 형식은 ReviewImageKeys가 정한 모양만 받는다(경로 조작 방어 1차),
 // 합친 경로가 root 밖이면 거절한다(2차 — 형식 규칙이 나중에 느슨해져도 디스크 밖으로 나가지 않게).
-public sealed class LocalDiskReviewImageStorage(string root) : IReviewImageStorage
+public sealed class LocalDiskImageStorage(string root) : IImageStorage
 {
     private readonly string _root = Path.GetFullPath(root);
 

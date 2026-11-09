@@ -1,19 +1,20 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nook.Api.Auth;
+using Nook.Application.Images;
 using Nook.Application.Reviews;
 using Nook.Domain.Bookmarks;
 using Nook.Domain.Likes;
 using Nook.Domain.Places;
 using Nook.Domain.Reviews;
 using Nook.Domain.Users;
-using Nook.Infrastructure.Reviews;
+using Nook.Infrastructure.Images;
 using Nook.Integration.Tests.Infrastructure;
 using Nook.SharedKernel;
 
@@ -200,9 +201,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var rendezvous = new Barrier(participantCount: 2);
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp =>
-                new RendezvousStorage(sp.GetRequiredService<InMemoryReviewImageStorage>(), rendezvous));
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp =>
+                new RendezvousStorage(sp.GetRequiredService<InMemoryImageStorage>(), rendezvous));
         });
 
         var responses = await Task.WhenAll(CreateAsync(_place.Id.Value, Jpeg), CreateAsync(_place.Id.Value, Jpeg));
@@ -324,9 +325,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         _factory.Dispose();
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp =>
-                new FailingDeleteStorage(sp.GetRequiredService<InMemoryReviewImageStorage>()));
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp =>
+                new FailingDeleteStorage(sp.GetRequiredService<InMemoryImageStorage>()));
         });
         var (reviewId, a, _, _) = await SeedReviewWithThreeImagesAsync();
 
@@ -380,9 +381,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         _factory.Dispose();
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp =>
-                new BeforePutStorage(sp.GetRequiredService<InMemoryReviewImageStorage>(), async () =>
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp =>
+                new BeforePutStorage(sp.GetRequiredService<InMemoryImageStorage>(), async () =>
                 {
                     await using var db = Db.CreateContext();
                     await db.Reviews.Where(r => r.Id == ReviewId.From(deleteOnUpload!.Value)).ExecuteDeleteAsync();
@@ -541,9 +542,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         _factory.Dispose();
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp =>
-                new FailingDeleteStorage(sp.GetRequiredService<InMemoryReviewImageStorage>()));
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp =>
+                new FailingDeleteStorage(sp.GetRequiredService<InMemoryImageStorage>()));
         });
         var reviewId = await SeedReviewToDeleteAsync();
 
@@ -659,9 +660,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var rendezvous = new Barrier(participantCount: 2);
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp =>
-                new RendezvousStorage(sp.GetRequiredService<InMemoryReviewImageStorage>(), rendezvous));
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp =>
+                new RendezvousStorage(sp.GetRequiredService<InMemoryImageStorage>(), rendezvous));
         });
     }
 
@@ -671,9 +672,9 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
         var rendezvous = new Barrier(participantCount: 2);
         (_factory, _client) = CreateClient(services =>
         {
-            services.RemoveAll<IReviewImageStorage>();
-            services.AddSingleton<IReviewImageStorage>(sp => new OrderedGateStorage(
-                sp.GetRequiredService<InMemoryReviewImageStorage>(), rendezvous, heldContentType, release));
+            services.RemoveAll<IImageStorage>();
+            services.AddSingleton<IImageStorage>(sp => new OrderedGateStorage(
+                sp.GetRequiredService<InMemoryImageStorage>(), rendezvous, heldContentType, release));
         });
     }
 
@@ -809,7 +810,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     }
 
     // 업로드 지점에서 두 요청이 서로를 기다린다. 둘 다 여기까지 왔다는 것은 둘 다 사전 확인(4단계)을 통과했다는 뜻.
-    private sealed class RendezvousStorage(InMemoryReviewImageStorage inner, Barrier rendezvous) : IReviewImageStorage
+    private sealed class RendezvousStorage(InMemoryImageStorage inner, Barrier rendezvous) : IImageStorage
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
@@ -828,7 +829,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     // 랑데부 뒤 heldContentType 업로드만 붙잡는다 — 다른 요청이 커밋까지 끝낸 다음 테스트가 release로 풀어 준다.
     // 랑데부는 출발선(둘 다 조회 완료)을, release는 커밋 순서를 고정한다.
     private sealed class OrderedGateStorage(
-        InMemoryReviewImageStorage inner, Barrier rendezvous, string heldContentType, Task release) : IReviewImageStorage
+        InMemoryImageStorage inner, Barrier rendezvous, string heldContentType, Task release) : IImageStorage
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
@@ -847,7 +848,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     }
 
     // 커밋 후 정리가 실패하는 스토리지. 업로드는 그대로.
-    private sealed class FailingDeleteStorage(InMemoryReviewImageStorage inner) : IReviewImageStorage
+    private sealed class FailingDeleteStorage(InMemoryImageStorage inner) : IImageStorage
     {
         public Task PutAsync(string storageKey, Stream content, string contentType, CancellationToken ct) =>
             inner.PutAsync(storageKey, content, contentType, ct);
@@ -859,7 +860,7 @@ public sealed class ReviewsApiTests : IntegrationTestBase, IAsyncLifetime, IDisp
     }
 
     // 업로드 직전에 끼어든다 — 핸들러의 조회와 저장 사이에 다른 트랜잭션을 커밋시키는 지점.
-    private sealed class BeforePutStorage(InMemoryReviewImageStorage inner, Func<Task> beforePut) : IReviewImageStorage
+    private sealed class BeforePutStorage(InMemoryImageStorage inner, Func<Task> beforePut) : IImageStorage
     {
         public async Task PutAsync(string storageKey, Stream content, string contentType, CancellationToken ct)
         {

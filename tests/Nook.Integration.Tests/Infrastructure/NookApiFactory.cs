@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Nook.Application.Auth;
 using Nook.Domain.Users;
+using Nook.Infrastructure.Images;
 using Nook.Infrastructure;
-using Nook.Infrastructure.Reviews;
 
 namespace Nook.Integration.Tests.Infrastructure;
 
@@ -24,7 +24,7 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
 
     public RecordingMailQueue Mail => Services.GetRequiredService<RecordingMailQueue>();
 
-    public InMemoryReviewImageStorage ImageStorage => Services.GetRequiredService<InMemoryReviewImageStorage>();
+    public InMemoryImageStorage ImageStorage => Services.GetRequiredService<InMemoryImageStorage>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -46,7 +46,7 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
             services.RemoveAll<IMagicLinkMailQueue>();
             services.AddSingleton<IMagicLinkMailQueue>(sp => sp.GetRequiredService<RecordingMailQueue>());
             // 리뷰 이미지는 메모리에 — 테스트가 ImageStorage.Objects로 올라간 것을 확인한다.
-            services.AddInMemoryReviewImageStorage();
+            services.AddInMemoryImageStorage();
 
             configureServices?.Invoke(services);
         });

@@ -1,9 +1,10 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Nook.Application.Images;
 using Nook.Domain.Reviews;
 using Nook.Domain.Stars;
 using Nook.Domain.Users;
 using Nook.SharedKernel;
-using System.Diagnostics;
 
 namespace Nook.Application.Reviews;
 
@@ -23,7 +24,7 @@ public sealed record EditReviewCommand(
 // 순서: DB 없는 검사 → 조회·권한 → Edit(메모리만 변경) → 업로드 → 저장 → 삭제. 거절은 모두 업로드 전에 끝난다.
 public sealed class EditReviewHandler(
     IReviewRepository reviews,
-    IReviewImageStorage storage,
+    IImageStorage storage,
     IReviewImageUrls urls,
     TimeProvider time,
     ILogger<EditReviewHandler> logger)

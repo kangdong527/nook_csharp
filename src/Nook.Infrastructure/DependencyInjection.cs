@@ -4,6 +4,7 @@ using Nook.Application.Auth;
 using Nook.Application.Bookmarks;
 using Nook.Application.Common;
 using Nook.Application.Groups;
+using Nook.Application.Images;
 using Nook.Application.Likes;
 using Nook.Application.Places;
 using Nook.Application.Reviews;
@@ -11,6 +12,7 @@ using Nook.Application.Users;
 using Nook.Infrastructure.Auth;
 using Nook.Infrastructure.Bookmarks;
 using Nook.Infrastructure.Groups;
+using Nook.Infrastructure.Images;
 using Nook.Infrastructure.Likes;
 using Nook.Infrastructure.Persistence;
 using Nook.Infrastructure.Places;
@@ -60,16 +62,16 @@ public static class DependencyInjection
 
     // 개발·테스트 전용(D5). 운영 스토리지는 DEP 주간 — 그 전 운영 환경에서 RV-01을 부르면 DI 해석 실패(500)로 드러난다.
     // 인스턴스 하나를 두 이름으로: 핸들러는 인터페이스, 테스트는 구현 클래스(Objects)로 꺼낸다.
-    public static IServiceCollection AddInMemoryReviewImageStorage(this IServiceCollection services)
+    public static IServiceCollection AddInMemoryImageStorage(this IServiceCollection services)
     {
-        services.AddSingleton<InMemoryReviewImageStorage>();
-        services.AddSingleton<IReviewImageStorage>(sp => sp.GetRequiredService<InMemoryReviewImageStorage>());
+        services.AddSingleton<InMemoryImageStorage>();
+        services.AddSingleton<IImageStorage>(sp => sp.GetRequiredService<InMemoryImageStorage>());
         return services;
     }
 
     // 개발 전용(FE-2 이미지 A안). 재시작해도 남아 화면 확인에 쓴다. 운영은 DEP에서 S3 구현체로 교체.
-    public static IServiceCollection AddLocalDiskReviewImageStorage(this IServiceCollection services, string root) =>
-        services.AddSingleton<IReviewImageStorage>(new LocalDiskReviewImageStorage(root));
+    public static IServiceCollection AddLocalDiskImageStorage(this IServiceCollection services, string root) =>
+        services.AddSingleton<IImageStorage>(new LocalDiskImageStorage(root));
 
     // 키 → URL 기준 주소(IReviewImageUrls). 저장소 구현과 따로 둔다 — 같은 저장소라도 앞단(BFF·CDN)에 따라 주소가 다르다.
     public static IServiceCollection AddReviewImageUrls(this IServiceCollection services, string baseUrl) =>

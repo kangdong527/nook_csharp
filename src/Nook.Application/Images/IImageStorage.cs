@@ -1,8 +1,9 @@
-namespace Nook.Application.Reviews;
+namespace Nook.Application.Images;
 
-// 리뷰 이미지 스토리지(외부 I/O). 트랜잭션 밖에서만 부른다(CLAUDE.md). 키는 호출 쪽이 ReviewImageKeys로 만든다.
-// D5는 메모리 구현, 실제 스토리지(S3)는 DEP 주간(ADR-009).
-public interface IReviewImageStorage
+// 이미지 스토리지(외부 I/O) — 리뷰 이미지(reviews/)와 프로필 사진(avatars/)이 함께 쓴다.
+// 트랜잭션 밖에서만 부른다(CLAUDE.md). 키는 호출 쪽이 ReviewImageKeys로 만든다.
+// 구현: 메모리(테스트)·로컬 디스크(개발)·S3(운영, DEP). 선택은 Program.cs의 ImageStorage:Provider(ADR-003 결정 1).
+public interface IImageStorage
 {
     Task PutAsync(string storageKey, Stream content, string contentType, CancellationToken ct);
 

@@ -35,7 +35,7 @@ switch (builder.Configuration["ImageStorage:Provider"] ?? (devDefault ? "LocalDi
 {
     // 로컬 디스크(FE-2 이미지 A안) — 재시작해도 남는다. 컨테이너에서는 LocalRoot 를 볼륨 경로로 준다. 통합 테스트는 메모리 구현으로 덮어쓴다.
     case "LocalDisk":
-        builder.Services.AddLocalDiskReviewImageStorage(
+        builder.Services.AddLocalDiskImageStorage(
             builder.Configuration["ImageStorage:LocalRoot"] ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "images"));
         break;
     case var other: throw new InvalidOperationException($"ImageStorage:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: LocalDisk)");

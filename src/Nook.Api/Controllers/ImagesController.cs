@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nook.Application.Images;
 using Nook.Application.Reviews;
 
 namespace Nook.Api.Controllers;
@@ -10,7 +11,7 @@ namespace Nook.Api.Controllers;
 [ApiController]
 [Route("images")]
 [AllowAnonymous]
-public sealed class ImagesController(IReviewImageStorage storage) : ControllerBase
+public sealed class ImagesController(IImageStorage storage) : ControllerBase
 {
     [HttpGet("{**key}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
