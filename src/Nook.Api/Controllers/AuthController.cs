@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Nook.Api.Auth;
 using Nook.Api.Http;
 using Nook.Application.Auth;
@@ -8,6 +9,7 @@ namespace Nook.Api.Controllers;
 
 [ApiController]
 [Route("auth")]
+[EnableRateLimiting(RateLimiting.AuthPolicy)]   // IP당 엄격 한도(7단계) — 전체 한도에 더해 적용
 public sealed class AuthController : ControllerBase
 {
     // AU-01·AU-02 흐름 1. 가입 여부·속도 제한과 무관하게 202(D5 결정).

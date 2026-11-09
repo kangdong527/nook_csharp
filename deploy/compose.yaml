@@ -17,6 +17,8 @@ x-providers: &providers
   Email__Provider: Console
   ImageStorage__Provider: LocalDisk
   ImageStorage__LocalRoot: /app/data/images
+  # X-Forwarded-For를 믿을 대역 = backend 서브넷(web이 api를 부르는 곳). 아래 networks.backend.ipam과 같아야 한다
+  ForwardedHeaders__KnownNetworks: 10.89.0.0/24
 
 services:
   db:
@@ -109,6 +111,11 @@ networks:
   edge:
   backend:
     internal: true # 바깥(인터넷)으로 나가는 경로 없음 — 7단계 SES·S3 호출이 생기면 api 만 egress 네트워크에 추가
+    # 서브넷 고정: api의 ForwardedHeaders__KnownNetworks가 이 대역만 믿는다(자동 할당이면 재생성 때 바뀐다).
+    # 10.89/24 — Docker 기본 풀(172.17~31·192.168)·AWS 기본 VPC(172.31/16, DNS 172.31.0.2)와 겹치지 않게
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
 
 volumes:
   pgdata:
