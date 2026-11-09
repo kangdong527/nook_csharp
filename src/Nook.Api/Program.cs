@@ -157,7 +157,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi().AllowAnonymous();
 }
 
-app.UseHttpsRedirection();
+// UseHttpsRedirection 없음(DEP 7단계): TLS는 Caddy에서 끝나고 api는 내부 HTTP로만 받는다 — 리다이렉트할 HTTPS 포트가 없어
+// "Failed to determine the https port" 경고만 남겼다. HTTP→HTTPS 리다이렉트와 HSTS는 브라우저와 맞닿은 Caddy 몫.
 
 // 인증 앞: 거절할 요청은 JWT 검증 비용도 쓰지 않는다. 엔드포인트 한도([EnableRateLimiting])는 라우팅 뒤라야 보인다 —
 // WebApplication은 UseRouting을 파이프라인 맨 앞에 암묵적으로 넣는다.
