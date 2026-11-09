@@ -1,4 +1,4 @@
-# 앞단 프록시. DEP 2단계, Claude 초안. 보안 헤더(HSTS 등)는 7단계에서 추가한다.
+# 앞단 프록시. DEP 2단계, Claude 초안. 보안 헤더는 7단계(2026-11-09)에 추가.
 #
 # SITE_ADDRESS
 #   - 로컬: http://localhost:3300 — http:// 를 붙이면 Caddy 가 인증서를 만들지 않는다. 포트는 카카오 플랫폼에 등록한 3300 과 맞춘다
@@ -8,5 +8,39 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 	reverse_proxy web:3300
-	header -Server
+
+	header {
+		# 서버 정보 숨김
+		-Server
+		-X-Powered-By
+		-Via
+
+		# HTTPS 로만 다시 오게(1년). HTTP 응답의 HSTS 는 브라우저가 무시하므로 로컬(http://)에선 영향 없다.
+		# preload 는 넣지 않는다 — 등록 목록에서 빼기 어렵다(.app 은 확장자 단위로 이미 preload).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# 응답 Content-Type 을 브라우저가 추측하지 않게(이미지 응답엔 api 도 붙인다)
+		X-Content-Type-Options "nosniff"
+
+		# 다른 사이트로 가는 요청엔 출처(도메인)만. 매직 링크 토큰은 URL 조각(#token)이라 Referer 에 원래 실리지 않는다
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# 다른 사이트가 iframe 으로 감싸지 못하게(클릭재킹). 옛 브라우저용 — CSP frame-ancestors 가 같은 일을 한다
+		X-Frame-Options "DENY"
+
+		# 쓰는 기능만: 지도 현재 위치(MapScreen) = 같은 출처만, 나머지는 끔. 클립보드 쓰기(초대 코드 복사)는 기본값 self 로 허용
+		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+
+		# 팝업으로 연 창이 window.opener 로 이 탭을 조작하지 못하게
+		Cross-Origin-Opener-Policy "same-origin"
+
+		# CSP. 1차 Report-Only(2026-11-09) 위반 측정 → 반영:
+		#   - SDK 본체·services 는 t1.kakaocdn.net(추정했던 daumcdn 아님), 키워드 검색은 dapi.kakao.com 으로 connect
+		#   - 출처에 스킴을 쓰지 않는다: "페이지와 같은 스킴" — 로컬(http)은 http·https, 운영(https, .app HSTS)은 https 만
+		#   - SDK(kakao.js)가 1차에서 문자열 eval 을 시도했지만, 2차 강제 모드(eval 불허)에서 지도·검색·현재 위치·사진·초대 코드 복사
+		#     모두 정상(사용자 브라우저 확인) → 'unsafe-eval' 넣지 않음. 지도가 깨지면 이 결정부터 다시 본다
+		#   - 남은 차단: cdn.jsdelivr.net 의 .map(소스맵) — DevTools 가 열렸을 때만 요청하므로 열지 않는다
+		# 'unsafe-inline'(script): Next 하이드레이션 인라인 스크립트. 개선 과제 = middleware nonce.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' dapi.kakao.com *.kakaocdn.net *.daumcdn.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; font-src 'self' cdn.jsdelivr.net; img-src 'self' data: blob: *.daumcdn.net *.kakaocdn.net *.kakao.com; connect-src 'self' dapi.kakao.com *.kakaocdn.net *.daumcdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+	}
 }
