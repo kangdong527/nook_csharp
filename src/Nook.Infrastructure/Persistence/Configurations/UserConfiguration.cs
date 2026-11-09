@@ -23,6 +23,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                 "birthdate >= DATE '1900-01-01'");
             // NULL(기본 이미지)은 CHECK를 통과한다. 빈 문자열만 막는다(ck_review_images_storage_key와 같은 최소 이중화).
             table.HasCheckConstraint("ck_users_avatar_key", "btrim(avatar_key) <> ''");
+            // R-US-06: 동의 시각과 방침 버전은 함께 있거나 함께 없다(PrivacyConsent 이중화). 둘 다 NULL = 동의 기록 도입 전 가입.
+            table.HasCheckConstraint("ck_users_privacy_consent",
+                "(privacy_consented_at IS NULL) = (privacy_policy_version IS NULL)");
+            // ck_users_optional_consent(선택 항목은 선택 동의가 있을 때만)는 NOT VALID 라 HasCheckConstraint 로 못 쓴다 → 마이그레이션 SQL
         });
 
         // 받는 쿼리: erd.md users Q1·Q2·Q5
@@ -43,10 +47,17 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(Email.MaxLength)
             .HasConversion(e => e.Value, value => Email.From(value));
 
+        // 선택(R-US-04, 2026-11-09) → NULL 허용. 변환기는 NULL 이 아닌 값에만 적용된다(Birthdate 와 같은 모양)
         builder.Property(u => u.Gender)
             .HasColumnName("gender")
             .HasMaxLength(6)
-            .HasConversion(g => GenderCode.ToCode(g), code => GenderCode.From(code));
+            .HasConversion(g => GenderCode.ToCode(g!.Value), code => GenderCode.From(code));
+
+        builder.Property(u => u.PrivacyConsentedAt).HasColumnName("privacy_consented_at");
+        builder.Property(u => u.PrivacyPolicyVersion)
+            .HasColumnName("privacy_policy_version")
+            .HasMaxLength(PrivacyConsent.MaxPolicyVersionLength);
+        builder.Property(u => u.OptionalConsentedAt).HasColumnName("optional_consented_at");
 
         builder.Property(u => u.AvatarKey)
             .HasColumnName("avatar_key")

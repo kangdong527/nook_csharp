@@ -34,6 +34,8 @@ function messageOf(reason: CreateProfileFail): string {
       return "이미 사용 중인 닉네임이에요.";
     case "rate_limited":
       return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
+    case "under_age":
+      return "만 14세 미만은 가입할 수 없어요.";
     default:
       return exhaustive(reason);
   }
@@ -52,19 +54,31 @@ export function ProfileSetupForm({ email }: { email: string }) {
   const [birth, setBirth] = useState("");
   const [genderOpen, setGenderOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // 가입 동의(R-US-06, DEP 7단계). 필수 둘 + 선택 하나 — 선택이 꺼지면 성별·생년월일을 지우고 입력을 막는다
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [confirmAge14, setConfirmAge14] = useState(false);
+  const [agreeOptional, setAgreeOptional] = useState(false);
 
   const nicknameOk = isValidNickname(nickname);
   const nickError = nicknameError(nickname);
-  const birthErr = birthError(birth);
-  const canSubmit = nicknameOk && gender !== null && !birthErr && !submitting;
+  const birthErr = agreeOptional ? birthError(birth) : null;
+  const canSubmit = nicknameOk && agreePrivacy && confirmAge14 && !birthErr && !submitting;
+
+  const toggleOptional = (on: boolean) => {
+    setAgreeOptional(on);
+    if (!on) {
+      setGender(null);
+      setBirth("");
+    }
+  };
 
   const submit = async () => {
     if (!nicknameOk) {
       toast("닉네임은 2~12자까지 입력할 수 있어요.");
       return;
     }
-    if (!gender) {
-      toast("성별을 선택해 주세요.");
+    if (!agreePrivacy || !confirmAge14) {
+      toast("필수 항목에 동의해 주세요.");
       return;
     }
     if (birthErr) {
@@ -77,6 +91,7 @@ export function ProfileSetupForm({ email }: { email: string }) {
         nickname,
         gender,
         birth: birth.trim() || null,
+        consent: { agreePrivacy, confirmAge14, agreeOptional },
       });
       if (!res.ok) {
         toast(messageOf(res.reason));
@@ -128,16 +143,17 @@ export function ProfileSetupForm({ email }: { email: string }) {
           {nickError && <p className="mt-2 text-xs text-like">{nickError}</p>}
         </div>
 
-        {/* 성별 */}
+        {/* 성별 (선택 — 선택 항목 동의가 있어야 입력) */}
         <div className="mt-7">
-          <label className="text-xs font-medium text-sub">성별</label>
+          <label className="text-xs font-medium text-sub">성별 (선택)</label>
           <button
             onClick={() => setGenderOpen(true)}
-            className={`mt-2 flex w-full items-center justify-between border-b border-line pb-2 text-lg ${
+            disabled={!agreeOptional}
+            className={`mt-2 flex w-full items-center justify-between border-b border-line pb-2 text-lg disabled:cursor-not-allowed ${
               gender ? "text-ink" : "text-disabled"
             }`}
           >
-            {gender ? GENDER_LABEL[gender] : "선택"}
+            {gender ? GENDER_LABEL[gender] : agreeOptional ? "선택" : "선택 항목 동의 후 입력"}
             <span className="text-sub">▾</span>
           </button>
         </div>
@@ -148,13 +164,30 @@ export function ProfileSetupForm({ email }: { email: string }) {
           <input
             value={birth}
             inputMode="numeric"
+            disabled={!agreeOptional}
             onChange={(e) => setBirth(formatBirthInput(e.target.value))}
-            placeholder="YY-MM-DD"
+            placeholder={agreeOptional ? "YY-MM-DD" : "선택 항목 동의 후 입력"}
             className={`mt-2 w-full border-b bg-transparent pb-2 text-lg outline-none placeholder:text-disabled ${
               birthErr ? "border-like focus:border-like" : "border-line focus:border-key"
             }`}
           />
           {birthErr && <p className="mt-2 text-xs text-like">{birthErr}</p>}
+        </div>
+
+        {/* 가입 동의(R-US-06). 필수와 선택을 따로 받는다 — 선택에 동의하지 않아도 가입된다 */}
+        <div className="mt-8 flex flex-col gap-3 rounded-2xl bg-field p-4 text-sm">
+          <ConsentCheck id="consent-age" checked={confirmAge14} onChange={setConfirmAge14}>
+            <b className="text-key">[필수]</b> 만 14세 이상입니다
+          </ConsentCheck>
+          <ConsentCheck id="consent-privacy" checked={agreePrivacy} onChange={setAgreePrivacy}>
+            <b className="text-key">[필수]</b> 개인정보 수집·이용에 동의합니다{" "}
+            <a href="/privacy" target="_blank" rel="noopener" className="text-sub underline">
+              보기
+            </a>
+          </ConsentCheck>
+          <ConsentCheck id="consent-optional" checked={agreeOptional} onChange={toggleOptional}>
+            <span className="text-sub">[선택]</span> 성별·생년월일 수집·이용에 동의합니다
+          </ConsentCheck>
         </div>
 
         <div className="mt-auto pt-8">
@@ -194,5 +227,30 @@ export function ProfileSetupForm({ email }: { email: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+function ConsentCheck({
+  id,
+  checked,
+  onChange,
+  children,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-3 text-ink">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-key"
+      />
+      <span>{children}</span>
+    </label>
   );
 }

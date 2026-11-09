@@ -44,7 +44,9 @@ public sealed class AuthController : ControllerBase
         [FromServices] AccessTokenIssuer issuer,
         CancellationToken ct)
     {
-        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(request.Token, request.Nickname, request.Gender, request.Birthdate), ct);
+        var result = await handler.HandleAsync(new ConsumeMagicLinkCommand(
+            request.Token, request.Nickname, request.Gender, request.Birthdate,
+            request.AgreePrivacy, request.ConfirmAge14, request.AgreeOptional), ct);
 
         if (!result.TryGetValue(out var outcome, out var error))
             return this.Problem(error);
@@ -58,8 +60,11 @@ public sealed class AuthController : ControllerBase
 
 public sealed record MagicLinkRequest(string? Email);
 
-// Gender: female|male|none, Birthdate: YYYY-MM-DD(선택). 둘 다 가입일 때만 쓴다.
-public sealed record ConsumeMagicLinkRequest(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
+// Gender: female|male|none, Birthdate: YYYY-MM-DD — 둘 다 선택(AgreeOptional 필요). 동의 세 개와 함께 가입일 때만 쓴다(R-US-06).
+// 방침 버전은 받지 않는다 — 서버가 시행 중인 버전(PrivacyPolicy.CurrentVersion)을 기록한다.
+public sealed record ConsumeMagicLinkRequest(
+    string? Token, string? Nickname, string? Gender = null, string? Birthdate = null,
+    bool AgreePrivacy = false, bool ConfirmAge14 = false, bool AgreeOptional = false);
 
 // Email: needsNickname일 때만 — 가입 폼 표시용(FE-2).
 public sealed record ConsumeMagicLinkResponse(string? AccessToken, bool NeedsNickname, string? Email = null);

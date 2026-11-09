@@ -20,11 +20,17 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     // - SignUp_WhenNicknameTaken_ReturnsConflictAndKeepsToken      (대소문자만 다른 닉네임 — ux_users_nickname_lower)
     // - SignUp_WhenNicknameFormatInvalid_ReturnsValidationAndKeepsToken
     // - SignUp_SavesGenderAndBirthdate / SignUp_WithoutBirthdate_SavesNull
-    // - SignUp_WhenGenderMissingOrUnknown_ReturnsValidationAndKeepsToken   (R-US-04)
+    // - SignUp_WithoutGender_SavesNull                                     (R-US-04 선택, 2026-11-09)
+    // - SignUp_WhenGenderUnknown_ReturnsValidationAndKeepsToken
+    // - SignUp_WithoutRequiredConsent_ReturnsValidationAndKeepsToken       (R-US-06 필수 동의 둘)
+    // - SignUp_OptionalItemsWithoutOptionalConsent_ReturnsValidation       (R-US-06 선택 동의)
+    // - SignUp_WhenBirthdateUnderMinimumAge_ReturnsValidation              (만 14세 경계)
+    // - SignUp_RecordsConsentWithServerPolicyVersion                       (버전은 서버가 정한다)
     // - SignUp_WhenBirthdateInvalid_ReturnsValidationAndKeepsToken         (R-US-05 형식·범위)
     //
     // 로그인
     // - SignIn_ExistingUser_IgnoresGenderAndBirthdate
+    // - SignIn_ExistingUser_DoesNotRequireConsent                  (동의는 가입 때만)
     // - SignIn_ExistingUser_IgnoresNickname                        (기존 회원이 쓰레기 nickname을 보내도 로그인)
     // - SignIn_MatchesEmailIgnoringCase
     //
@@ -136,9 +142,19 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     [Theory]
     [InlineData(null)]
     [InlineData("")]
+    public async Task SignUp_WithoutGender_SavesNull(string? gender)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        (await ConsumeAsync(token, "누크", gender)).Unwrap();
+
+        Assert.Null((await Db.CreateContext().Users.SingleAsync()).Gender);
+    }
+
+    [Theory]
     [InlineData("FEMALE")]     // 표기는 소문자만
     [InlineData("other")]
-    public async Task SignUp_WhenGenderMissingOrUnknown_ReturnsValidationAndKeepsToken(string? gender)
+    public async Task SignUp_WhenGenderUnknown_ReturnsValidationAndKeepsToken(string? gender)
     {
         var token = await IssueAsync(NewEmail);
 
@@ -162,6 +178,74 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
         Assert.False(result.TryGetValue(out _, out var error));
         Assert.Equal(code, error.Code);
         Assert.Null(await ConsumedAtAsync(token));
+    }
+
+    // ── 가입 동의(R-US-06) ─────────────────────────────────
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task SignUp_WithoutRequiredConsent_ReturnsValidationAndKeepsToken(bool agreePrivacy, bool confirmAge14)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        AssertFailure(await ConsumeAsync(token, "누크", agreePrivacy: agreePrivacy, confirmAge14: confirmAge14), UserErrors.ConsentRequired);
+        Assert.Null(await ConsumedAtAsync(token));
+        Assert.Equal(0, await Db.CreateContext().Users.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("female", null)]
+    [InlineData(null, "1995-03-01")]
+    public async Task SignUp_OptionalItemsWithoutOptionalConsent_ReturnsValidation(string? gender, string? birthdate)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        AssertFailure(await ConsumeAsync(token, "누크", gender, birthdate, agreeOptional: false), UserErrors.OptionalConsentRequired);
+        Assert.Equal(0, await Db.CreateContext().Users.CountAsync());
+    }
+
+    // IssuedAt = 2026-10-20 → 2012-10-20 생은 오늘 만 14세, 2012-10-21 생은 13세
+    [Theory]
+    [InlineData("2012-10-21", false)]
+    [InlineData("2012-10-20", true)]
+    public async Task SignUp_WhenBirthdateUnderMinimumAge_ReturnsValidation(string birthdate, bool accepted)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        var result = await ConsumeAsync(token, "누크", birthdate: birthdate);
+
+        if (accepted)
+            result.Unwrap();
+        else
+            AssertFailure(result, UserErrors.UnderMinimumAge);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SignUp_RecordsConsentWithServerPolicyVersion(bool withOptional)
+    {
+        var token = await IssueAsync(NewEmail);
+
+        (await ConsumeAsync(token, "누크", gender: withOptional ? "none" : null)).Unwrap();
+
+        var user = await Db.CreateContext().Users.SingleAsync();
+        Assert.Equal(PrivacyPolicy.CurrentVersion, user.PrivacyPolicyVersion);
+        Assert.Equal(IssuedAt, user.PrivacyConsentedAt);
+        Assert.Equal(withOptional ? IssuedAt : null, user.OptionalConsentedAt);
+    }
+
+    [Fact]
+    public async Task SignIn_ExistingUser_DoesNotRequireConsent()
+    {
+        await SeedUserAsync("누크", NewEmail);
+        var token = await IssueAsync(NewEmail);
+
+        var outcome = (await ConsumeAsync(token, nickname: null, agreePrivacy: false, confirmAge14: false)).Unwrap();
+
+        Assert.False(outcome.NeedsNickname);
     }
 
     [Fact]
@@ -238,13 +322,17 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
     // ── 도우미 ────────────────────────────────────────────
 
     // 요청마다 새 스코프 = 운영의 요청당 DbContext 하나와 같다.
-    // 가입 폼은 성별을 반드시 보낸다 — 성별이 주제가 아닌 테스트는 기본값 "none".
+    // 기본: 필수 동의 둘 다 체크(가입 폼은 체크해야 제출된다), 성별·생년월일 없음.
+    // agreeOptional 을 주지 않으면 선택 항목을 보낼 때만 켠다 — 동의가 주제가 아닌 테스트가 동의를 신경 쓰지 않게.
     private async Task<Result<ConsumeMagicLinkOutcome>> ConsumeAsync(
-        string? token, string? nickname, string? gender = "none", string? birthdate = null)
+        string? token, string? nickname, string? gender = null, string? birthdate = null,
+        bool agreePrivacy = true, bool confirmAge14 = true, bool? agreeOptional = null)
     {
         await using var scope = _services.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<ConsumeMagicLinkHandler>();
-        return await handler.HandleAsync(new ConsumeMagicLinkCommand(token, nickname, gender, birthdate), CancellationToken.None);
+        var optional = agreeOptional ?? (!string.IsNullOrEmpty(gender) || !string.IsNullOrEmpty(birthdate));
+        return await handler.HandleAsync(
+            new ConsumeMagicLinkCommand(token, nickname, gender, birthdate, agreePrivacy, confirmAge14, optional), CancellationToken.None);
     }
 
     // AU-01 발급과 같은 저장 경로(IMagicLinkTokenStore.AddAsync)로 넣고 원문을 돌려준다.
@@ -259,7 +347,7 @@ public sealed class ConsumeMagicLinkTests : IntegrationTestBase, IDisposable
 
     private async Task<User> SeedUserAsync(string nickname, string email)
     {
-        var user = User.Create(Nickname.From(nickname), Email.From(email), Gender.None, null);
+        var user = User.Create(Nickname.From(nickname), Email.From(email), TestConsent.Required);
         await using var db = Db.CreateContext();
         db.Users.Add(user);
         await db.SaveChangesAsync();

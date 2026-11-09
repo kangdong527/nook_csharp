@@ -1,3 +1,4 @@
+using Nook.Domain.Tests;
 using Nook.Domain.Users;
 
 namespace Nook.Domain.Tests.Users;
@@ -14,7 +15,7 @@ public class UserAvatarTests
     private const string A = "avatars/2026/10/27/0123456789abcdef0123456789abcdef.png";
     private const string B = "avatars/2026/10/27/fedcba9876543210fedcba9876543210.png";
 
-    private static User NewUser() => User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
+    private static User NewUser() => User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
 
     [Fact]
     public void ReplaceAvatar_ReturnsPreviousKey()

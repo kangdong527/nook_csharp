@@ -55,8 +55,8 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
 
     private readonly NookApiFactory _factory;
     private readonly HttpClient _client;
-    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
-    private readonly User _creator = User.Create(Nickname.From("방장"), Email.From("creator@example.com"), Gender.None, null);
+    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
+    private readonly User _creator = User.Create(Nickname.From("방장"), Email.From("creator@example.com"), TestConsent.Required);
 
     public GroupsApiTests(PostgresFixture fixture) : base(fixture)
     {
@@ -269,8 +269,8 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
 
     private async Task<MapFixture> SeedMapAsync()
     {
-        var member = User.Create(Nickname.From("멤버"), Email.From("member@example.com"), Gender.None, null);
-        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), Gender.None, null);
+        var member = User.Create(Nickname.From("멤버"), Email.From("member@example.com"), TestConsent.Required);
+        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), TestConsent.Required);
         var group = Group.Create(GroupName.From("지도모임"), _creator.Id, InviteCode.From(Code), CreatedAt, pickSlot: _ => 0);
         Assert.True(group.AddMember(_user.Id, CreatedAt, pickSlot: _ => 0).IsSuccess);
         Assert.True(group.AddMember(member.Id, CreatedAt, pickSlot: _ => 0).IsSuccess);
@@ -361,7 +361,7 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
 
     private async Task SeedStrangersGroupAsync()
     {
-        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), Gender.None, null);
+        var stranger = User.Create(Nickname.From("남남"), Email.From("stranger@example.com"), TestConsent.Required);
         var group = Group.Create(GroupName.From("남의모임"), stranger.Id, InviteCode.From("ZXCVBN"), CreatedAt);
         await using var db = Db.CreateContext();
         db.AddRange(stranger, group);
@@ -378,7 +378,7 @@ public sealed class GroupsApiTests : IntegrationTestBase, IAsyncLifetime, IDispo
         var others = new List<User>();
         for (var i = 1; i <= extraMembers; i++)
         {
-            var member = User.Create(Nickname.From($"멤버{i}"), Email.From($"member{i}@example.com"), Gender.None, null);
+            var member = User.Create(Nickname.From($"멤버{i}"), Email.From($"member{i}@example.com"), TestConsent.Required);
             others.Add(member);
             Assert.True(group.AddMember(member.Id, CreatedAt).IsSuccess);
         }

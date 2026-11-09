@@ -56,7 +56,7 @@ export function SettingsScreen() {
       </header>
 
       <div className="flex-1">
-        <RowDisabled label="서비스 약관 및 방침" />
+        <Row label="개인정보 처리방침" onClick={() => router.push("/privacy")} />
         <RowDisabled label="신고 / 문의하기" />
         <Row label="버전 정보" right={<span className="text-sm text-sub">0.1.0</span>} />
         <Row label="로그아웃" onClick={working ? undefined : logout} />
@@ -73,7 +73,10 @@ export function SettingsScreen() {
           <div className="animate-pop-in relative w-full rounded-3xl bg-white p-6 text-center">
             <p className="text-base font-bold">정말 탈퇴할까요?</p>
             <p className="mt-2 text-sm leading-relaxed text-sub">
-              탈퇴 시 모든 데이터가 삭제되며 복구할 수 없어요
+              {/* 처리방침 3절과 같은 사실만 — 리뷰는 남는다(PF-02). "모든 데이터 삭제"는 사실과 달랐다 */}
+              회원 정보·저장한 장소·그룹 참여는 삭제되고 복구할 수 없어요.
+              <br />
+              작성한 리뷰와 사진은 &ldquo;탈퇴한 사용자&rdquo;로 남으니, 지우고 싶은 리뷰는 먼저 삭제해 주세요.
             </p>
             <div className="mt-6 flex flex-col gap-2">
               <button

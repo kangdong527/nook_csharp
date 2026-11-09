@@ -37,7 +37,7 @@ public sealed class BookmarksApiTests : IntegrationTestBase, IAsyncLifetime, IDi
 
     private readonly NookApiFactory _factory;
     private readonly HttpClient _client;
-    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
+    private readonly User _user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
     private readonly Place _place = Place.Create(
         KakaoPlaceId.From("8130394"), "누크 카페", "서울", Coordinate.Create(37.5665, 126.978).Unwrap()).Unwrap();
 

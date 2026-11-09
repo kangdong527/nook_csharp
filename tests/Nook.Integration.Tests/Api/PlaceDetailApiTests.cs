@@ -199,7 +199,7 @@ public sealed class PlaceDetailApiTests : IntegrationTestBase, IAsyncLifetime, I
         await db.SaveChangesAsync();
     }
 
-    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), Gender.None, null);
+    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), TestConsent.Required);
 
     private Review NewReview(User author, DateTimeOffset at, params string[] images) =>
         Review.Create(

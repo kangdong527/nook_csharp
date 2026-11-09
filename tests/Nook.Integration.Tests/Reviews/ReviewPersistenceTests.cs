@@ -22,7 +22,7 @@ public sealed class ReviewPersistenceTests(PostgresFixture fixture, ITestOutputH
     public async Task SaveChanges_WhenSortOrdersSwapped_ReloadsInNewOrder()
     {
         // Arrange — 리뷰는 users·places FK가 있으므로 둘 다 함께 저장한다.
-        var user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
+        var user = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
         var place = Place.Create(
             KakaoPlaceId.From("12345"), "누크 카페", "서울 중구", Coordinate.Create(37.5665, 126.9780).Unwrap()).Unwrap();
         var review = Review.Create(

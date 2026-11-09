@@ -48,7 +48,7 @@ public sealed class WithdrawalSchemaTests(PostgresFixture fixture) : Integration
         Assert.Equal(2, await check.Likes.CountAsync(l => l.ReviewId == review.Id));   // 좋아요 수가 줄지 않는다
     }
 
-    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"u{n}@example.com"), Gender.None, null);
+    private static User NewUser(int n) => User.Create(Nickname.From($"회원{n}"), Email.From($"u{n}@example.com"), TestConsent.Required);
 
     private static Place NewPlace() =>
         Place.Create(KakaoPlaceId.From("1"), "누크 카페", "서울", Coordinate.Create(37.5, 127.0).Unwrap()).Unwrap();
