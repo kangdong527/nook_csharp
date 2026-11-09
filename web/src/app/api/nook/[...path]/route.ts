@@ -84,9 +84,9 @@ async function relay(request: NextRequest, { params }: Context): Promise<NextRes
     body: method === "GET" || method === "DELETE" ? undefined : await request.arrayBuffer(),
   });
 
-  // 넘기는 헤더는 이것만(Set-Cookie 등 API 헤더는 넘기지 않는다): 본문 해석·이미지 캐시(immutable)·nosniff.
+  // 넘기는 헤더는 이것만(Set-Cookie 등 API 헤더는 넘기지 않는다): 본문 해석·이미지 캐시(immutable)·nosniff·429 재시도 시각.
   const out = new Headers();
-  for (const name of ["content-type", "cache-control", "x-content-type-options"]) {
+  for (const name of ["content-type", "cache-control", "x-content-type-options", "retry-after"]) {
     const value = res.headers.get(name);
     if (value) out.set(name, value);
   }

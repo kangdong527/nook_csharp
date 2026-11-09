@@ -32,6 +32,8 @@ function messageOf(reason: CreateProfileFail): string {
       return "입력값을 다시 확인해 주세요.";
     case "nickname_taken":
       return "이미 사용 중인 닉네임이에요.";
+    case "rate_limited":
+      return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
     default:
       return exhaustive(reason);
   }

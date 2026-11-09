@@ -2,13 +2,17 @@
 // 성공하면 Access 토큰 쿠키를 심고 가입 대기 쿠키를 지운다.
 // 실패(닉네임 중복 409 등)는 C# 이 롤백해 토큰이 살아 있으므로 가입 대기 쿠키를 그대로 둔다 — 폼에서 다시 제출할 수 있다.
 
-import { NextResponse } from "next/server";
-import { apiFetch, readProblem, readSignupPending } from "@/lib/api/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { apiFetch, problemResponse, readSignupPending } from "@/lib/api/server";
+import { rejectCrossOrigin } from "@/lib/api/origin";
 import { AUTH_COOKIE, AUTH_MAX_AGE_SECONDS, SIGNUP_COOKIE, cookieOptions } from "@/lib/api/cookies";
 
 type SignupRequest = { nickname?: string; gender?: string; birthdate?: string | null };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const rejected = rejectCrossOrigin(request);
+  if (rejected) return rejected;
+
   const pending = await readSignupPending();
   if (!pending) {
     // 가입 대기 쿠키 만료(15분) 또는 없음 — 매직 링크부터 다시.
@@ -26,10 +30,7 @@ export async function POST(request: Request) {
     }),
   });
 
-  if (!res.ok) {
-    const problem = await readProblem(res);
-    return NextResponse.json(problem, { status: problem.status });
-  }
+  if (!res.ok) return problemResponse(res);
 
   const body = (await res.json()) as { accessToken: string | null };
   if (!body.accessToken) {
