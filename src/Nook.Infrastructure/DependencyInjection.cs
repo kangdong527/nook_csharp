@@ -1,3 +1,5 @@
+using Amazon;
+using Amazon.S3;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Application.Auth;
@@ -72,6 +74,25 @@ public static class DependencyInjection
     // 개발 전용(FE-2 이미지 A안). 재시작해도 남아 화면 확인에 쓴다. 운영은 DEP에서 S3 구현체로 교체.
     public static IServiceCollection AddLocalDiskImageStorage(this IServiceCollection services, string root) =>
         services.AddSingleton<IImageStorage>(new LocalDiskImageStorage(root));
+
+    // 운영(dep-plan 결정 3). 자격 증명은 넘기지 않는다 — SDK 기본 체인이 EC2 인스턴스 역할(IMDSv2)에서 임시 키를 받는다.
+    // serviceUrl은 S3 호환 서버(테스트의 s3mock)용. 비우면 실제 AWS 엔드포인트.
+    // 클라이언트는 Singleton — 스레드 안전하고 커넥션 풀을 가진다(요청마다 만들면 소켓 고갈).
+    public static IServiceCollection AddS3ImageStorage(
+        this IServiceCollection services, string bucket, string region, string? serviceUrl = null)
+    {
+        var config = new AmazonS3Config { RegionEndpoint = RegionEndpoint.GetBySystemName(region) };
+        if (!string.IsNullOrEmpty(serviceUrl))
+        {
+            config.ServiceURL = serviceUrl;            // 설정하면 RegionEndpoint가 비워진다
+            config.AuthenticationRegion = region;      // 서명(SigV4)에 쓸 리전은 따로 지정
+            config.ForcePathStyle = true;              // 호환 서버는 버킷을 하위 도메인으로 못 받는다
+        }
+
+        services.AddSingleton<IAmazonS3>(new AmazonS3Client(config));
+        services.AddSingleton<IImageStorage>(sp => new S3ImageStorage(sp.GetRequiredService<IAmazonS3>(), bucket));
+        return services;
+    }
 
     // 키 → URL 기준 주소(IReviewImageUrls). 저장소 구현과 따로 둔다 — 같은 저장소라도 앞단(BFF·CDN)에 따라 주소가 다르다.
     public static IServiceCollection AddReviewImageUrls(this IServiceCollection services, string baseUrl) =>
