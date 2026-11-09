@@ -13,7 +13,7 @@
 | 3a | S3 구현 세부 (2026-11-09) | **코드는 5단계 전에 구현**(도메인 대기 중, `567a885`) · 인터페이스 `IImageStorage`(리뷰·프로필 공용, `50431ca`) · **API 프록시 유지**(버킷 완전 비공개, `GET /images/{key}`가 S3에서 읽음, FE 변경 없음) · 테스트는 **`adobe/s3mock`** Testcontainers | presigned URL은 만료로 immutable 캐시가 깨지고 FE·BFF 수정 필요, CloudFront+OAC는 리소스·도메인 결정과 엮임 → 기각. MinIO는 공개 이미지가 없어짐(Docker Hub 없음·quay 401 실측) |
 | 4a | 컨테이너 레지스트리 | **GHCR → ECR** (원래 계획 변경) | private GHCR pull엔 서버에 GitHub PAT(장기 비밀값) 필요. ECR은 인스턴스 역할로 pull |
 | 4b | 배포 경로 | **SSH → SSM Run Command** (원래 계획 변경) | 22번 포트를 닫고 SSH 키를 GitHub에 두지 않음. 접속도 Session Manager |
-| 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지). 등록처 **Route 53**(2026-11-09). 이름은 **PM 확인 대기** — 후보 `nookmap.app`(RDAP 미등록, HSTS 프리로드라 HTTPS만). `nook.com`(1997~)·`nookmap.com`(2026-04~) 등 `nook*.com` 10개는 등록됨 | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각. Route 53: 계정·비밀값이 늘지 않고 SES·ACM 레코드 연동(Cloudflare 연 ~$10 저렴하나 계정 추가) |
+| 5 | 도메인 | **A. 저렴한 도메인 구매**(5단계 전까지). 등록처 **Route 53**(2026-11-09). 이름 **`fillyournookwithstars.com` 구매(2026-11-09, PM 결정)** — $16/년(갱신 동일), 1년·자동 갱신·개인정보 보호, 등록자 이메일 인증 완료. 이전 후보 `nookmap.app`은 채택 안 함. **`.com`은 HSTS 프리로드 TLD가 아님** → HTTP→HTTPS 리다이렉트(Caddy 기본 동작 — 5단계에서 실측)와 `Strict-Transport-Security` 헤더를 직접 보내야 함(5단계 확인 항목). **SES(2026-11-09)**: 서울 리전 도메인 자격 증명, Easy DKIM RSA 2048, 사용자 지정 MAIL FROM 끔(DMARC는 DKIM 정렬만으로 통과 — 필요하면 나중에 켬, 재생성 불필요), DMARC `p=none`(수신함이 없어 `rua` 없음) → 테스트 발송 `dkim=pass`·`dmarc=pass`(Gmail 받은편지함) 확인 후 **`p=quarantine`으로 올림 ✅ 2026-11-09**(권한 서버·8.8.8.8 조회 확인). 몇 주 문제없으면 `p=reject` 검토. 샌드박스에서는 미인증 주소로 발송 거절 + 워커 발송이라 화면엔 성공 → 운영 승인 후 외부 주소 실발송 확인 필수 | HTTPS(쿠키 `Secure`), SES DKIM/DMARC(매직 링크 도착률), 카카오 도메인 등록. DuckDNS(B)·IP+HTTP(C) 기각. Route 53: 계정·비밀값이 늘지 않고 SES·ACM 레코드 연동(Cloudflare 연 ~$10 저렴하나 계정 추가) |
 | 6 | 공개 시점 (2026-11-07) | **(a) 5단계 SG 80·443은 내 IP만 → 7단계 완료(보안 + 개인정보 처리방침·수집 동의) 뒤 0.0.0.0/0으로 전환** | 5단계(문 열기)가 7단계(IP RateLimiter·메일 상한·ForwardedHeaders)보다 앞서 방어 없는 공개 구간이 생김. 순서는 유지하고 문만 늦게 연다. (b) 7단계 선행은 기각 |
 | 7 | 계정 플랜·리전 (2026-11-07) | **A. Paid plan 업그레이드 → 서울(`ap-northeast-2`)**. 순서: 루트 MFA → Budgets 알림 → 업그레이드(크레딧 유지·되돌림 여부 화면 확인) → 서울 활성화 | Free plan은 시드니(`ap-southeast-2`) 고정, 다른 리전은 업그레이드 + 고급 기능 활성화 필요(실측 팝업). 시드니(B)는 지연·**개인정보 국외 이전**(§5 처리방침에 고지 필요)·약 6개월 기한·계획 수정 → 기각 |
 
@@ -44,7 +44,7 @@
 | Data protection | Caddy 자동 TLS + HSTS, EBS·S3·백업 암호화, SecureString, httpOnly 쿠키(BFF), 매직 링크 해시 저장 | DB가 같은 EC2 → 인스턴스 유실 = DB 유실. 백업·복원 리허설로 보완 |
 | Incident response | 불변 sha 태그로 즉시 롤백, 복원 리허설, EBS 스냅샷, 런북(키 유출 시 교체, SG 격리) | 런북을 실행해 본 적 없으면 무의미 → 리허설 1회 필수 |
 
-예상 비용(대략, Budgets로 실측 확인): t4g.small 약 $12/월 + 퍼블릭 IPv4 약 $3.6/월 + EBS 20GB 약 $2/월 + 도메인 연 $10 안팎. ECR·S3·Parameter Store·SES는 거의 0.
+예상 비용(대략, Budgets로 실측 확인): t4g.small 약 $12/월 + 퍼블릭 IPv4 약 $3.6/월 + EBS 20GB 약 $2/월 + 도메인 연 $16(실제) + 호스팅 영역 $0.50/월. ECR·S3·Parameter Store·SES는 거의 0.
 t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 → small에서 시작, 측정 후 조정.
 
 ## 3. 1단계 결과 (2026-11-05)
