@@ -22,6 +22,8 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
     // HS256 최소 32바이트(JwtOptions). 테스트 전용 값이라 커밋해도 된다.
     public const string SigningKey = "nook-integration-tests-signing-key-0123456789";
 
+    public const string TrustedProxyNetwork = "10.89.0.0/24";
+
     public RecordingMailQueue Mail => Services.GetRequiredService<RecordingMailQueue>();
 
     public InMemoryImageStorage ImageStorage => Services.GetRequiredService<InMemoryImageStorage>();
@@ -38,6 +40,8 @@ public sealed class NookApiFactory(string connectionString, Action<IServiceColle
         // 이미지 저장소는 아래에서 메모리 구현으로 덮어쓴다(마지막 등록이 이긴다). LocalDisk 생성자는 디스크를 건드리지 않는다.
         builder.UseSetting("Email:Provider", "Console");
         builder.UseSetting("ImageStorage:Provider", "LocalDisk");
+        // Development 밖에서는 필수. 테스트는 이 대역을 "web(BFF)"으로 친다 — TestServer의 RemoteIpAddress는 null이라 기본은 아무도 해당하지 않는다.
+        builder.UseSetting("ForwardedHeaders:KnownNetworks", TrustedProxyNetwork);
 
         builder.ConfigureTestServices(services =>
         {

@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nook.Api.Auth;
@@ -52,6 +53,24 @@ switch (builder.Configuration["ImageStorage:Provider"] ?? (devDefault ? "LocalDi
 builder.Services.AddReviewImageUrls(builder.Configuration["ImageStorage:PublicBaseUrl"] ?? "/api/nook/images/");
 
 builder.Services.AddSingleton(TimeProvider.System);
+
+// 클라이언트 IP(7단계 — IP RateLimiter의 전제). 요청은 Caddy → web(BFF) → api라 api가 보는 상대는 web 컨테이너다.
+// X-Forwarded-For는 KnownNetworks(web이 있는 backend 서브넷)에서 온 것만 믿고, 맨 오른쪽 한 칸(ForwardLimit 1 = BFF가 적은 값)만 쓴다.
+// 개발 밖에서는 필수(fail-fast). 주의: 신뢰 목록이 비면 미들웨어는 "모두 믿음"으로 동작한다 → 비었으면 아예 켜지 않는다.
+var knownNetworks = (builder.Configuration["ForwardedHeaders:KnownNetworks"] ?? (devDefault ? "" : null)
+        ?? throw new InvalidOperationException("ForwardedHeaders:KnownNetworks 설정이 없습니다(예: 172.30.0.0/24, 쉼표로 여러 개)."))
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(System.Net.IPNetwork.Parse)
+    .ToList();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;   // Proto·Host는 쓰지 않는다 — api는 내부 HTTP만
+    options.ForwardLimit = 1;
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    knownNetworks.ForEach(options.KnownIPNetworks.Add);
+});
+builder.Services.AddNookRateLimiting();
 
 // 유스케이스(Application). 저장소가 Scoped라 같은 수명으로 둔다.
 builder.Services.AddScoped<RequestMagicLinkHandler>();
@@ -123,6 +142,10 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// 맨 앞: 뒤의 모든 미들웨어(예외 로그·RateLimiter)가 바뀐 RemoteIpAddress를 본다.
+if (knownNetworks.Count > 0)
+    app.UseForwardedHeaders();
+
 app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline.
@@ -133,6 +156,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// 인증 앞: 거절할 요청은 JWT 검증 비용도 쓰지 않는다. 엔드포인트 한도([EnableRateLimiting])는 라우팅 뒤라야 보인다 —
+// WebApplication은 UseRouting을 파이프라인 맨 앞에 암묵적으로 넣는다.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -5,7 +5,7 @@
 //    브라우저는 C# API 를 직접 부르지 않는다 — 항상 Next 를 거친다(BFF).
 // =========================================================
 
-import { cookies } from "next/headers";
+import { cookies, headers as requestHeaders } from "next/headers";
 import { AUTH_COOKIE, SIGNUP_COOKIE, type SignupPending } from "./cookies";
 
 /** 서버 환경변수. NEXT_PUBLIC_ 이 아니다 — API 주소를 브라우저에 알릴 이유가 없다. */
@@ -20,6 +20,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+  // 클라이언트 IP를 API로 넘긴다(7단계 IP RateLimiter). 받은 XFF의 맨 오른쪽 = 바로 앞 프록시(Caddy)가 적은 값만 쓴다 —
+  // 왼쪽 값은 누구나 적을 수 있다. Caddy는 trusted_proxies가 없으면 들어온 XFF를 버리고 실제 접속 IP로 덮어쓴다.
+  // API는 web 서브넷에서 온 XFF만 믿는다(ForwardedHeaders:KnownNetworks) — 이 줄만으로는 위조를 막지 못한다.
+  const clientIp = (await requestHeaders()).get("x-forwarded-for")?.split(",").at(-1)?.trim();
+  if (clientIp) headers.set("X-Forwarded-For", clientIp);
 
   return fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
 }

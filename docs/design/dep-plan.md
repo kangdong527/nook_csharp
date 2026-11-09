@@ -69,6 +69,11 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 
 - **BFF Origin 검사 × 프록시**: `api/nook/[...path]/route.ts`가 `origin !== request.nextUrl.origin`이면 403. Caddy 뒤에선 Next가 보는 자기 주소(`http://web:3300` 류)와 브라우저 Origin(`https://도메인`)이 달라 **모든 POST가 403**. 검사를 풀면 CSRF 방어가 사라짐 → 허용 Origin을 설정값으로 명시(2·7단계)
 - **ForwardedHeaders**: Caddy 뒤에서 모든 요청 IP가 프록시 IP → IP 기준 RateLimiter가 전원을 한 명으로 봄. 반대로 `X-Forwarded-For`를 무조건 믿으면 IP 위조 우회 → 신뢰 프록시(KnownNetworks/KnownProxies) 명시(7단계)
+  - ✅ 2026-11-09 `c474a7a` — 실제 경로는 **Caddy → web(BFF) → api 2단**이라 api가 보는 상대는 web. 고리 3개: Caddy가 들어온 XFF를 버리고 실제 IP로 덮어씀(`trusted_proxies` 없음) → BFF `apiFetch`가 XFF 맨 오른쪽만 넘김 → api는 `ForwardedHeaders:KnownNetworks`(backend `10.89.0.0/24` 고정)에서 온 것만 믿음. **신뢰 목록이 비면 미들웨어는 "모두 믿음"**(변이로 실측) → 비면 켜지 않음
+  - 로컬 compose 실측: XFF를 매번 위조한 매직 링크 6회 → 6번째 429, api 로그에 실제 상대 IP(`172.22.0.1`)
+  - 한도(시작값, 거절 로그로 조정): 전체 IP당 300/분 · 매직 링크 요청·소비 각각 IP당 5/10분(칸 = IP + 경로). 설정 `RateLimit:*`
+  - 남은 것: BFF `/api/auth/*`가 `Retry-After` 헤더를 넘기지 않고 화면도 429 문구가 없음(FE). IPv6를 열면 /64 단위로 묶어야 함(지금은 주소 하나 = 한 칸)
+- **compose 네트워크 설정 변경 = `down` 후 `up`** (2026-11-09 실측): 서브넷을 바꾸면 compose가 네트워크는 다시 만들지만 기존 컨테이너는 이어 붙이기만 해서 **서비스 이름 DNS 별칭(`db`)이 빠짐** → migrate가 `Resource temporarily unavailable`(DNS SERVFAIL). 볼륨은 `-v` 없이 내리면 유지
 - **ARM 이미지**: t4g = arm64. Actions에서 arm64 빌드(arm 러너 또는 buildx) 필요(8단계)
 - **S3 × compose 네트워크** (2026-11-09): `backend`가 `internal: true`라 api가 S3에 못 나간다(연결 시간 초과). Provider를 `S3`로 바꿀 때 **api만** egress 네트워크에 추가(5단계). 로컬 compose는 LocalDisk라 지금은 열지 않음(최소 권한)
 - **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
