@@ -51,8 +51,8 @@ public sealed class MeApiTests : IntegrationTestBase, IAsyncLifetime, IDisposabl
 
     private readonly NookApiFactory _factory;
     private readonly HttpClient _client;
-    private readonly User _me = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
-    private readonly User _other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
+    private readonly User _me = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
+    private readonly User _other = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), TestConsent.Required);
     private readonly Place _bookmarkedOnly = NewPlace("1", "저장만 한 곳");
     private readonly Place _reviewedOnly = NewPlace("2", "리뷰만 쓴 곳");
     private readonly Place _both = NewPlace("3", "둘 다 한 곳");

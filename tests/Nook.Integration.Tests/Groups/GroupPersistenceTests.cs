@@ -20,7 +20,7 @@ public sealed class GroupPersistenceTests(PostgresFixture fixture) : Integration
     public async Task Create_WhenSaved_ReloadsCreatorAsOnlyMember()
     {
         // Arrange — 테스트 입력은 이미 유효한 값이므로 Result를 풀지 않고 From으로 복원한다.
-        var creator = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
+        var creator = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
         var group = Group.Create(GroupName.From("산책모임"), creator.Id, InviteCode.From("ABCDEF"), CreatedAt);
 
         // 저장용 컨텍스트. User와 Group을 한 번에 넣어도 EF가 FK(fk_group_members_users)를 보고

@@ -8,8 +8,11 @@ namespace Nook.Application.Auth;
 // AU-02 흐름 3: 매직 링크 소모(erd.md magic_link_tokens "흐름" 3). 가입·로그인 공통.
 // 한 트랜잭션: Q1 소모 → 회원 찾기(users Q4) → 없으면 가입 → Q3 남은 링크 무효화 → 커밋.
 // 결과: 로그인(UserId) · 닉네임 필요 · 실패(InvalidLink 400 · 닉네임 형식 400 · NicknameTaken 409).
-// Gender·Birthdate는 가입(회원 없음)일 때만 본다 — 닉네임과 같은 규칙(D5-3). Birthdate는 선택, YYYY-MM-DD.
-public sealed record ConsumeMagicLinkCommand(string? Token, string? Nickname, string? Gender = null, string? Birthdate = null);
+// Gender·Birthdate는 가입(회원 없음)일 때만 본다 — 닉네임과 같은 규칙(D5-3). 둘 다 선택, Birthdate는 YYYY-MM-DD.
+// 동의(R-US-06)도 가입일 때만: AgreePrivacy·ConfirmAge14 필수, AgreeOptional 은 성별·생년월일을 보낼 때 필수. 기존 회원 로그인은 보지 않는다.
+public sealed record ConsumeMagicLinkCommand(
+    string? Token, string? Nickname, string? Gender = null, string? Birthdate = null,
+    bool AgreePrivacy = false, bool ConfirmAge14 = false, bool AgreeOptional = false);
 
 // Application 공개 결과는 Domain 타입을 노출하지 않는다(D5 결정) — UserId 대신 Guid.
 // SignupEmail: 닉네임 필요일 때 이 링크의 이메일 — 가입 폼이 보여 준다. 토큰을 가진 사람만 받으므로 가입 여부 노출이 아니다.
@@ -51,21 +54,37 @@ public sealed class ConsumeMagicLinkHandler(
             if (string.IsNullOrEmpty(command.Nickname))
                 return ConsumeMagicLinkOutcome.NicknameRequired(email);   // 성공 결과지만 커밋하지 않는다
 
+            // 동의 먼저 — 값 검사보다 앞이라, 동의 없이 보낸 성별·생년월일은 형식을 보기도 전에 거절된다
+            if (!command.AgreePrivacy || !command.ConfirmAge14)
+                return UserErrors.ConsentRequired;
+            if (!command.AgreeOptional && (!string.IsNullOrEmpty(command.Gender) || !string.IsNullOrEmpty(command.Birthdate)))
+                return UserErrors.OptionalConsentRequired;
+
             if (!Nickname.Create(command.Nickname).TryGetValue(out var nickname, out var nicknameError))
                 return nicknameError;
 
-            if (!GenderCode.Parse(command.Gender).TryGetValue(out var gender, out var genderError))
-                return genderError;
+            Gender? gender = null;
+            if (!string.IsNullOrEmpty(command.Gender))
+            {
+                if (!GenderCode.Parse(command.Gender).TryGetValue(out var parsedGender, out var genderError))
+                    return genderError;
+                gender = parsedGender;
+            }
 
+            var today = DateOnly.FromDateTime(now.UtcDateTime);
             Birthdate? birthdate = null;
             if (!string.IsNullOrEmpty(command.Birthdate))
             {
-                if (!Birthdate.Create(command.Birthdate, DateOnly.FromDateTime(now.UtcDateTime)).TryGetValue(out var parsed, out var birthError))
+                if (!Birthdate.Create(command.Birthdate, today).TryGetValue(out var parsed, out var birthError))
                     return birthError;
+                // 자기 신고(ConfirmAge14)와 모순되는 생년월일 — 받지 않는다(R-US-06)
+                if (parsed.AgeOn(today) < User.MinimumAge)
+                    return UserErrors.UnderMinimumAge;
                 birthdate = parsed;
             }
 
-            user = User.Create(nickname, email, gender, birthdate);
+            var consent = PrivacyConsent.Agree(now, PrivacyPolicy.CurrentVersion, command.AgreeOptional);
+            user = User.Create(nickname, email, consent, gender, birthdate);
             if ((await users.AddAsync(user, ct)).IsFailure(out var addError))
                 return addError;
         }

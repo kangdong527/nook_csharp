@@ -32,8 +32,8 @@ public sealed class WithdrawApiTests : IntegrationTestBase, IAsyncLifetime, IDis
     private readonly NookApiFactory _factory;
     private readonly HttpClient _me;
     private readonly HttpClient _other;
-    private readonly User _meUser = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), Gender.None, null);
-    private readonly User _otherUser = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), Gender.None, null);
+    private readonly User _meUser = User.Create(Nickname.From("누크"), Email.From("nook@example.com"), TestConsent.Required);
+    private readonly User _otherUser = User.Create(Nickname.From("남의회원"), Email.From("other@example.com"), TestConsent.Required);
     private readonly Place _place = Place.Create(
         KakaoPlaceId.From("1"), "누크 카페", "서울", Coordinate.Create(37.5, 127.0).Unwrap()).Unwrap();
 
@@ -86,7 +86,7 @@ public sealed class WithdrawApiTests : IntegrationTestBase, IAsyncLifetime, IDis
     [Fact]
     public async Task Withdraw_AsGroupOwner_PassesOwnershipToEarliestJoined()
     {
-        var late = User.Create(Nickname.From("늦게"), Email.From("late@example.com"), Gender.None, null);
+        var late = User.Create(Nickname.From("늦게"), Email.From("late@example.com"), TestConsent.Required);
         var group = Group.Create(GroupName.From("모임"), _meUser.Id, InviteCode.From("ABCDEF"), Past);
         Assert.True(group.AddMember(late.Id, Past.AddHours(2)).IsSuccess);
         Assert.True(group.AddMember(_otherUser.Id, Past.AddHours(1)).IsSuccess);

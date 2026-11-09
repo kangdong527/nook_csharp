@@ -148,7 +148,7 @@ public sealed class JoinGroupTests : IntegrationTestBase, IDisposable
 
     private async Task<User> SeedUserAsync(int n)
     {
-        var user = User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), Gender.None, null);
+        var user = User.Create(Nickname.From($"회원{n}"), Email.From($"user{n}@example.com"), TestConsent.Required);
         await using var db = Db.CreateContext();
         db.Users.Add(user);
         await db.SaveChangesAsync();
