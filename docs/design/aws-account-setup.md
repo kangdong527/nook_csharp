@@ -169,7 +169,7 @@ SCP = 계정 안에서 어떤 권한을 받아도 넘을 수 없는 **상한선*
 - [ ] (선택) 관리 계정 콘솔 기본 리전을 서울로(Unified Settings)
 - [ ] Builder ID 복구 이메일을 다른 메일 서비스로 교체
 - [ ] 같은 Gmail에 예전 Builder ID가 있는지 확인(복구 이메일 "이미 사용 중" 단서) — 있으면 MFA 또는 삭제
-- [ ] 도메인 구매(5단계 전)
+- [x] 도메인 구매(5단계 전) — `fillyournookwithstars.com`(2026-11-09, dep-plan 결정 5). SES 서울 도메인 인증·DMARC `quarantine`·운영 승인 요청 제출·카카오 SDK 도메인 추가까지 완료
 - [ ] **비용 알림 안전망** (2026-11-08 추가 — 지출 한도가 없어 알림만 남았으므로 "알림이 실제로 도착하는지"까지 확인)
   - [ ] Budgets 알림 메일 도착 확인: 첫 과금(5단계 이후) 때 `nook-zero-spend` 메일이 Gmail **받은편지함**에 오는지(스팸·필터 확인)
   - [ ] **비용 이상 탐지(Cost Anomaly Detection)** 켜기: Management → Billing → 비용 이상 탐지 → 모니터(AWS 서비스) + 이메일 구독. 무료. 키 유출 같은 급격한 지출 대비
