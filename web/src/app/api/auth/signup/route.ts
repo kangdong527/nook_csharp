@@ -7,7 +7,14 @@ import { apiFetch, problemResponse, readSignupPending } from "@/lib/api/server";
 import { rejectCrossOrigin } from "@/lib/api/origin";
 import { AUTH_COOKIE, AUTH_MAX_AGE_SECONDS, SIGNUP_COOKIE, cookieOptions } from "@/lib/api/cookies";
 
-type SignupRequest = { nickname?: string; gender?: string; birthdate?: string | null };
+type SignupRequest = {
+  nickname?: string;
+  gender?: string | null;
+  birthdate?: string | null;
+  agreePrivacy?: boolean;
+  confirmAge14?: boolean;
+  agreeOptional?: boolean;
+};
 
 export async function POST(request: NextRequest) {
   const rejected = rejectCrossOrigin(request);
@@ -25,8 +32,12 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({
       token: pending.token,
       nickname: form.nickname,
-      gender: form.gender,
+      gender: form.gender ?? null,
       birthdate: form.birthdate ?? null,
+      // 동의(R-US-06)는 boolean 만 그대로 넘긴다. 방침 버전은 보내지 않는다 — C# 이 시행 중인 버전을 기록한다
+      agreePrivacy: form.agreePrivacy === true,
+      confirmAge14: form.confirmAge14 === true,
+      agreeOptional: form.agreeOptional === true,
     }),
   });
 
