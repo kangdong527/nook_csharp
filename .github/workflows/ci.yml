@@ -93,6 +93,10 @@ jobs:
       TRIVY_IMAGE: aquasec/trivy:0.76.2
     steps:
       - uses: actions/checkout@v7
+      # PR CI 는 러너 아키텍처(x86)로 빌드·스캔한다. 운영(t4g = arm64) 이미지는 main 병합 뒤 배포 작업(8단계)에서 빌드한다.
+      # 이유(2026-11-09 사용자 결정): arm64 는 migrate 번들·web 이 QEMU 라 로컬 실측 각 약 14분(854s·861s) — PR 마다 기다리기엔 길다.
+      # 대가: PR 에서 스캔한 이미지와 배포 이미지의 아키텍처가 다르다(같은 베이스라 OS 패키지 취약점은 거의 같지만 보장은 아님)
+      #       → 배포 작업에서 arm64 이미지를 한 번 더 Trivy 로 스캔한다(8단계에 반영할 것).
       - name: Build images
         run: |
           docker build -f deploy/api.Dockerfile --target api     -t nook-api:ci .

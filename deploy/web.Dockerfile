@@ -4,6 +4,9 @@
 
 ARG NODE_VERSION=24-alpine
 
+# arm64(운영 t4g) 빌드는 단계 전체를 대상 플랫폼(QEMU)으로 돈다 — npm ci 가 대상 아키텍처의 네이티브 바이너리(SWC·sharp 등)를 받아야 하고,
+# standalone 출력이 그 node_modules 를 추적해 담기 때문. 빌드만 호스트로 빼면 x86 바이너리가 ARM 이미지에 들어간다(DEP 8단계).
+
 # ---- 1. deps: lockfile 그대로(npm ci). package*.json 만 먼저 → 코드만 바뀌면 캐시
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app

@@ -1,0 +1,34 @@
+# 운영 override — compose.yaml 위에 겹친다. DEP 8단계, Claude 초안(2026-11-09). 5단계 EC2 에서 처음 쓴다.
+#
+#   docker compose -f deploy/compose.yaml -f deploy/compose.prod.yaml --env-file /opt/nook/.env up -d --no-build
+#
+# 바뀌는 것: 빌드 대신 ECR 이미지(태그 = 커밋 sha), 이미지 저장소 S3 + api egress, Caddy 80·443.
+# 이미지 이름이 build 와 함께 있으면 compose 는 pull 로 받는다(--no-build 로 빌드 안 함).
+# 비밀값은 여기 없다 — 6단계에서 SSM Parameter Store → /opt/nook/.env(권한 600)로 받는다.
+
+services:
+  migrate:
+    image: ${IMAGE_REPO:?IMAGE_REPO 를 설정하세요(ECR 레지스트리/nook)}-migrate:${IMAGE_TAG:?IMAGE_TAG 를 설정하세요(커밋 sha)}
+
+  api:
+    image: ${IMAGE_REPO}-api:${IMAGE_TAG}
+    environment:
+      # 운영 이미지 저장소(dep-plan 결정 3). 자격 증명은 인스턴스 역할(IMDSv2 홉 제한 2 — 컨테이너에서 받으려면)
+      ImageStorage__Provider: S3
+      ImageStorage__S3__Bucket: ${S3_IMAGE_BUCKET:?S3_IMAGE_BUCKET 을 설정하세요}
+      ImageStorage__S3__Region: ${AWS_REGION:-ap-northeast-2}
+    # S3 를 부르려면 인터넷 출구가 필요하다 — backend 는 internal. api 만 egress 에 붙인다(최소 권한, dep-plan §4)
+    networks: [backend, egress]
+
+  web:
+    image: ${IMAGE_REPO}-web:${IMAGE_TAG}
+
+  caddy:
+    # 기본 파일의 127.0.0.1:3300 과 합쳐지지 않게 교체(!override). 443/udp = HTTP/3
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+
+networks:
+  egress: {}

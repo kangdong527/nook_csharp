@@ -75,6 +75,10 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
   - 남은 것: BFF `/api/auth/*`가 `Retry-After` 헤더를 넘기지 않고 화면도 429 문구가 없음(FE). IPv6를 열면 /64 단위로 묶어야 함(지금은 주소 하나 = 한 칸)
 - **compose 네트워크 설정 변경 = `down` 후 `up`** (2026-11-09 실측): 서브넷을 바꾸면 compose가 네트워크는 다시 만들지만 기존 컨테이너는 이어 붙이기만 해서 **서비스 이름 DNS 별칭(`db`)이 빠짐** → migrate가 `Resource temporarily unavailable`(DNS SERVFAIL). 볼륨은 `-v` 없이 내리면 유지
 - **ARM 이미지**: t4g = arm64. Actions에서 arm64 빌드(arm 러너 또는 buildx) 필요(8단계)
+  - 2026-11-09 결정(사용자): **교차 빌드 + 에뮬레이션** — api는 SDK를 `$BUILDPLATFORM`으로(DLL은 아키텍처 무관, 로컬 15s), **migrate 번들과 web은 대상 플랫폼(QEMU)**. 번들 도구가 `--runtime linux-arm64` 빌드 결과를 직접 로드해서 교차 빌드하면 `Could not load file or assembly 'Nook.Api'`(실측). web은 `npm ci`가 arm64 네이티브 바이너리를 받아야 함
+  - 로컬 arm64 빌드: api 15s · migrate 854s · web 861s. 에뮬레이션 실행 확인: api RID `linux-arm64`·live 200, web `/login` 200, 번들 `--help` 정상
+  - **PR CI는 x86 유지**(사용자 결정 — PR마다 약 29분은 김). arm64는 8단계 배포 작업에서 빌드하고 **그 이미지를 Trivy로 다시 스캔**한다
+- **배포 스크립트**: `deploy/scripts/deploy.sh <태그>` + `deploy/compose.prod.yaml`(ECR 이미지·S3·api egress·80/443 `!override`). 로컬 리허설(2026-11-09): good 배포 성공 → bad(api 즉시 종료) 배포 → ready 60s 실패 → good 자동 롤백, exit 1, 기록 태그 good 유지. **롤백은 이미지만** — 마이그레이션은 확장 → 전환 → 축소로 직전 버전과 호환되게
 - **S3 × compose 네트워크** (2026-11-09): `backend`가 `internal: true`라 api가 S3에 못 나간다(연결 시간 초과). Provider를 `S3`로 바꿀 때 **api만** egress 네트워크에 추가(5단계). 로컬 compose는 LocalDisk라 지금은 열지 않음(최소 권한)
 - **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
 - **S3 없는 키 = 403**: 역할에 `s3:ListBucket`이 없으면 S3는 없는 키에 404 대신 403을 준다. `S3ImageStorage`는 404만 "없음"으로 보고 403은 설정 사고로 올려 500 → 인스턴스 역할 정책에 버킷 `s3:ListBucket` + 객체 `s3:GetObject`·`PutObject`·`DeleteObject`(5단계)

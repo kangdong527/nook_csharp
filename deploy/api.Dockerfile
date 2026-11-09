@@ -6,7 +6,10 @@
 ARG DOTNET_VERSION=10.0
 
 # ---- 1. restore: csproj 만 먼저 복사 → 코드만 바뀌면 이 레이어(패키지 다운로드)는 캐시를 그대로 쓴다
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS restore
+# --platform=$BUILDPLATFORM: SDK 는 빌드 머신 아키텍처로 돈다(QEMU 에뮬레이션 없음, DEP 8단계 — 운영 t4g = arm64).
+#   publish 결과(UseAppHost=false 프레임워크 의존 DLL)는 아키텍처와 무관하고, 번들은 TARGETARCH 로 RID 를 골라 교차 빌드한다.
+#   실행 이미지(aspnet·runtime-deps)만 대상 아키텍처 것을 받는다 — 아래 FROM 에 --platform 이 없는 이유.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS restore
 WORKDIR /src
 COPY Directory.Build.props dotnet-tools.json ./
 COPY src/Nook.SharedKernel/Nook.SharedKernel.csproj       src/Nook.SharedKernel/
@@ -26,9 +29,13 @@ RUN dotnet publish src/Nook.Api/Nook.Api.csproj -c Release --no-restore -o /app/
 RUN mkdir -p /app/data/images
 
 # ---- 3. 마이그레이션 번들: EF 마이그레이션을 실행 파일 하나로. 운영 이미지에 SDK·dotnet-ef 를 넣지 않으려고 따로 만든다
-FROM restore AS bundle
+# 이 단계만 대상 플랫폼(arm64 면 QEMU)에서 돈다 — restore 를 잇지 않는다. 번들 도구가 시작 프로젝트(Nook.Api)를 --runtime 으로 빌드한 뒤
+# 그 결과를 직접 로드해 DbContext 를 얻는데, 빌드 머신(x86)에서 linux-arm64 빌드 결과를 로드하면
+# "Could not load file or assembly 'Nook.Api'"로 실패한다(2026-11-09 실측). api 의 publish 는 로드하지 않아 교차 빌드가 된다.
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS bundle
 ARG TARGETARCH
-COPY .editorconfig ./
+WORKDIR /src
+COPY Directory.Build.props dotnet-tools.json .editorconfig ./
 COPY src/ src/
 RUN dotnet tool restore
 # TARGETARCH(amd64|arm64, buildx 가 채움) → .NET RID. t4g(ARM) 배포 때 arm64 로 빌드된다(8단계)
