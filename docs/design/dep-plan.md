@@ -85,6 +85,8 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 - **route53domains는 us-east-1 전용**: 리전 제한 SCP를 걸면 이 서비스는 예외로 둬야 한다. CLI는 `--region us-east-1`
 - **`nook-readonly` 축소 검증 남음**(2026-11-09 추가): `ViewOnlyAccess + SecurityAudit`로 줄였지만 데이터 든 버킷이 없어 "거부되는지"는 미확인 → 이미지 버킷 생성 후 `s3api get-object --profile nook-readonly`가 `AccessDenied`인지 확인
 - **SES·DMARC 확인**(2026-11-09 추가): 운영 승인 후 실제 매직 링크를 외부 주소로 받아 `dkim=pass`·`dmarc=pass`·한글 제목 확인. 샌드박스에서는 워커 발송 실패가 화면에 안 보임(로그만)
+- **5단계 S3·IAM 결정**(2026-11-09): 버킷 2개 **계정 리전 네임스페이스**(`nook-prod-{images,backups}-<계정ID>-ap-northeast-2-an` — 다른 계정이 같은 이름을 못 만듦, 무작위 접미사 불필요). 둘 다 버전 관리·SSE-S3·퍼블릭 차단·ACL 끔. 이미지 수명 주기 `expire-noncurrent-35d`(백업 보존 약 5주와 맞춤). 백업은 침해 대비로 버전 관리 켬. 인스턴스 역할 `nook-ec2` 인라인 정책 = **`deploy/iam/nook-ec2-inline-policy.json`**(이미지 `reviews/`·`avatars/` Get·Put·Delete + 버킷 List / 백업 **`daily/`·`weekly/` Put만**(사용자 작성) / SES `no-reply@`만). 백업 키 접두사는 이 정책이 기준 → 9단계 스크립트·수명 주기도 같은 이름. `s3:AbortMultipartUpload`는 주지 않음 — 남은 조각은 백업 버킷 수명 주기 "미완료 업로드 7일 삭제"(9단계)가 치움. 역할은 api 컨테이너·호스트 백업 스크립트가 공유(IMDS) → 백업이 쓰기 전용이라 api 침해 시에도 읽기·삭제 불가
+- **5단계 실호출 확인 목록**: SSM 세션에서 인스턴스 역할로 ① 이미지 `reviews/` Put·Get·Delete, 없는 키 Get = 404(403이면 ListBucket 누락) ② 이미지 다른 접두사 Put = 거부 ③ 백업 `daily/` Put 성공, 같은 키 Get·Delete·List = 거부 ④ SES `no-reply@` 발송(샌드박스면 수신 자격 증명 권한 문제 가능 → 결과로 판단), 다른 From = 거부 ⑤ `nook-readonly`로 이미지 객체 Get = 거부
 - **SES 리전**: 서울만 인증·승인. 콘솔이 마지막 리전을 기억해 다른 리전에 만들 수 있음 → 시드니는 SCP로 차단(2026-11-09), 그래도 작업 전 리전 확인
 
 ## 5. 개인정보 처리방침·수집 동의 (2026-11-07 추가, 7단계 · 공개 조건)

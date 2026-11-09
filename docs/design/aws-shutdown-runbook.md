@@ -168,9 +168,11 @@
 | 2026-11-07 | nook Management Account | 서울 | S3 버킷 `aws-cloudtrail-logs-…-c8fa08da` | 트레일 로그 — 계속 쌓임 → 9단계 수명 주기 정책 · 8절 ① |
 | 2026-11-07 | nook Management Account | 글로벌 | Budgets `nook-zero-spend`, `nook-monthly-20` | 예산 2개까지 무료 · 8절 ③에서 함께 사라짐 |
 | 2026-11-09 | nook-prod | 글로벌(Route 53 Domains) | 도메인 `fillyournookwithstars.com` 등록 | **$16/년, 자동 갱신 켜짐**(다음 갱신 2027-11-09 전후 — 캘린더 등록). 개인정보 보호 켜짐, 등록자 이메일 인증 완료. 환불 거의 불가 · 6-2(마지막에 놓음) |
+| 2026-11-09 | nook-prod | 서울 | S3 `nook-prod-images-<계정ID>-ap-northeast-2-an`(계정 리전 네임스페이스) | 회원 사진. 버전 관리 + 수명 주기 `expire-noncurrent-35d`(이전 버전 35일·만료 삭제 마커·미완료 업로드 7일). SSE-S3, 퍼블릭 차단, ACL 끔. 용량 비례 과금(소량) · 6-1(버전 포함 비우기 → 삭제) |
+| 2026-11-09 | nook-prod | 서울 | S3 `nook-prod-backups-<계정ID>-ap-northeast-2-an`(계정 리전 네임스페이스) | DB 덤프. 버전 관리 켬(침해 시 덮어쓰기·삭제 대비, 인스턴스 역할엔 Put만), 수명 주기는 9단계. **개인정보 사본** — 3절 데이터 파기 대상 · 6-1 |
 | 2026-11-09 | nook-prod | 글로벌 | Route 53 호스팅 영역 `fillyournookwithstars.com`(등록 시 자동 생성) | **$0.50/월**, 도메인과 별개 과금. 생성 확인(NS·SOA, 2026-11-09) · 6-1에서 삭제(도메인을 놓기 전 레코드 정리) |
 
-과금 없는 설정(종료 시 계정과 함께 사라짐, 따로 지울 필요 없음): SCP `RegionFloor` 수정, 통합 설정 "표시되는 리전", S3 계정 퍼블릭 액세스 차단, IAM 역할 `nook-readonly`(6-1 #10에서 삭제). 무료지만 **반드시 직접 지울 것**: SES 도메인 자격 증명 `fillyournookwithstars.com`·샌드박스 테스트용 개인 이메일 자격 증명(둘 다 서울, 2026-11-09 — 4절. 이메일 쪽은 운영 승인 뒤 바로 지워도 됨), Route 53 레코드 DKIM CNAME 3개·`_dmarc` TXT(호스팅 영역과 함께 6-1)
+과금 없는 설정(종료 시 계정과 함께 사라짐, 따로 지울 필요 없음): SCP `RegionFloor` 수정, 통합 설정 "표시되는 리전", S3 계정 퍼블릭 액세스 차단, IAM 역할 `nook-readonly`(6-1 #10에서 삭제). 무료지만 **반드시 직접 지울 것**: SES 도메인 자격 증명 `fillyournookwithstars.com`·샌드박스 테스트용 개인 이메일 자격 증명(둘 다 서울, 2026-11-09 — 4절. 이메일 쪽은 운영 승인 뒤 바로 지워도 됨), Route 53 레코드 DKIM CNAME 3개·`_dmarc` TXT(호스팅 영역과 함께 6-1), IAM 역할 `nook-ec2`(관리형 `AmazonSSMManagedInstanceCore` + 인라인 `nook-ec2-app`) **+ 같은 이름의 인스턴스 프로파일**(콘솔엔 안 보임 — 역할 삭제 시 함께 확인, 2026-11-09 · 6-1)
 
 ## 잊었을 때의 안전망 (종료를 미룬 경우)
 
