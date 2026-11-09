@@ -1,0 +1,38 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ImagesListForNotFound",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::nook-prod-images-<ACCOUNT_ID>-ap-northeast-2-an"
+    },
+    {
+      "Sid": "ImagesReadWrite",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::nook-prod-images-<ACCOUNT_ID>-ap-northeast-2-an/reviews/*",
+        "arn:aws:s3:::nook-prod-images-<ACCOUNT_ID>-ap-northeast-2-an/avatars/*"
+      ]
+    },
+    {
+      "Sid": "BackupWriteOnly",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::nook-prod-backups-<ACCOUNT_ID>-ap-northeast-2-an/daily/*",
+        "arn:aws:s3:::nook-prod-backups-<ACCOUNT_ID>-ap-northeast-2-an/weekly/*"
+      ]
+    },
+    {
+      "Sid": "SendSignInMail",
+      "Effect": "Allow",
+      "Action": "ses:SendEmail",
+      "Resource": "arn:aws:ses:ap-northeast-2:<ACCOUNT_ID>:identity/fillyournookwithstars.com",
+      "Condition": {
+        "StringEquals": { "ses:FromAddress": "no-reply@fillyournookwithstars.com" }
+      }
+    }
+  ]
+}
