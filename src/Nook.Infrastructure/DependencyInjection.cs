@@ -71,6 +71,12 @@ public static class DependencyInjection
         return services;
     }
 
+    // /health/ready(DEP 7단계): DB에 연결되는가(CanConnect — 쿼리 한 번). 태그로 live와 나눈다 — live는 의존성을 보지 않는다.
+    public const string ReadyTag = "ready";
+
+    public static IHealthChecksBuilder AddDatabaseHealthCheck(this IHealthChecksBuilder builder) =>
+        builder.AddDbContextCheck<NookDbContext>("database", tags: [ReadyTag]);
+
     // 개발 전용(FE-2 이미지 A안). 재시작해도 남아 화면 확인에 쓴다. 운영은 DEP에서 S3 구현체로 교체.
     public static IServiceCollection AddLocalDiskImageStorage(this IServiceCollection services, string root) =>
         services.AddSingleton<IImageStorage>(new LocalDiskImageStorage(root));

@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -71,6 +72,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     knownNetworks.ForEach(options.KnownIPNetworks.Add);
 });
 builder.Services.AddNookRateLimiting();
+builder.Services.AddHealthChecks().AddDatabaseHealthCheck();
 
 // 유스케이스(Application). 저장소가 Scoped라 같은 수명으로 둔다.
 builder.Services.AddScoped<RequestMagicLinkHandler>();
@@ -165,5 +167,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// 헬스체크(DEP 7단계, 2026-11-09 결정): live = 프로세스가 요청을 받는가(의존성 없음), ready = DB까지(8단계 배포 게이트·롤백 판단).
+// 재시작 판단에 ready를 쓰지 않는다 — DB 순간 장애가 멀쩡한 api 재시작으로 번진다.
+// 응답은 상태 문자열만(기본 writer) — 예외 메시지·연결 정보를 내보내지 않는다. api는 바깥에 경로가 없다(Caddy → web만).
+// 익명(Fallback 정책 예외), 요청 제한 제외(전체 한도 포함) — 배포 스크립트의 반복 확인이 한도를 먹지 않게.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous().DisableRateLimiting();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyInjection.ReadyTag) })
+    .AllowAnonymous().DisableRateLimiting();
 
 app.Run();
