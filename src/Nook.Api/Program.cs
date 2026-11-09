@@ -31,7 +31,13 @@ var devDefault = builder.Environment.IsDevelopment();
 switch (builder.Configuration["Email:Provider"] ?? (devDefault ? "Console" : null))
 {
     case "Console": builder.Services.AddConsoleEmailTransport(); break;
-    case var other: throw new InvalidOperationException($"Email:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: Console)");
+    // 운영(DEP 7단계). 보내는 주소·리전 필수 — 빠지면 시작에서 실패. 실제 발송은 SES 도메인 인증·운영 승인 뒤
+    case "Ses":
+        builder.Services.AddSesEmailTransport(
+            builder.Configuration["Email:Ses:From"] ?? throw new InvalidOperationException("Email:Ses:From 설정이 없습니다(예: no-reply@도메인)."),
+            builder.Configuration["Email:Ses:Region"] ?? throw new InvalidOperationException("Email:Ses:Region 설정이 없습니다."));
+        break;
+    case var other: throw new InvalidOperationException($"Email:Provider 설정이 없거나 지원하지 않는 값입니다: '{other}' (지원: Console, Ses)");
 }
 switch (builder.Configuration["ImageStorage:Provider"] ?? (devDefault ? "LocalDisk" : null))
 {

@@ -13,6 +13,11 @@ services:
   api:
     image: ${IMAGE_REPO}-api:${IMAGE_TAG}
     environment:
+      # 운영 메일(DEP 7단계). 보내는 주소는 SES 에서 인증한 도메인 — 도메인 구매·DKIM 뒤에 정한다.
+      # 인스턴스 역할에 ses:SendEmail(이 identity 한정) 권한 필요. 샌드박스를 벗어나기 전엔 인증한 주소로만 보내진다
+      Email__Provider: Ses
+      Email__Ses__From: ${SES_FROM:?SES_FROM 을 설정하세요(예 no-reply@도메인)}
+      Email__Ses__Region: ${AWS_REGION:-ap-northeast-2}
       # 운영 이미지 저장소(dep-plan 결정 3). 자격 증명은 인스턴스 역할(IMDSv2 홉 제한 2 — 컨테이너에서 받으려면)
       ImageStorage__Provider: S3
       ImageStorage__S3__Bucket: ${S3_IMAGE_BUCKET:?S3_IMAGE_BUCKET 을 설정하세요}
