@@ -6,6 +6,7 @@
 // =========================================================
 
 import { cookies, headers as requestHeaders } from "next/headers";
+import { NextResponse } from "next/server";
 import { AUTH_COOKIE, SIGNUP_COOKIE, type SignupPending } from "./cookies";
 
 /** 서버 환경변수. NEXT_PUBLIC_ 이 아니다 — API 주소를 브라우저에 알릴 이유가 없다. */
@@ -38,6 +39,18 @@ export async function readProblem(res: Response): Promise<Problem> {
   } catch {
     return { status: res.status };
   }
+}
+
+/**
+ * C# 실패 응답을 브라우저로 그대로 넘기는 응답. 본문은 Problem 모양, 상태 코드는 같게.
+ * Retry-After 도 넘긴다 — 429(요청 제한, DEP 7단계)에서 "언제 다시"를 알려 주는 유일한 신호다.
+ */
+export async function problemResponse(res: Response): Promise<NextResponse> {
+  const problem = await readProblem(res);
+  const response = NextResponse.json(problem, { status: problem.status });
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) response.headers.set("Retry-After", retryAfter);
+  return response;
 }
 
 // Next 15+: cookies() 는 Promise 다(요청 API 비동기화) → 이 함수도 async.

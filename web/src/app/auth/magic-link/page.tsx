@@ -14,9 +14,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Spinner } from "@/components/Spinner";
 
+// invalid: 없음·만료·이미 사용(구분하지 않음) / rate_limited: 429 — 링크는 아직 유효하니 "새 링크를 받으라"고 하면 안 된다
+type Failure = "invalid" | "rate_limited";
+
 export default function MagicLinkPage() {
   const router = useRouter();
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<Failure | null>(null);
   // React 18 개발 모드의 effect 두 번 실행 방지 — 같은 토큰을 두 번 보내면 두 번째는 InvalidLink 다.
   const sent = useRef(false);
 
@@ -30,7 +33,7 @@ export default function MagicLinkPage() {
 
     // 토큰이 없으면 요청 없이 실패 — setState 는 effect 본문이 아니라 비동기 콜백에서(react-hooks/set-state-in-effect)
     if (!token) {
-      void Promise.resolve().then(() => setFailed(true));
+      void Promise.resolve().then(() => setFailed("invalid"));
       return;
     }
 
@@ -41,16 +44,16 @@ export default function MagicLinkPage() {
     })
       .then(async (res) => {
         if (!res.ok) {
-          setFailed(true);
+          setFailed(res.status === 429 ? "rate_limited" : "invalid");
           return;
         }
         const { next } = (await res.json()) as { next: string };
         router.replace(next);
       })
-      .catch(() => setFailed(true));
+      .catch(() => setFailed("invalid"));
   }, [router]);
 
-  if (!failed) {
+  if (failed === null) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <Spinner className="text-key" />
@@ -58,7 +61,17 @@ export default function MagicLinkPage() {
     );
   }
 
-  // 없음·만료·이미 사용을 구분하지 않는다(D5-3 — 구분하면 토큰 존재 여부가 드러난다).
+  // 토큰은 주소창에서 이미 지웠다 → 같은 탭 새로 고침으로는 재시도할 수 없다. 메일의 링크를 다시 누르게 안내한다.
+  if (failed === "rate_limited") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-ink">요청이 너무 많아요.</p>
+        <p className="text-sm text-sub">잠시 후 메일의 링크를 다시 눌러 주세요. 링크는 받은 뒤 15분 동안 쓸 수 있어요.</p>
+      </div>
+    );
+  }
+
+  // failed === "invalid": 없음·만료·이미 사용을 구분하지 않는다(D5-3 — 구분하면 토큰 존재 여부가 드러난다).
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <p className="text-ink">로그인 링크가 유효하지 않아요.</p>

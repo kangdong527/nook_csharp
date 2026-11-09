@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# DB 백업 덤프(개인정보 포함) — deploy/scripts/db-backup.sh 기본 출력
+backups/

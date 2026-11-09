@@ -14,7 +14,8 @@ import type { Gender } from "../types";
 export type CreateProfileFail =
   | "no_session" // 가입 대기(15분)가 끝났다 → 매직링크부터 다시
   | "nickname_taken" // 409 User.NicknameTaken — 동시 가입까지 DB UNIQUE 가 판정
-  | "invalid_input"; // 400 — 화면 검사를 통과했는데 서버가 거절(규칙 불일치)
+  | "invalid_input" // 400 — 화면 검사를 통과했는데 서버가 거절(규칙 불일치)
+  | "rate_limited"; // 429 — 같은 IP 의 링크 사용(consume)이 10분 5회를 넘었다(DEP 7단계). 가입 대기 쿠키는 남아 다시 제출 가능
 
 /**
  * 원본 화면의 생년월일 입력(YY-MM-DD)을 API 형식(YYYY-MM-DD)으로 바꾼다.
@@ -49,6 +50,7 @@ export async function createProfile(input: {
   if (res.status === 401) return err("no_session");
   if (res.status === 409) return err("nickname_taken");
   if (res.status === 400) return err("invalid_input");
+  if (res.status === 429) return err("rate_limited");
 
   throw new Error(`signup 실패: ${res.status}`);
 }

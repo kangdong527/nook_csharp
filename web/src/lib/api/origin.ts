@@ -10,7 +10,7 @@
 //   - 쉼표로 여러 개 허용(예: https://nook.example,https://www.nook.example). 끝 슬래시는 무시 — Origin 헤더엔 경로가 없다
 // =========================================================
 
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 function allowedOrigins(request: NextRequest): string[] {
   const configured = (process.env.NOOK_PUBLIC_ORIGIN ?? "")
@@ -25,4 +25,17 @@ function allowedOrigins(request: NextRequest): string[] {
 export function isAllowedOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
   return origin !== null && allowedOrigins(request).includes(origin);
+}
+
+/**
+ * 상태를 바꾸는 route handler 맨 앞에서: 허용 출처가 아니면 403 응답, 맞으면 null.
+ * /api/auth/* 는 쿠키가 없어도 막을 이유가 있다(DEP 7단계, 2026-11-09):
+ *   - consume: 로그인 CSRF — 공격자 토큰으로 피해자를 공격자 계정에 로그인시킨다(쿠키 불필요라 SameSite 로 못 막음)
+ *   - magic-link: 피해자 브라우저들로 메일 요청 → IP 요청 제한을 피해자 IP 수만큼 우회
+ *   - logout: 강제 로그아웃 / signup·withdraw: SameSite=Lax 다음 두 번째 겹
+ */
+export function rejectCrossOrigin(request: NextRequest): NextResponse | null {
+  return isAllowedOrigin(request)
+    ? null
+    : NextResponse.json({ status: 403, title: "Bff.CrossOrigin" }, { status: 403 });
 }

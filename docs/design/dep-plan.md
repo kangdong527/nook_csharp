@@ -31,7 +31,7 @@
 | 6 | 비밀값 | SSM Parameter Store SecureString, 배포 시 인스턴스 역할로 읽기. 리포·이미지·로그 금지 | 협업 | |
 | 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`, **개인정보 처리방침·수집 동의(아래 §5)**. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | 🟡 2026-11-09 코드 완료분: ForwardedHeaders·IP RateLimiter(PR #34) · `/health/live`·`/health/ready`(`398887c`) · `UseHttpsRedirection` 제거·`IncludeErrorDetails=false` 테스트 고정(`8ab8a9d`) · Caddy 보안 헤더 + **강제 CSP**(`119c90a`, Report-Only 측정 → 강제 모드 브라우저 확인, `'unsafe-eval'` 없음). **남은 것**: SES 발송기·메일 상한(A1)(도메인 필요), 개인정보 처리방침·수집 동의(§5), BFF Origin 검사 `/api/auth/{signup,logout,magic-link}`, 429 화면 문구·`Retry-After` 전달(FE), CSP nonce(개선) |
 | 8 | CD | `main` push → arm64 이미지 → ECR(sha 태그) → GitHub OIDC(신뢰 정책 `main` 한정) → SSM → pull·마이그레이션·`compose up`·헬스체크 → 실패 시 직전 태그 롤백 | Claude | |
-| 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북, **종료 런북 갱신(`aws-shutdown-runbook.md`)** | 협업 | |
+| 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북, **종료 런북 갱신(`aws-shutdown-runbook.md`)** | 협업 | 🟡 2026-11-09 로컬 선행: 결정(사용자) **하루 1회(RPO 24h) · 보존 매일 7 + 주 4**(S3 수명 주기). `deploy/scripts/db-backup.sh`(`-Fc`, 권한 600, `pg_restore --list` 점검)·`db-restore-check.sh`(버리는 `postgres:17`에 `--exit-on-error` 복원 → 테이블별 행 수 대조·시간). 로컬 통과, 잘린 덤프·덤프 뒤 쓰기는 실패로 잡음(실측). **남은 것**: S3 업로드·타이머(systemd), EC2 기준 RTO 전체 측정, 운영 리허설 판정은 원본 대조 대신 `/health/ready` 200 + 핵심 테이블 비어 있지 않음(쓰기 중 대조는 거짓 실패), 사진은 덤프 밖 → S3 버전 관리·수명 주기(5단계 버킷 생성 때), **백업 보존 = 탈퇴 회원 데이터가 최대 약 5주 남음 → 개인정보 처리방침 파기 범위에 기재(§5)** |
 | 10 | 게이트 + Pillar 점검 | `개발_프로세스.md` DEP 게이트 4개 + 아래 표를 측정값·화면으로 확인 | 사용자 확인 | |
 
 ## 2. AWS 보안 Pillar 점검표 (계획 기준 — 10단계에서 실제로 확인)
@@ -75,6 +75,10 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
   - 남은 것: BFF `/api/auth/*`가 `Retry-After` 헤더를 넘기지 않고 화면도 429 문구가 없음(FE). IPv6를 열면 /64 단위로 묶어야 함(지금은 주소 하나 = 한 칸)
 - **compose 네트워크 설정 변경 = `down` 후 `up`** (2026-11-09 실측): 서브넷을 바꾸면 compose가 네트워크는 다시 만들지만 기존 컨테이너는 이어 붙이기만 해서 **서비스 이름 DNS 별칭(`db`)이 빠짐** → migrate가 `Resource temporarily unavailable`(DNS SERVFAIL). 볼륨은 `-v` 없이 내리면 유지
 - **ARM 이미지**: t4g = arm64. Actions에서 arm64 빌드(arm 러너 또는 buildx) 필요(8단계)
+  - 2026-11-09 결정(사용자): **교차 빌드 + 에뮬레이션** — api는 SDK를 `$BUILDPLATFORM`으로(DLL은 아키텍처 무관, 로컬 15s), **migrate 번들과 web은 대상 플랫폼(QEMU)**. 번들 도구가 `--runtime linux-arm64` 빌드 결과를 직접 로드해서 교차 빌드하면 `Could not load file or assembly 'Nook.Api'`(실측). web은 `npm ci`가 arm64 네이티브 바이너리를 받아야 함
+  - 로컬 arm64 빌드: api 15s · migrate 854s · web 861s. 에뮬레이션 실행 확인: api RID `linux-arm64`·live 200, web `/login` 200, 번들 `--help` 정상
+  - **PR CI는 x86 유지**(사용자 결정 — PR마다 약 29분은 김). arm64는 8단계 배포 작업에서 빌드하고 **그 이미지를 Trivy로 다시 스캔**한다
+- **배포 스크립트**: `deploy/scripts/deploy.sh <태그>` + `deploy/compose.prod.yaml`(ECR 이미지·S3·api egress·80/443 `!override`). 로컬 리허설(2026-11-09): good 배포 성공 → bad(api 즉시 종료) 배포 → ready 60s 실패 → good 자동 롤백, exit 1, 기록 태그 good 유지. **롤백은 이미지만** — 마이그레이션은 확장 → 전환 → 축소로 직전 버전과 호환되게
 - **S3 × compose 네트워크** (2026-11-09): `backend`가 `internal: true`라 api가 S3에 못 나간다(연결 시간 초과). Provider를 `S3`로 바꿀 때 **api만** egress 네트워크에 추가(5단계). 로컬 compose는 LocalDisk라 지금은 열지 않음(최소 권한)
 - **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
 - **S3 없는 키 = 403**: 역할에 `s3:ListBucket`이 없으면 S3는 없는 키에 404 대신 403을 준다. `S3ImageStorage`는 404만 "없음"으로 보고 403은 설정 사고로 올려 500 → 인스턴스 역할 정책에 버킷 `s3:ListBucket` + 객체 `s3:GetObject`·`PutObject`·`DeleteObject`(5단계)

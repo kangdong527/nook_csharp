@@ -5,8 +5,9 @@
 //               (C# 는 닉네임이 없으면 롤백해 토큰을 살려 둔다 — 프로필 제출 때 같은 토큰을 다시 쓴다)
 //   실패      → C# ProblemDetails 그대로(400 Auth.InvalidLink 등)
 
-import { NextResponse } from "next/server";
-import { apiFetch, readProblem } from "@/lib/api/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { apiFetch, problemResponse } from "@/lib/api/server";
+import { rejectCrossOrigin } from "@/lib/api/origin";
 import {
   AUTH_COOKIE,
   AUTH_MAX_AGE_SECONDS,
@@ -18,14 +19,15 @@ import {
 
 type ConsumeResponse = { accessToken: string | null; needsNickname: boolean; email: string | null };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // 로그인 CSRF 방어 — 다른 사이트가 공격자 토큰을 실어 보내면 피해자가 공격자 계정에 로그인된다
+  const rejected = rejectCrossOrigin(request);
+  if (rejected) return rejected;
+
   const { token } = (await request.json()) as { token?: string };
 
   const res = await apiFetch("/auth/magic-link/consume", { method: "POST", body: JSON.stringify({ token }) });
-  if (!res.ok) {
-    const problem = await readProblem(res);
-    return NextResponse.json(problem, { status: problem.status });
-  }
+  if (!res.ok) return problemResponse(res);
 
   const body = (await res.json()) as ConsumeResponse;
 
