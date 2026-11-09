@@ -6,6 +6,7 @@
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
+     - **▶ 2026-11-09 밤 이후 재개 (여기부터)** — ① `feat/dep5-infra` PR(`dbd723e` 이후 커밋 포함) ② SES 운영 승인 메일 확인(승인되면 테스트용 이메일 자격 증명 삭제, 추가 질문이면 progress 상단 답변 요지로 회신) ③ **6단계 비밀값**(Parameter Store 이름 체계·인스턴스 역할 `ssm:GetParameters` 추가) ④ **5단계 C** EC2 t4g.small(AL2023 arm64, 키 페어 없음, IMDSv2 홉 2, EBS 20GB gp3 암호화, SG 80·443 내 IP만, 역할 `nook-ec2`) → D 탄력적 IP + A 레코드 → E SSM 접속·Docker → dep-plan §4 "5단계 실호출 확인 목록" ①~⑤. AWS 작업 안내는 **단계마다 계정·리전 확인을 첫 줄에**
      - **세션 시작하면 할 일 (순서대로)**
        0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35) · BFF `/api/auth/*` Origin 검사·429 안내·백업/복원 리허설·arm64 빌드·`compose.prod.yaml`·`deploy.sh`(PR #37) · A1 수신자별 메일 상한·SES 발송기 코드(PR #38). 단계별 남은 것은 dep-plan 단계 표 7·8·9행과 §4
        - 로컬 compose가 배포 리허설 이미지(`nook-local-*:good`)로 떠 있을 수 있음 → `docker compose -f deploy/compose.yaml up -d --build`로 최신 코드로 다시 올린다
@@ -440,6 +441,16 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
 6. 발견(2단계 함정): BFF Origin 검사가 프록시 뒤에서 모든 POST를 403으로 만듦 / ForwardedHeaders 없으면 IP RateLimiter가 전원을 한 명으로 봄
 커밋: 없음(`fix/next16-security` 작업 트리 — 다음 세션 첫 결정)
 Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `next.config.js` 이미지 설정(사용자: "Next.js는 아직 학습 전"), progress·learning-log 갱신. 결정은 사용자
+
+### 2026-11-09 밤 (DEP — 도메인·SES·5단계 준비)
+1. 도메인 `fillyournookwithstars.com`(PM 결정, Route 53 $16/년) 구매 · 이메일 인증 · 요청 성공·호스팅 영역 확인. `.com`이라 HSTS 프리로드 없음 → 5단계 HTTPS·HSTS 직접 확인
+2. SES 서울 도메인 인증(Easy DKIM 2048, MAIL FROM 끔 — DMARC는 DKIM 정렬로 충분) → 샌드박스 테스트 Gmail 받은편지함·SPF/DKIM/DMARC PASS → DMARC `none` → `quarantine`(공개 DNS 실측) → 운영 승인 요청 제출(결과 대기). 사용자 질문: SES가 뭔가, 샌드박스면 가입자에게 무슨 일(→ 발송 거절 + 워커라 화면은 성공)
+3. **사고(경미)**: 테스트용 이메일 자격 증명을 시드니에 생성 — 콘솔이 마지막 리전 기억. 삭제·서울 재생성 → 시드니 자원 0개 조회 후 **SCP `RegionFloor`·표시 리전에서 시드니 제거**, 시드니 호출 = SCP 명시적 거부 실측(사람 주의 → 구조적 차단)
+4. 카카오 JS SDK 도메인 추가 · `nook-readonly` → `ViewOnlyAccess + SecurityAudit`(PR #42·#43)
+5. 5단계 A·B: S3 2개 **계정 리전 네임스페이스**(새 콘솔 옵션 — 화면 문구 먼저 받아 판단, 무작위 접미사 폐기), 이미지 수명 주기 35일, 백업 버전 관리(Claude가 "끔" 권장 → 침해 시나리오로 정정) · 역할 `nook-ec2` + 인라인 정책(**백업 문 사용자 작성**: `s3:PostObject`(없는 액션)·복사된 접두사 2곳 리뷰로 수정 → `daily/`·`weekly/` Put만). Claude 실수: `<ACCOUNT_ID>` 개수 5 → 사용자가 6으로 정정
+6. EC2는 6단계(Parameter Store) 뒤로(사용자 결정 — 빈 인스턴스 과금·노출 기간 단축)
+커밋: PR #42·#43 병합, `dbd723e`(`feat/dep5-infra`, 푸시·PR 전)
+Claude가 작성: 정책 틀(백업 문 제외), 문서 갱신. 콘솔 작업·결정은 사용자
 
 ### 2026-11-09 저녁 (DEP 7 §5 — 개인정보)
 1. 발견: 성별(필수)·생년월일(선택)을 가입 때 받아 **저장만 하고 어디서도 쓰지 않음**(프로필도 `gender: null`) → 최소 수집 원칙과 충돌
