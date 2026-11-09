@@ -6,7 +6,7 @@
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
-     - **▶ 2026-11-09 밤 이후 재개 (여기부터)** — ① `feat/dep5-infra` PR(`dbd723e` 이후 커밋 포함) ② SES 운영 승인 메일 확인(승인되면 테스트용 이메일 자격 증명 삭제, 추가 질문이면 progress 상단 답변 요지로 회신) ③ **6단계 비밀값**(Parameter Store 이름 체계·인스턴스 역할 `ssm:GetParameters` 추가) ④ **5단계 C** EC2 t4g.small(AL2023 arm64, 키 페어 없음, IMDSv2 홉 2, EBS 20GB gp3 암호화, SG 80·443 내 IP만, 역할 `nook-ec2`) → D 탄력적 IP + A 레코드 → E SSM 접속·Docker → dep-plan §4 "5단계 실호출 확인 목록" ①~⑤. AWS 작업 안내는 **단계마다 계정·리전 확인을 첫 줄에**
+     - **▶ 2026-11-09 밤 이후 재개 (여기부터)** — ① `feat/dep5-infra` PR(`dbd723e` 이후 커밋 포함) ② ~~SES 운영 승인~~ ✅ 2026-11-09 당일 승인(배너 사라짐, 일일 할당량 200 → 50,000). 남은 것: 서울 테스트용 개인 이메일 자격 증명 삭제(선택, 무료) ③ **6단계 비밀값**(Parameter Store 이름 체계·인스턴스 역할 `ssm:GetParameters` 추가) ④ **5단계 C** EC2 t4g.small(AL2023 arm64, 키 페어 없음, IMDSv2 홉 2, EBS 20GB gp3 암호화, SG 80·443 내 IP만, 역할 `nook-ec2`) → D 탄력적 IP + A 레코드 → E SSM 접속·Docker → dep-plan §4 "5단계 실호출 확인 목록" ①~⑤. AWS 작업 안내는 **단계마다 계정·리전 확인을 첫 줄에**
      - **세션 시작하면 할 일 (순서대로)**
        0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35) · BFF `/api/auth/*` Origin 검사·429 안내·백업/복원 리허설·arm64 빌드·`compose.prod.yaml`·`deploy.sh`(PR #37) · A1 수신자별 메일 상한·SES 발송기 코드(PR #38). 단계별 남은 것은 dep-plan 단계 표 7·8·9행과 §4
        - 로컬 compose가 배포 리허설 이미지(`nook-local-*:good`)로 떠 있을 수 있음 → `docker compose -f deploy/compose.yaml up -d --build`로 최신 코드로 다시 올린다
