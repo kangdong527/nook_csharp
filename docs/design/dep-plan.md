@@ -29,7 +29,7 @@
 | 4 | AWS 계정 보안 기본 | 루트 MFA·루트 키 없음, IAM Identity Center, Budgets 알림, CloudTrail, 서울 리전 | 사용자(콘솔) + 가이드 | |
 | 5 | 인프라 | EC2 t4g.small(ARM), IMDSv2 강제, EBS 기본 암호화, SG 80·443만(22 닫음) — **처음엔 내 IP만(결정 6)**, SSM 에이전트·인스턴스 역할, 탄력적 IP, 도메인 DNS, S3(이미지·백업, 퍼블릭 차단, SSE) | 사용자 + 가이드 | |
 | 6 | 비밀값 | SSM Parameter Store SecureString, 배포 시 인스턴스 역할로 읽기. 리포·이미지·로그 금지 | 협업 | |
-| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`, **개인정보 처리방침·수집 동의(아래 §5)**. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | |
+| 7 | 공개 전 앱 보안 | RateLimiter(IP·이메일), 메일 상한(A1), SES 발송기, `IncludeErrorDetails=false`, **ForwardedHeaders(신뢰 프록시 명시)**, **BFF Origin 검사 허용 Origin 설정값화**, HSTS·보안 헤더, `/health`, **개인정보 처리방침·수집 동의(아래 §5)**. **끝나면 SG 80·443을 전체 공개로 전환(결정 6)** | 협업 | 🟡 2026-11-09 코드 완료분: ForwardedHeaders·IP RateLimiter(PR #34) · `/health/live`·`/health/ready`(`398887c`) · `UseHttpsRedirection` 제거·`IncludeErrorDetails=false` 테스트 고정(`8ab8a9d`) · Caddy 보안 헤더 + **강제 CSP**(`119c90a`, Report-Only 측정 → 강제 모드 브라우저 확인, `'unsafe-eval'` 없음). **남은 것**: SES 발송기·메일 상한(A1)(도메인 필요), 개인정보 처리방침·수집 동의(§5), BFF Origin 검사 `/api/auth/{signup,logout,magic-link}`, 429 화면 문구·`Retry-After` 전달(FE), CSP nonce(개선) |
 | 8 | CD | `main` push → arm64 이미지 → ECR(sha 태그) → GitHub OIDC(신뢰 정책 `main` 한정) → SSM → pull·마이그레이션·`compose up`·헬스체크 → 실패 시 직전 태그 롤백 | Claude | |
 | 9 | 운영·복구 | `pg_dump` → S3 주기 백업, **복원 리허설 1회**, EBS 스냅샷(DLM), 로그 로테이션, 사고 대응 런북, **종료 런북 갱신(`aws-shutdown-runbook.md`)** | 협업 | |
 | 10 | 게이트 + Pillar 점검 | `개발_프로세스.md` DEP 게이트 4개 + 아래 표를 측정값·화면으로 확인 | 사용자 확인 | |
