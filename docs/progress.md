@@ -1,13 +1,14 @@
 # 진행 내역
 
 - 시작일: 2026-10-08
-- 현재: **DEP 진행 중 — 1·2·3·4단계 완료, 7단계 중 도메인 무관 코드 완료(2026-11-09, PR #33·#34·#35)**. **다음 세션: 도메인 이름(PM 확인 대기, 후보 `nookmap.app`) → 구매 → 5단계(인프라)**. 도메인이 계속 늦으면 8단계(CD — ECR·OIDC·SSM) 중 도메인 무관 부분을 먼저 할 수 있다. DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6), AWS 구성은 **`docs/design/aws-account-setup.md`**, 종료 절차는 **`docs/design/aws-shutdown-runbook.md`**(서비스 완전 종료 전체 프로세스, 2026-11-08 재구성). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
+- 현재: **DEP 진행 중 — 1·2·3·4단계 완료, 도메인 없이 할 수 있는 코드 전부 완료(2026-11-09, PR #33~#38): 7단계 코드 · 8단계 준비(arm64·운영 compose·배포/롤백 스크립트) · 9단계 로컬 리허설**. **다음 세션: PM에게 ① 도메인 이름(후보 `nookmap.app`) ② 개인정보 정책(만 14세 미만·선택 동의·파기 범위 — 백업 약 5주 보존 포함) 확인 → 도메인 구매 → 5단계(인프라)**. 남은 작업 추정(Claude) 약 5~6 작업일. DEP 계획·기록은 **`docs/design/dep-plan.md`**(4단계 실제 진행은 §6), AWS 구성은 **`docs/design/aws-account-setup.md`**, 종료 절차는 **`docs/design/aws-shutdown-runbook.md`**(서비스 완전 종료 전체 프로세스, 2026-11-08 재구성). 달력 기준 약 10일 지연. **2026-10-27부터 서비스 계층 `TODO(human)`도 Claude 작성(사용자 요청 — 면접·역량검사 대비 기간, 사용자가 말할 때까지)**
 - **일정 변경 채택(2026-10-20)**: D5 → D6 → FE 프론트 연결 → DEP 배포 주간(1주, AWS EC2 + GitHub Actions) → README 최소판 → D7~D11 → D13 → D14. 상세는 `docs/개발_프로세스.md` §5 "진행 순서"
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
      - **세션 시작하면 할 일 (순서대로)**
-       0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35). 7단계 남은 것은 dep-plan 단계 표 7행
+       0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35) · BFF `/api/auth/*` Origin 검사·429 안내·백업/복원 리허설·arm64 빌드·`compose.prod.yaml`·`deploy.sh`(PR #37) · A1 수신자별 메일 상한·SES 발송기 코드(PR #38). 단계별 남은 것은 dep-plan 단계 표 7·8·9행과 §4
+       - 로컬 compose가 배포 리허설 이미지(`nook-local-*:good`)로 떠 있을 수 있음 → `docker compose -f deploy/compose.yaml up -d --build`로 최신 코드로 다시 올린다
        1. `git status` — `main`에서 시작(마지막 병합 PR #35, `519f3fa`). 작업 트리 깨끗. 새 클론이면 `git config core.hooksPath .githooks`. GitHub 배너 "main branch isn't protected"는 무시(3단계 결정 — private·Free라 규칙 강제 불가, 공개 전환 시 켬)
        2. ~~4단계 AWS 계정 보안~~ ✅ — 서울 리전(원인: 통합 설정 "표시되는 리전", SCP와 별도) · S3 계정 퍼블릭 차단 · Identity Center 권한 세트 없음(Builder ID 소스) → 대안 nook-prod IAM 역할 `nook-readonly` + `aws login`(CLI 2.39.5) · CLI 읽기 검증 9항목(`aws-account-setup.md` 9절) · nook-prod 루트 자격 증명 "없음" · 계정 이름은 이미 `nook-prod`(세션 표시만 옛 이름). 남은 것: 7단계 전 `nook-readonly` 권한 축소, 시드니 정리(같은 문서 7절)
           - CLI 사용: 조회는 `--profile nook-readonly`, 만료 시 `aws login --profile nook-prod`. Claude는 읽기 명령만
@@ -439,6 +440,16 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
 6. 발견(2단계 함정): BFF Origin 검사가 프록시 뒤에서 모든 POST를 403으로 만듦 / ForwardedHeaders 없으면 IP RateLimiter가 전원을 한 명으로 봄
 커밋: 없음(`fix/next16-security` 작업 트리 — 다음 세션 첫 결정)
 Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `next.config.js` 이미지 설정(사용자: "Next.js는 아직 학습 전"), progress·learning-log 갱신. 결정은 사용자
+
+### 2026-11-09 오후 (DEP — 도메인 무관 작업 마무리)
+1. 문서 PR #36: progress·learning-log·**ADR-013**(클라이언트 IP 신뢰 고리와 요청 제한 위치, Claude 작성 — 사용자 요청)
+2. BFF 인증 경로(PR #37): Origin 검사가 빠진 곳이 메모(3곳)보다 많았음 — **consume = 로그인 CSRF**(쿠키 불필요라 SameSite로 못 막음), magic-link = IP 제한 우회. `rejectCrossOrigin`·`problemResponse`(Retry-After) 공통화. 429 화면: 링크 열기 "잠시 후"(이전엔 "유효하지 않음" → 잘못된 재요청 유도), 가입 폼은 exhaustive switch가 누락을 컴파일 오류로 잡음. compose 실측 + 브라우저 로그인·로그아웃(사용자)
+3. 백업·복원(PR #37): 결정(사용자) 하루 1회·보존 7+4. 리허설 통과, 잘린 덤프·덤프 뒤 쓰기는 실패로 잡음. 사용자 질문 "덤프 뒤 쓰기가 왜 실패?" → 원본을 지금 세는 한계(덤프 자신을 기준으로 바꾸는 안 제시, 사용자: 수정 없이 진행)
+4. arm64(PR #37): 결정(사용자) 교차 빌드 + web만 QEMU → **번들 교차 빌드 실패 실측**(`Could not load file or assembly 'Nook.Api'` — 도구가 arm64 빌드를 로드) → 번들도 대상 플랫폼. 로컬 api 15s·migrate 854s·web 861s, 에뮬레이션 실행 확인. **PR CI는 x86 유지**(사용자 결정, CI images 5분 39초 — 기준선). 배포 스크립트 롤백 리허설 good → bad → good
+5. 메일(PR #38): A1 측정 — 동시 100요청 → Q2 통과 8건 → 발송 3통(제거 변이 12통). SES 발송기 UTF-8 Charset 고정. 사용자 질문: SES란(발송 전용, 받은편지함 없음), "인증한 도메인의 주소"(= `no-reply@구매할도메인`, DKIM 레코드로 소유 증명)
+6. 아티팩트: 변경점 그림 정리 https://claude.ai/artifact/T74t79HyxxvMhszDAndVLo (비공개)
+커밋: `25e361f`·`e8254df`·`fed3b9c`·`9918032`(#37) · `e97e9f3`(#38) · 이 progress 커밋
+Claude가 작성(위임 기간): 위 코드·스크립트·테스트 전부, ADR-013, dep-plan 갱신. 결정은 사용자(백업 주기·보존, ARM 빌드 방식, PR CI x86, 리허설 스크립트 수정 안 함)
 
 ### 2026-11-09 (DEP — 7단계 코드)
 1. Dependabot 잔여 #17·#18: 내용이 이미 `main`(#30)이라 충돌 해결 대신 닫기 → 브랜치 삭제(사용자). 병합 버튼 비활성 = 충돌 PR 정상 동작
