@@ -83,6 +83,9 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
 - **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
 - **S3 없는 키 = 403**: 역할에 `s3:ListBucket`이 없으면 S3는 없는 키에 404 대신 403을 준다. `S3ImageStorage`는 404만 "없음"으로 보고 403은 설정 사고로 올려 500 → 인스턴스 역할 정책에 버킷 `s3:ListBucket` + 객체 `s3:GetObject`·`PutObject`·`DeleteObject`(5단계)
 - **route53domains는 us-east-1 전용**: 리전 제한 SCP를 걸면 이 서비스는 예외로 둬야 한다. CLI는 `--region us-east-1`
+- **`nook-readonly` 축소 검증 남음**(2026-11-09 추가): `ViewOnlyAccess + SecurityAudit`로 줄였지만 데이터 든 버킷이 없어 "거부되는지"는 미확인 → 이미지 버킷 생성 후 `s3api get-object --profile nook-readonly`가 `AccessDenied`인지 확인
+- **SES·DMARC 확인**(2026-11-09 추가): 운영 승인 후 실제 매직 링크를 외부 주소로 받아 `dkim=pass`·`dmarc=pass`·한글 제목 확인. 샌드박스에서는 워커 발송 실패가 화면에 안 보임(로그만)
+- **SES 리전**: 서울만 인증·승인. 콘솔이 마지막 리전을 기억해 다른 리전에 만들 수 있음 → 시드니는 SCP로 차단(2026-11-09), 그래도 작업 전 리전 확인
 
 ## 5. 개인정보 처리방침·수집 동의 (2026-11-07 추가, 7단계 · 공개 조건)
 
