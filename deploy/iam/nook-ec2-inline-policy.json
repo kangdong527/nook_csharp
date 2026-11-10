@@ -33,6 +33,12 @@
       "Condition": {
         "StringEquals": { "ses:FromAddress": "no-reply@fillyournookwithstars.com" }
       }
+    },
+    {
+      "Sid": "ReadDeploySecrets",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameters",
+      "Resource": "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:parameter/nook/prod/*"
     }
   ]
 }
