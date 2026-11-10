@@ -39,6 +39,12 @@
       "Effect": "Allow",
       "Action": "ssm:GetParameters",
       "Resource": "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:parameter/nook/prod/*"
+    },
+    {
+      "Sid": "DenyParametersOutsideNookProd",
+      "Effect": "Deny",
+      "Action": "ssm:GetParameter*",
+      "NotResource": "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:parameter/nook/prod/*"
     }
   ]
 }
