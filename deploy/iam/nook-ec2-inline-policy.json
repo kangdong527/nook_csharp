@@ -39,6 +39,29 @@
       "Effect": "Allow",
       "Action": "ssm:GetParameters",
       "Resource": "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:parameter/nook/prod/*"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrPullOnly",
+      "Effect": "Allow",
+      "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+      "Resource": [
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-api",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-web",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-migrate",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-deploy"
+      ]
+    },
+    {
+      "Sid": "DenyParametersOutsideNookProd",
+      "Effect": "Deny",
+      "Action": "ssm:GetParameter*",
+      "NotResource": "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:parameter/nook/prod/*"
     }
   ]
 }

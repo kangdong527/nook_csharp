@@ -6,7 +6,8 @@
 - **▶ 다음 세션 재개 지점 (여기서 바로 시작)**
   0. Docker Desktop을 먼저 켠다(꺼져 있으면 통합 테스트 전체가 `DockerUnavailableException`). 손 테스트 뒤 `dotnet run`을 끄지 않으면 빌드가 DLL 잠금(MSB3027)으로 실패한다
   1. **▶ DEP (여기서 바로 시작)** — 계획 `docs/design/dep-plan.md`(단계 1~10, 결정 1~6, Pillar 점검표, 함정, §5 개인정보). 보안 1순위·비용 2순위
-     - **▶ 2026-11-09 밤 이후 재개 (여기부터)** — ① `feat/dep5-infra` PR(`dbd723e` 이후 커밋 포함) ② ~~SES 운영 승인~~ ✅ 2026-11-09 당일 승인(배너 사라짐, 일일 할당량 200 → 50,000). 남은 것: 서울 테스트용 개인 이메일 자격 증명 삭제(선택, 무료) ③ ~~6단계 비밀값~~ ✅ 2026-11-10(`feat/dep6-secrets` — 결정·검증은 dep-plan 단계 표 6행. 남은 것: EC2에서 `fetch-secrets.sh` 실제 호출) ④ **5단계 C** EC2 t4g.small(AL2023 arm64, 키 페어 없음, IMDSv2 홉 2, EBS 20GB gp3 암호화, SG 80·443 내 IP만, 역할 `nook-ec2`) → D 탄력적 IP + A 레코드 → E SSM 접속·Docker → dep-plan §4 "5단계 실호출 확인 목록" ①~⑤. AWS 작업 안내는 **단계마다 계정·리전 확인을 첫 줄에**
+     - **▶ 2026-11-10 이후 재개 (여기부터)** — 브랜치 `feat/dep5-ec2`(5단계 C~E + 8단계 준비) **PR 병합 = 첫 배포**(`deploy.yml`이 main CI 성공 뒤 실행). 병합 전: GitHub 리포 변수 3개 ✅(사용자 추가) · `nook-deploy` 꺼내기 로컬 확인 ✅. 첫 배포 확인: Actions 로그(빌드·arm64 Trivy·push·SSM 서버 출력) → Caddy 인증서 발급 → 집 IP `https://` 앱·HSTS → 휴대폰 데이터 `http://` 리다이렉트·`https://` 시간 초과 → `/health/ready`. 그다음 9단계(S3 백업 업로드·systemd 타이머·DLM·EC2 RTO), 7단계 남은 것(처리방침 `[PM]` 5개·443 공개 전환), 10단계. 자원·결정은 dep-plan 단계 표 5·6·8행, 과금 자원은 런북 표. EC2 `i-02eed84198de4f971`·탄력적 IP `3.37.162.16`·SG `nook-web`. 접속은 Session Manager(긴 명령은 짧게 끊어 붙이기 — 터미널 복사 시 접힌 자리에 줄바꿈)
+     - ~~2026-11-09 밤 이후 재개~~ (아래는 당시 메모) — ① `feat/dep5-infra` PR(`dbd723e` 이후 커밋 포함) ② ~~SES 운영 승인~~ ✅ 2026-11-09 당일 승인(배너 사라짐, 일일 할당량 200 → 50,000). 남은 것: 서울 테스트용 개인 이메일 자격 증명 삭제(선택, 무료) ③ ~~6단계 비밀값~~ ✅ 2026-11-10(`feat/dep6-secrets` — 결정·검증은 dep-plan 단계 표 6행. 남은 것: EC2에서 `fetch-secrets.sh` 실제 호출) ④ **5단계 C** EC2 t4g.small(AL2023 arm64, 키 페어 없음, IMDSv2 홉 2, EBS 20GB gp3 암호화, SG 80·443 내 IP만, 역할 `nook-ec2`) → D 탄력적 IP + A 레코드 → E SSM 접속·Docker → dep-plan §4 "5단계 실호출 확인 목록" ①~⑤. AWS 작업 안내는 **단계마다 계정·리전 확인을 첫 줄에**
      - **세션 시작하면 할 일 (순서대로)**
        0. **2026-11-09 한 일**(아래 세션 기록): Dependabot 잔여 #17·#18 닫음 · 등록처 Route 53 · S3 이미지 저장소(`IImageStorage`, PR #33) · ForwardedHeaders + IP RateLimiter(PR #34) · `/health/live`·`ready`, 보안 헤더·강제 CSP(PR #35) · BFF `/api/auth/*` Origin 검사·429 안내·백업/복원 리허설·arm64 빌드·`compose.prod.yaml`·`deploy.sh`(PR #37) · A1 수신자별 메일 상한·SES 발송기 코드(PR #38). 단계별 남은 것은 dep-plan 단계 표 7·8·9행과 §4
        - 로컬 compose가 배포 리허설 이미지(`nook-local-*:good`)로 떠 있을 수 있음 → `docker compose -f deploy/compose.yaml up -d --build`로 최신 코드로 다시 올린다
@@ -441,6 +442,14 @@ Claude가 작성(FE-2, 사용자 요청): ADR-012, 탈퇴 전체(스키마·절�
 6. 발견(2단계 함정): BFF Origin 검사가 프록시 뒤에서 모든 POST를 403으로 만듦 / ForwardedHeaders 없으면 IP RateLimiter가 전원을 한 명으로 봄
 커밋: 없음(`fix/next16-security` 작업 트리 — 다음 세션 첫 결정)
 Claude가 작성(사용자 요청): dep-plan.md, web/ 업그레이드 전부, `next.config.js` 이미지 설정(사용자: "Next.js는 아직 학습 전"), progress·learning-log 갱신. 결정은 사용자
+
+### 2026-11-10 (DEP — 6단계·5단계 C~E·8단계 준비)
+1. 6단계: 결정 4개(이름·범위·키·API), `prod.env` + `fetch-secrets.sh`(가짜 aws로 정상·누락 검증), 정책 문 `ReadDeploySecrets`(Claude, 사용자 요청), SecureString 2개(콘솔), 첫 정책 저장 누락을 API 비교로 발견 → PR #46
+2. 5단계: EBS 기본 암호화 · **포트 80 충돌 발견**(SG 내 IP만 → Let's Encrypt 검증 불가) → 결정 A + 설명 페이지 · SG `nook_web` → `nook-web` 재생성 · EC2(콘솔 기본값 4곳 교정) · 탄력적 IP·A 레코드(권한 서버·8.8.8.8·1.1.1.1) · SSM·Docker·Compose v5.1.3 · IMDS 홉 2 · **관리형 정책 경계 구멍 발견**(단수 GetParameter 허용) → Deny `NotResource`(C) · 실호출 ①~⑤ 통과(SES 받은편지함·SPF/DKIM/DMARC PASS)
+3. 8단계 준비: D8-1~5 결정(배포 파일 이미지, arm64 러너, ECR 불변·10개, 전용 SSM 문서, CI 성공 뒤 배포) · ECR·OIDC·배포 역할·SSM 문서·`nook-ec2` ECR pull 반영(스크립트, 사용자 실행) · `deploy.yml` · 신뢰 정책 Condition(Claude, 사용자 요청)
+4. PM 공유: `docs/design/post-deploy-changes.md`(배포 후 디자인·기능 변경 가이드)
+커밋: PR #46 병합 · `feat/dep5-ec2`(5bbbf9a~8966b43 + 이 기록, 푸시·PR 전)
+Claude가 작성: 스크립트·정책·워크플로·문서 전부(위 learning-log 목록). 콘솔·CLI 쓰기 작업과 결정은 사용자
 
 ### 2026-11-09 밤 (DEP — 도메인·SES·5단계 준비)
 1. 도메인 `fillyournookwithstars.com`(PM 결정, Route 53 $16/년) 구매 · 이메일 인증 · 요청 성공·호스팅 영역 확인. `.com`이라 HSTS 프리로드 없음 → 5단계 HTTPS·HSTS 직접 확인

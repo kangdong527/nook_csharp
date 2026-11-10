@@ -58,6 +58,15 @@ if [[ -z "$PREVIOUS" ]]; then
 fi
 
 echo "롤백: $PREVIOUS" >&2
+# 8단계 D8-1: 직전 릴리스 폴더의 compose·Caddyfile·prod.env 로 되돌린다(이미지만 되돌리면 "옛 이미지 + 새 설정" 조합이 된다).
+# RELEASES_DIR 은 SSM 문서 nook-deploy 가 준다. 없으면(로컬 리허설) 현재 파일로 이미지만 되돌린다.
+PREV_DIR="${RELEASES_DIR:-}/$PREVIOUS"
+if [[ -n "${RELEASES_DIR:-}" && -d "$PREV_DIR" ]]; then
+  cd "$PREV_DIR"
+  [[ "${SKIP_SECRETS:-0}" == 1 ]] || ENV_FILE="$ENV_FILE" deploy/scripts/fetch-secrets.sh
+else
+  echo "직전 릴리스 폴더가 없음 — 현재 파일로 이미지만 되돌립니다" >&2
+fi
 if up "$PREVIOUS" && ready; then
   echo "롤백 성공: $PREVIOUS 로 서비스 중. 실패한 태그 $TAG 를 확인하세요." >&2
 else

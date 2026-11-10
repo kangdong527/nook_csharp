@@ -1,0 +1,44 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrPush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage"
+      ],
+      "Resource": [
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-api",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-web",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-migrate",
+        "arn:aws:ecr:ap-northeast-2:<ACCOUNT_ID>:repository/nook-deploy"
+      ]
+    },
+    {
+      "Sid": "RunDeployDocumentOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ssm:ap-northeast-2:<ACCOUNT_ID>:document/nook-deploy",
+        "arn:aws:ec2:ap-northeast-2:<ACCOUNT_ID>:instance/i-02eed84198de4f971"
+      ]
+    },
+    {
+      "Sid": "ReadDeployResult",
+      "Effect": "Allow",
+      "Action": "ssm:GetCommandInvocation",
+      "Resource": "*"
+    }
+  ]
+}

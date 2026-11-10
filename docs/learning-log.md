@@ -500,3 +500,19 @@
 - 사실·교훈: 로그인 CSRF는 쿠키가 없어도 성립 · exhaustive switch가 새 실패 이유의 문구 누락을 컴파일 오류로 잡음 · "아키텍처 무관한 결과물"과 "도구가 결과물을 실행해야 하는가"는 다른 질문(번들 교차 빌드 실패) · 처음부터 초록인 검사는 변이로 확인(A1 제거 → 12통) · SES 기본 문자 집합은 7비트 ASCII
 - 면접 대비로 다시 볼 만한 것(Claude 제안): 로그인 CSRF와 Origin/SameSite의 차이, RPO·RTO와 "복원해 봤는가", 교차 컴파일 vs 에뮬레이션, 롤백과 확장 → 전환 → 축소 마이그레이션, 메일 인증(SPF·DKIM·DMARC)
 - 다음에 할 것: PM 확인(도메인 이름·개인정보 정책) → 도메인 구매 → 5단계 인프라
+
+## 2026-11-10 (DEP-6·5·8) — 비밀값, EC2, 배포 경로
+
+> 형식과 사실 항목은 Claude가 잡음. "배운 것"과 "막힌 것"은 사용자 작성.
+
+- 한 일: 6단계 비밀값(SSM SecureString 2개, `fetch-secrets.sh`, PR #46) · EBS 기본 암호화 · SG `nook-web`(결정 A: 80 전체·443 내 IP) · EC2 `nook-prod`(t4g.small arm64, IMDSv2 홉 2, 종료 방지, 크레딧 표준) · 탄력적 IP + A 레코드 · SSM 접속·Docker·Compose · 실호출 확인 ①~⑤ 통과 · 8단계: ECR 4개, OIDC 배포 역할, SSM 문서 `nook-deploy`, `deploy.yml` · PM용 `post-deploy-changes.md`
+- 오늘 배운 것 3줄:
+  1.
+  2.
+  3.
+- 막힌 것: (사용자 작성)
+- 내가 결정한 것: SSM 이름 `/nook/prod/<환경변수>`·비밀값 2개만·`aws/ssm`·`GetParameters` · EBS 계정 기본 암호화 · 포트 80만 전체 공개(A) · SG 다시 만들기(`nook-web`) · 크레딧 표준 · 관리형 정책 경계 구멍은 Deny로(C) · D8-1 배포 파일 = `nook-deploy` 이미지 · D8-2 arm64 네이티브 러너 · D8-3 불변 태그·10개 보존 · D8-4 전용 SSM 문서 · D8-5 CI 성공 뒤 배포
+- Claude가 대신 작성한 부분: `fetch-secrets.sh`·`prod.env`·`deploy.sh` 변경, **IAM 문 `ReadDeploySecrets`(사용자 요청)**, `DenyParametersOutsideNookProd`, ECR pull 문, **배포 역할 신뢰 정책 `Condition`(사용자 요청)**, 배포 역할 권한 정책, `deploy.Dockerfile`, SSM 문서, PowerShell 스크립트 2개, `deploy.yml`, 설명 페이지(포트 80), `post-deploy-changes.md`, 문서 갱신, 이 기록 형식
+- 사실·교훈: 시뮬레이터는 평가 범위가 있다(`simulate-custom-policy`는 넣은 문서만, `simulate-principal-policy`는 리전 맥락이 없으면 SCP를 거부로) · AWS 관리형 정책 `AmazonSSMManagedInstanceCore`에 `ssm:GetParameter(s)` on `*` → 인라인 경계 무효, **거절 쪽 실호출로만 발견** · 명시적 Deny + `NotResource` = 허용 목록 · SG를 내 IP로만 열면 Let's Encrypt 검증이 막힌다(로컬에선 재현 불가) · 콘솔 기본값(x86, SSH 0.0.0.0/0, 역할 없음, 크레딧 무제한)은 편의용 · 탄력적 IP는 인스턴스와 별개로 과금·릴리스 전 A 레코드 삭제 · Windows 인코딩 함정 3개(PS 5.1 스크립트, `aws.exe` 출력 ``, `file://` CP949) · 긴 명령을 터미널에서 복사하면 접힌 자리에 줄바꿈이 들어간다 · 이미지와 설정 파일을 같은 sha로 묶어야 롤백이 온전하다
+- 면접 대비로 다시 볼 만한 것(Claude 제안): IAM 평가 순서(명시적 Deny → Allow → 암묵적 거부)와 관리형 정책 함정, OIDC 신뢰 정책(`aud`·`sub`)과 포크 PR `workflow_run` 공격, IMDSv2·홉 제한, 불변 태그와 롤백, 릴리스 폴더 패턴, ACME HTTP-01 vs DNS-01
+- 다음에 할 것: PR 병합 = 첫 배포 → 인증서·HTTPS·헬스체크 확인 → 9단계(S3 백업 업로드·타이머·DLM)

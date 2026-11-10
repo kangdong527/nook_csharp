@@ -1,0 +1,43 @@
+# SSM 명령 문서 nook-deploy — DEP 8단계 결정 D8-4. Claude 작성(2026-11-10).
+# GitHub 배포 역할은 AWS-RunShellScript 가 아니라 이 문서만 실행할 수 있다 → 서버에서 할 수 있는 일 = "이 sha 를 배포" 하나.
+# 입력 검증은 SSM 이 한다(allowedPattern) — sha 자리에 셸 문자열이 오면 서버에 닿기 전에 거절된다.
+# 등록·갱신(사용자, 쓰기 프로필): deploy/aws/create-ssm-document.ps1
+schemaVersion: "2.2"
+description: "nook: deploy one commit sha (pull nook-deploy:<sha>, extract to /opt/nook/releases/<sha>, run deploy.sh)"
+parameters:
+  ImageTag:
+    type: String
+    description: "40-character lowercase git commit sha (image tag)"
+    allowedPattern: "^[0-9a-f]{40}$"
+mainSteps:
+  - action: aws:runShellScript
+    name: deploy
+    inputs:
+      timeoutSeconds: "900"
+      runCommand:
+        - "set -euo pipefail"
+        - "TAG='{{ ImageTag }}'"
+        - "export AWS_REGION=ap-northeast-2"
+        - "ROOT=/opt/nook"
+        - "ACCOUNT=$(aws sts get-caller-identity --query Account --output text)"
+        - "REG=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
+        - "REL=$ROOT/releases/$TAG"
+        - "mkdir -p $ROOT/releases $ROOT/state"
+        # ECR 토큰(12시간)은 배포 동안만 디스크에 둔다 — 끝나면 logout(성공·실패 모두)
+        - "trap 'docker logout $REG >/dev/null 2>&1 || true' EXIT"
+        - "aws ecr get-login-password | docker login --username AWS --password-stdin $REG"
+        # 같은 sha 를 다시 배포하면 이미 꺼낸 폴더를 그대로 쓴다(태그 불변 → 내용 같음)
+        - "if [ ! -d $REL ]; then"
+        - "  docker pull $REG/nook-deploy:$TAG"
+        - "  TMP=$(mktemp -d $ROOT/releases/.incoming.XXXXXX)"
+        - "  CID=$(docker create $REG/nook-deploy:$TAG noop)"
+        - "  docker cp $CID:/release/. $TMP/"
+        - "  docker rm $CID >/dev/null"
+        - "  chmod 755 $TMP"
+        - "  mv $TMP $REL"
+        - "fi"
+        - "cd $REL"
+        - "STATE_DIR=$ROOT/state ENV_FILE=$ROOT/.env RELEASES_DIR=$ROOT/releases deploy/scripts/deploy.sh $TAG"
+        # 성공했을 때만 정리: 릴리스 폴더 최근 10개(ECR 수명 주기와 같은 수), 72시간 지난 미사용 이미지
+        - "ls -1dt $ROOT/releases/*/ | tail -n +11 | xargs -r rm -rf"
+        - "docker image prune -af --filter until=72h >/dev/null"
