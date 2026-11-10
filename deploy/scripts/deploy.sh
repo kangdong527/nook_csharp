@@ -38,6 +38,10 @@ up() {  # $1 = 태그. migrate 가 실패하면 api 가 뜨지 않는다(depends
   compose "$1" up -d --no-build --remove-orphans
 }
 
+# 6단계: 매 배포마다 .env 를 SSM + deploy/prod.env 로 다시 만든다(비밀값 교체·설정 변경이 다음 배포에 반영).
+# 실패하면 기존 .env 그대로 두고 배포하지 않는다. SKIP_SECRETS=1: 로컬 리허설(손으로 만든 ENV_FILE)일 때만
+[[ "${SKIP_SECRETS:-0}" == 1 ]] || ENV_FILE="$ENV_FILE" deploy/scripts/fetch-secrets.sh
+
 echo "배포: ${PREVIOUS:-(없음)} → $TAG"
 if up "$TAG" && ready; then
   echo "$TAG" > "$STATE_DIR/current-tag"
