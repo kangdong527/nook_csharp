@@ -79,6 +79,12 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
   - 로컬 arm64 빌드: api 15s · migrate 854s · web 861s. 에뮬레이션 실행 확인: api RID `linux-arm64`·live 200, web `/login` 200, 번들 `--help` 정상
   - **PR CI는 x86 유지**(사용자 결정 — PR마다 약 29분은 김). arm64는 8단계 배포 작업에서 빌드하고 **그 이미지를 Trivy로 다시 스캔**한다
 - **배포 스크립트**: `deploy/scripts/deploy.sh <태그>` + `deploy/compose.prod.yaml`(ECR 이미지·S3·api egress·80/443 `!override`). 로컬 리허설(2026-11-09): good 배포 성공 → bad(api 즉시 종료) 배포 → ready 60s 실패 → good 자동 롤백, exit 1, 기록 태그 good 유지. **롤백은 이미지만** — 마이그레이션은 확장 → 전환 → 축소로 직전 버전과 호환되게
+- **운영 롤백 실측**(2026-11-11, 안 A: `compose.prod.yaml`에서 api만 `Port=5433` → migrate 성공·api ready 503). 판정 기준(실행 전에 적는다):
+  (Claude 작성, 사용자 요청. ①~④ 전부 맞아야 성공. 실패 배포 sha = `$BAD`, 직전 = `eaaea3e…`)
+  - ① **Actions = 빨강이 정상**: CI 초록 → Deploy 잡의 마지막 단계만 실패, `결과: Failed`. 빌드·Trivy·push에서 실패했다면 롤백을 시험하지 못한 것(무효)
+  - ② **SSM 서버 출력**(Actions "서버 출력" 그룹): `배포: eaaea3e… → $BAD` → `배포 실패: $BAD — /health/ready 가 90s 안에 200 이 아님` → migrate 로그 `exit 0`·api 로그에 5433 연결 거부 → `롤백: eaaea3e…` → **`롤백 성공: eaaea3e… 로 서비스 중`**. `롤백도 실패`·`직전 릴리스 폴더가 없음`이 나오면 실패(종료 코드는 둘 다 1이라 **문구로만** 구분)
+  - ③ **서버 상태**(SSM 세션): `cat /opt/nook/state/current-tag` = `eaaea3e…`(실패 sha로 바뀌지 않음) · `docker inspect nook-deploy-api-1 --format '{{.Config.Image}}'` 태그 = `eaaea3e…` · **설정도 되돌았는지**: `docker inspect nook-deploy-api-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -o 'Port=[0-9]*'` = `Port=5432`(비밀번호가 같은 줄에 있으니 `grep -o`로 포트만) · `/opt/nook/releases/$BAD` 폴더는 남아 있음(정리 단계는 성공 때만 돈다 — 다음 성공 배포 때 10개 규칙으로 정리)
+  - ④ **사용자 관점**: 집 IP 브라우저 `https://fillyournookwithstars.com` 로그인 상태 화면 정상, 서버에서 `/health/ready` 200(deploy.sh와 같은 curl 컨테이너 방식). 실패~롤백 사이 api 중단 시간도 Actions 타임스탬프로 기록(예상 약 90~120s)
 - **S3 × compose 네트워크** (2026-11-09): `backend`가 `internal: true`라 api가 S3에 못 나간다(연결 시간 초과). Provider를 `S3`로 바꿀 때 **api만** egress 네트워크에 추가(5단계). 로컬 compose는 LocalDisk라 지금은 열지 않음(최소 권한)
 - **IMDSv2 홉 제한**: 컨테이너 안 SDK가 인스턴스 역할 자격 증명을 받으려면 응답이 Docker 브리지를 한 번 더 건넌다 → `HttpPutResponseHopLimit` **2 이상**. 1이면 "자격 증명 없음"으로만 보인다(5단계 EC2 생성 시)
 - **S3 없는 키 = 403**: 역할에 `s3:ListBucket`이 없으면 S3는 없는 키에 404 대신 403을 준다. `S3ImageStorage`는 404만 "없음"으로 보고 403은 설정 사고로 올려 500 → 인스턴스 역할 정책에 버킷 `s3:ListBucket` + 객체 `s3:GetObject`·`PutObject`·`DeleteObject`(5단계)

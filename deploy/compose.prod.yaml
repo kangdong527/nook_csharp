@@ -13,6 +13,9 @@ services:
   api:
     image: ${IMAGE_REPO}-api:${IMAGE_TAG}
     environment:
+      # ⚠️ 롤백 실측용 의도적 실패(DEP 8단계, 2026-11-11) — 다음 커밋에서 되돌린다.
+      # api 만 틀린 포트(5433) → migrate 는 성공, api 는 뜨지만 /health/ready 가 503 → deploy.sh 가 직전 릴리스로 롤백
+      ConnectionStrings__Nook: "Host=db;Port=5433;Database=${POSTGRES_DB:-nook};Username=${POSTGRES_USER:-nook};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD}"
       # 운영 메일(DEP 7단계). 보내는 주소는 SES 에서 인증한 도메인 — 도메인 구매·DKIM 뒤에 정한다.
       # 인스턴스 역할에 ses:SendEmail(이 identity 한정) 권한 필요. 샌드박스를 벗어나기 전엔 인증한 주소로만 보내진다
       Email__Provider: Ses
