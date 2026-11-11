@@ -503,17 +503,42 @@
 
 ## 2026-11-10 (DEP-6·5·8) — 비밀값, EC2, 배포 경로
 
+> 형식과 사실 항목은 Claude가 잡음. **"배운 것"과 "막힌 것"도 사용자 요청으로 Claude가 작성**(사용자가 다시 물어본 질문과 핵심 내용을 바탕으로).
+
+- 한 일: 6단계 비밀값(SSM SecureString 2개, `fetch-secrets.sh`, PR #46) · EBS 기본 암호화 · SG `nook-web`(결정 A: 80 전체·443 내 IP) · EC2 `nook-prod`(t4g.small arm64, IMDSv2 홉 2, 종료 방지, 크레딧 표준) · 탄력적 IP + A 레코드 · SSM 접속·Docker·Compose · 실호출 확인 ①~⑤ 통과 · 8단계: ECR 4개, OIDC 배포 역할, SSM 문서 `nook-deploy`, `deploy.yml` · PM용 `post-deploy-changes.md` · **첫 운영 배포 `b34ffd0`, 두 번째 자동 배포 `eaaea3e`(약 40초) 성공**
+- 오늘 배운 것(다시 물어본 질문 중심):
+  1. **staging이 필요한지**는 "운영과 똑같은 환경에서 미리 확인해야 할 위험이 있는가"로 판단한다. 지금은 사용자가 없고 롤백이 있어서 운영 하나로 충분하다. 사용자가 생기고 DB 변경이 위험해지면 그때 다시 검토한다
+  2. **ARN 접두사를 묶을 수 있는지**는 감으로 정하지 않고 AWS Service Authorization Reference 표에서 확인한다. 액션 행의 "리소스 유형" 칸에 `parameter*`처럼 리소스가 적혀 있으면 ARN으로 범위를 좁힐 수 있다. 비어 있으면(`GetAuthorizationToken`, `GetCommandInvocation`) `*`만 된다. `/nook/prod/*`처럼 경로 접두사로 묶으려면 이름을 처음부터 계층형으로 지어야 한다
+  3. **EBS**는 EC2의 디스크다. 인스턴스와 따로 과금되고 따로 남는다. 지금까지 낸 월 비용 추정에 **추가되는** 항목이었다(EC2·EBS·탄력적 IP를 합쳐 약 $19~20/월)
+  4. **SG(보안 그룹)**는 인스턴스 앞의 허용 목록 방화벽이다. 허용 규칙만 있고, 응답은 자동으로 통과한다(stateful). 443을 내 IP로만 열어도 **80은 전체에 열어야** Let's Encrypt가 도메인 소유를 확인할 수 있다. `default` SG가 남아 있는 것은 정상이다(VPC마다 하나씩 있고 지울 수 없음)
+  5. **ECR**은 AWS 안의 Docker 이미지 저장소다. 태그를 불변으로 두면 "같은 sha = 같은 이미지"가 보장되어 롤백 대상이 흔들리지 않는다. 오래된 이미지는 수명 주기 규칙(10개 보존)으로 비용을 막는다
+  6. **배포 후에도 디자인·기능을 바꿔도 된다.** CD가 생긴 뒤가 오히려 안전하다. 다만 롤백은 **이미지와 설정만** 되돌리고 **DB는 되돌리지 않는다**. 스키마를 바꿀 때는 확장 → 전환 → 축소로 나눠 배포한다(`post-deploy-changes.md`)
+  7. **SSM 세션이 끊겨도 처음부터 다시 할 필요는 없다.** 서버에 남은 상태(설치된 패키지, 만든 파일)는 그대로다. 끊기기 전 마지막 명령이 끝났는지만 확인하고 이어 가면 된다
+  8. **설정을 저장했다고 끝이 아니다.** 콘솔 저장이 실제로 반영됐는지 `get-role-policy` 같은 조회로 확인한다. 실제로 한 번은 검토 화면에서 저장이 빠져 있었다
+  9. **GitHub 브랜치 정리**: 지우기 전에 `git branch -r --merged origin/main`으로 병합 여부를 확인한다. `/branches` 페이지의 Active 칸은 기본 브랜치를 뺀 나머지만 보여 주므로, 마지막 작업 브랜치를 지우면 칸 자체가 사라진다
+- 막힌 것:
+  - 관리형 정책 `AmazonSSMManagedInstanceCore`가 `GetParameter`를 `*`로 열어 둔 것을 시뮬레이터로는 못 잡았다. **거절되어야 할 호출을 실제로 불러 보고서야** 알았다 → Deny + `NotResource`로 막음
+  - 첫 배포가 STS `AccessDenied`로 실패했다. OIDC `sub` 형식이 예전 문서와 달랐다(숫자 ID 포함). 오류 메시지에는 단서가 없었고 **CloudTrail `userName`**에서 실제 값을 찾았다
+  - 터미널에서 긴 명령을 복사하면 줄이 꺾인 자리에 줄바꿈이 들어가 명령이 깨졌다 → 변수와 짧은 줄로 나눠서 해결
+  - Windows 인코딩(PS 5.1, `aws.exe` 출력의 `\r`, `file://` CP949) 때문에 결과가 거짓으로 나오거나 스크립트가 실패했다
+  - PR을 만들 때 제목과 본문 없이 CI가 먼저 돌았다 → CI가 끝나기를 기다렸다가 PR 화면에서 수정함
+- 내가 결정한 것: SSM 이름 `/nook/prod/<환경변수>`·비밀값 2개만·`aws/ssm`·`GetParameters` · EBS 계정 기본 암호화 · 포트 80만 전체 공개(A) · SG 다시 만들기(`nook-web`) · 크레딧 표준 · 관리형 정책 경계 구멍은 Deny로(C) · D8-1 배포 파일 = `nook-deploy` 이미지 · D8-2 arm64 네이티브 러너 · D8-3 불변 태그·10개 보존 · D8-4 전용 SSM 문서 · D8-5 CI 성공 뒤 배포
+- Claude가 대신 작성한 부분: `fetch-secrets.sh`·`prod.env`·`deploy.sh` 변경, **IAM 문 `ReadDeploySecrets`(사용자 요청)**, `DenyParametersOutsideNookProd`, ECR pull 문, **배포 역할 신뢰 정책 `Condition`(사용자 요청)**, 배포 역할 권한 정책, `deploy.Dockerfile`, SSM 문서, PowerShell 스크립트 2개, `deploy.yml`, 설명 페이지(포트 80), `post-deploy-changes.md`, 문서 갱신, 이 기록 형식, **"배운 것"·"막힌 것"(사용자 요청)**
+- 사실·교훈: 시뮬레이터는 평가 범위가 있다(`simulate-custom-policy`는 넣은 문서만, `simulate-principal-policy`는 리전 맥락이 없으면 SCP를 거부로) · AWS 관리형 정책 `AmazonSSMManagedInstanceCore`에 `ssm:GetParameter(s)` on `*` → 인라인 경계 무효, **거절 쪽 실호출로만 발견** · 명시적 Deny + `NotResource` = 허용 목록 · SG를 내 IP로만 열면 Let's Encrypt 검증이 막힌다(로컬에선 재현 불가) · 콘솔 기본값(x86, SSH 0.0.0.0/0, 역할 없음, 크레딧 무제한)은 편의용 · 탄력적 IP는 인스턴스와 별개로 과금·릴리스 전 A 레코드 삭제 · Windows 인코딩 함정 3개(PS 5.1 스크립트, `aws.exe` 출력 `\r`, `file://` CP949) · 긴 명령을 터미널에서 복사하면 접힌 자리에 줄바꿈이 들어간다 · 이미지와 설정 파일을 같은 sha로 묶어야 롤백이 온전하다 · **GitHub OIDC `sub`에는 소유자·리포 숫자 ID가 붙는다**(`repo:owner@id/repo@id:ref:…`) — STS 오류 메시지는 어느 조건이 틀렸는지 안 알려 주고, **CloudTrail의 `userName`이 실제 `sub`** · Let's Encrypt `notBefore`는 약 1시간 앞당겨 적힘(발급 시각 추정에 쓰지 말 것)
+- 면접 대비로 다시 볼 만한 것(Claude 제안): IAM 평가 순서(명시적 Deny → Allow → 암묵적 거부)와 관리형 정책 함정, OIDC 신뢰 정책(`aud`·`sub`)과 포크 PR `workflow_run` 공격, IMDSv2·홉 제한, 불변 태그와 롤백, 릴리스 폴더 패턴, ACME HTTP-01 vs DNS-01
+- 다음에 할 것: ~~PR 병합 = 첫 배포~~ ✅ → 롤백 실측 → 9단계(S3 백업 업로드·타이머·DLM)
+
+## 2026-11-11 (DEP-8) — 운영 롤백 실측
+
 > 형식과 사실 항목은 Claude가 잡음. "배운 것"과 "막힌 것"은 사용자 작성.
 
-- 한 일: 6단계 비밀값(SSM SecureString 2개, `fetch-secrets.sh`, PR #46) · EBS 기본 암호화 · SG `nook-web`(결정 A: 80 전체·443 내 IP) · EC2 `nook-prod`(t4g.small arm64, IMDSv2 홉 2, 종료 방지, 크레딧 표준) · 탄력적 IP + A 레코드 · SSM 접속·Docker·Compose · 실호출 확인 ①~⑤ 통과 · 8단계: ECR 4개, OIDC 배포 역할, SSM 문서 `nook-deploy`, `deploy.yml` · PM용 `post-deploy-changes.md`
+- 한 일: 실패 만드는 방법 결정(안 A: `compose.prod.yaml`에서 api만 `Port=5433`) → 판정 기준 ①~④를 실행 전에 기록 → PR #49 병합(배포 `ba31751`) → 실패 → **자동 롤백 성공**(`eaaea3e`, 이미지 + 설정) → 복구 PR
 - 오늘 배운 것 3줄:
   1.
   2.
   3.
 - 막힌 것: (사용자 작성)
-- 내가 결정한 것: SSM 이름 `/nook/prod/<환경변수>`·비밀값 2개만·`aws/ssm`·`GetParameters` · EBS 계정 기본 암호화 · 포트 80만 전체 공개(A) · SG 다시 만들기(`nook-web`) · 크레딧 표준 · 관리형 정책 경계 구멍은 Deny로(C) · D8-1 배포 파일 = `nook-deploy` 이미지 · D8-2 arm64 네이티브 러너 · D8-3 불변 태그·10개 보존 · D8-4 전용 SSM 문서 · D8-5 CI 성공 뒤 배포
-- Claude가 대신 작성한 부분: `fetch-secrets.sh`·`prod.env`·`deploy.sh` 변경, **IAM 문 `ReadDeploySecrets`(사용자 요청)**, `DenyParametersOutsideNookProd`, ECR pull 문, **배포 역할 신뢰 정책 `Condition`(사용자 요청)**, 배포 역할 권한 정책, `deploy.Dockerfile`, SSM 문서, PowerShell 스크립트 2개, `deploy.yml`, 설명 페이지(포트 80), `post-deploy-changes.md`, 문서 갱신, 이 기록 형식
-- 사실·교훈: 시뮬레이터는 평가 범위가 있다(`simulate-custom-policy`는 넣은 문서만, `simulate-principal-policy`는 리전 맥락이 없으면 SCP를 거부로) · AWS 관리형 정책 `AmazonSSMManagedInstanceCore`에 `ssm:GetParameter(s)` on `*` → 인라인 경계 무효, **거절 쪽 실호출로만 발견** · 명시적 Deny + `NotResource` = 허용 목록 · SG를 내 IP로만 열면 Let's Encrypt 검증이 막힌다(로컬에선 재현 불가) · 콘솔 기본값(x86, SSH 0.0.0.0/0, 역할 없음, 크레딧 무제한)은 편의용 · 탄력적 IP는 인스턴스와 별개로 과금·릴리스 전 A 레코드 삭제 · Windows 인코딩 함정 3개(PS 5.1 스크립트, `aws.exe` 출력 `
-`, `file://` CP949) · 긴 명령을 터미널에서 복사하면 접힌 자리에 줄바꿈이 들어간다 · 이미지와 설정 파일을 같은 sha로 묶어야 롤백이 온전하다 · **GitHub OIDC `sub`에는 소유자·리포 숫자 ID가 붙는다**(`repo:owner@id/repo@id:ref:…`) — STS 오류 메시지는 어느 조건이 틀렸는지 안 알려 주고, **CloudTrail의 `userName`이 실제 `sub`** · Let's Encrypt `notBefore`는 약 1시간 앞당겨 적힘(발급 시각 추정에 쓰지 말 것)
-- 면접 대비로 다시 볼 만한 것(Claude 제안): IAM 평가 순서(명시적 Deny → Allow → 암묵적 거부)와 관리형 정책 함정, OIDC 신뢰 정책(`aud`·`sub`)과 포크 PR `workflow_run` 공격, IMDSv2·홉 제한, 불변 태그와 롤백, 릴리스 폴더 패턴, ACME HTTP-01 vs DNS-01
-- 다음에 할 것: ~~PR 병합 = 첫 배포~~ ✅ → 롤백 실측 → 9단계(S3 백업 업로드·타이머·DLM)
+- 내가 결정한 것: 실패 방식 A(설정 실패 — 운영 코드에 시험 스위치를 넣지 않음, SSM 직접 호출 C는 `deploy.sh`까지 못 감) · 틀린 값 = 포트(호스트 대신)
+- Claude가 대신 작성한 부분: 실패 설정·복구 커밋, **판정 기준 ①~④(사용자 요청)**, dep-plan 결과 기록, 이 기록 형식
+- 사실·교훈: 배포가 CI 성공 뒤에만 돌아서 **실패는 CI를 통과하고 운영에서만 나야** 시험이 된다 · compose `environment`는 파일을 겹칠 때 키 단위로 병합 → api 한 키만 덮어쓰기 가능 · 롤백 분기 증거 = 롤백 쪽 `fetch-secrets` 출력이 두 번째로 찍힘 · **이미지만 되돌렸다면 롤백 후에도 503**(설정이 5433으로 남음) → 릴리스 폴더 패턴이 필요한 이유를 실측으로 확인 · 배포 sha는 내 커밋이 아니라 GitHub merge commit · 헬스체크 실패 사유가 `(null)`로만 남음(관측 개선 후보) · migrate `libgssapi_krb5` 경고(미확인)
+- 다음에 할 것: 복구 배포 확인 → 9단계(S3 백업 업로드·systemd 타이머·DLM·EC2 RTO)
