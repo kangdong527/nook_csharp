@@ -83,7 +83,8 @@ t4g.micro(1GB)는 .NET + Next + Postgres + Caddy 동시 구동 시 OOM 우려 �
   - 백업 버킷 수명 주기 `deploy/aws/backup-lifecycle.json`: `daily/` 7일 · `weekly/` 28일(주 4개) · 이전 버전 7일(같은 키 덮어쓰기 대비 — 버전 관리) · 만료 삭제 마커·미완료 업로드 7일 정리. **최대 보존 = 28 + 7 = 35일** = 이미지 이전 버전 35일과 같음 → 처리방침 파기 범위 "최대 약 5주"
   - ✅ 운영 확인(2026-11-11, PR #51 `e569e21`): 수명 주기 4규칙 `Enabled`(사용자 적용, `get-bucket-lifecycle-configuration`으로 확인) · 타이머 설치, 다음 실행 `19:00 UTC`(= 04:00 KST) · 수동 1회 → `daily/nook-20261111T145614Z.dump` 24,520 bytes, `AES256`, SHA256 체크섬 저장, 서비스 성공 종료
   - **운영 복원 리허설 — 결정(사용자): B 버리는 컨테이너**(운영 DB 덮어쓰기 A는 위험 대비 이득 적음, 갈아 끼우는 절차는 런북으로). `db-restore-check.sh`도 compose → `docker exec`, 기동 포함 전체 시간 출력 추가. 판정 기준(Claude 초안): ① `pg_restore --exit-on-error` 성공 ② 테이블별 행 수 = 운영(덤프 직후 실행 — 쓰기가 끼면 그 테이블만 차이, 그 경우 사유 기록) ③ `__EFMigrationsHistory` 행 수 일치(스키마 버전) ④ 복원 시간·전체 시간·덤프 크기 기록. 덤프 출처 = 서버 로컬(서버는 S3에서 못 꺼냄) → S3에서 꺼내 오는 시간은 RTO에 별도 항목
-  - 남은 것: 운영 복원 리허설 실행 → DLM
+  - ✅ **운영 복원 리허설 통과**(2026-11-12 00:19 KST, 릴리스 `d7958d2`): 직전 새 백업 `nook-20261111T151913Z.dump`(24,520 bytes) → 버리는 `postgres:17`(`--network none`)에 `--exit-on-error` 복원 → 테이블 10개 행 수 전부 일치(`__EFMigrationsHistory` 8 · users 2 · reviews 7 · places 7 · likes 5 · magic_link_tokens 7 · review_images 3 · group_members 2 · groups 1 · bookmarks 0) · **복원 0s(초 단위 반올림) · 기동 포함 3s**. 데이터 규모가 작아 RTO 근거로는 약함 → 데이터가 쌓이면 재측정(기준선). 사진은 덤프 밖(`review_images`엔 S3 키만) → 전체 복구 = DB 덤프 + 이미지 버킷 버전 관리, 런북에 함께
+  - 남은 것: DLM(EBS 스냅샷) · 운영 DB 갈아 끼우기 절차 런북(실행은 안 함, 결정 B)
 - **운영 롤백 실측**(2026-11-11, 안 A: `compose.prod.yaml`에서 api만 `Port=5433` → migrate 성공·api ready 503). 판정 기준(실행 전에 적는다):
   (Claude 작성, 사용자 요청. ①~④ 전부 맞아야 성공. 실패 배포 sha = `$BAD`, 직전 = `eaaea3e…`)
   - ① **Actions = 빨강이 정상**: CI 초록 → Deploy 잡의 마지막 단계만 실패, `결과: Failed`. 빌드·Trivy·push에서 실패했다면 롤백을 시험하지 못한 것(무효)
