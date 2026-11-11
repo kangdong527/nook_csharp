@@ -11,8 +11,10 @@ set -euo pipefail
 DUMP="${1:?덤프 파일 경로를 주세요}"
 [[ -s "$DUMP" ]] || { echo "덤프가 없거나 비었습니다: $DUMP" >&2; exit 1; }
 
-COMPOSE=(docker compose -f deploy/compose.yaml)
+# compose 대신 컨테이너 이름(2026-11-11) — db-backup.sh 와 같은 이유(EC2 에서 compose 보간 실패)
+DB_CONTAINER="${DB_CONTAINER:-nook-deploy-db-1}"
 SCRATCH="nook-restore-check-$$"
+total_start=$(date +%s)   # RTO 의 서버 부분 = 빈 DB 기동 + 복원(덤프를 서버로 가져오는 시간은 밖에서 따로 잰다)
 # 운영과 같은 메이저 버전 — 다르면 리허설이 운영 복원을 증명하지 못한다(compose.yaml db 이미지와 맞출 것)
 IMAGE="postgres:17"
 
@@ -39,7 +41,7 @@ count_rows() {  # $@ = psql 을 실행할 docker 명령 앞부분
   "$@" -AtF '|' -c "$q ORDER BY t"
 }
 
-source_counts=$(count_rows "${COMPOSE[@]}" exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' psql)
+source_counts=$(count_rows docker exec "$DB_CONTAINER" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' psql)
 restored_counts=$(count_rows docker exec "$SCRATCH" psql -U postgres -d nook)
 
 printf '%-28s %10s %10s\n' table source restored
@@ -50,6 +52,6 @@ while IFS='|' read -r table n; do
   printf '%-28s %10s %10s%s\n' "$table" "$n" "${restored:-없음}" "$mark"
 done <<< "$source_counts"
 
-echo "복원 시간: ${elapsed}s (덤프 $(wc -c < "$DUMP") bytes)"
+echo "복원 시간: ${elapsed}s · 기동 포함 전체: $(( $(date +%s) - total_start ))s (덤프 $(wc -c < "$DUMP") bytes)"
 if (( status == 0 )); then echo "복원 리허설 통과"; else echo "복원 리허설 실패 — 행 수가 다릅니다" >&2; fi
 exit $status
