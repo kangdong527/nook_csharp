@@ -1,0 +1,25 @@
+{
+  "Rules": [
+    {
+      "ID": "daily-7d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "daily/" },
+      "Expiration": { "Days": 7 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "weekly-28d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "weekly/" },
+      "Expiration": { "Days": 28 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "cleanup-markers-and-uploads",
+      "Status": "Enabled",
+      "Filter": {},
+      "Expiration": { "ExpiredObjectDeleteMarker": true },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

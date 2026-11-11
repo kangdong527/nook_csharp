@@ -1,0 +1,19 @@
+# 운영 DB 백업 1회 실행 — nook-backup.timer 가 부른다. DEP 9단계, Claude 작성(2026-11-11).
+# 설치: deploy/scripts/install-backup-timer.sh(1회). 손으로 바로 돌리기: sudo systemctl start nook-backup.service
+# 결과 보기: systemctl status nook-backup.service · journalctl -u nook-backup.service -n 50
+[Unit]
+Description=nook DB backup to S3
+# docker 가 떠 있어야 db 컨테이너에 exec 할 수 있다
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 지금 서비스 중인 릴리스의 스크립트를 쓴다 → 스크립트를 고치면 배포만 하면 반영된다(유닛을 다시 설치할 필요 없음).
+# $$ = systemd 변수 확장을 피하고 셸에 $ 를 넘긴다
+ExecStart=/bin/bash -c 'cd /opt/nook/releases/"$$(cat /opt/nook/state/current-tag)" && exec deploy/scripts/db-backup-s3.sh'
+# 서비스(api·db)보다 CPU·디스크 우선순위를 낮춘다
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

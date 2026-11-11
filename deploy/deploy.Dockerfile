@@ -6,3 +6,4 @@
 FROM scratch
 COPY deploy/compose.yaml deploy/compose.prod.yaml deploy/Caddyfile deploy/prod.env /release/deploy/
 COPY deploy/scripts/ /release/deploy/scripts/
+COPY deploy/systemd/ /release/deploy/systemd/
