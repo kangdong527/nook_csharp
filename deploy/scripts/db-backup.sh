@@ -10,17 +10,19 @@
 set -euo pipefail
 umask 077
 
-COMPOSE=(docker compose -f deploy/compose.yaml)
+# compose 대신 컨테이너 이름으로 직접 exec(2026-11-11) — compose 는 파일을 읽을 때 ${POSTGRES_PASSWORD:?} 보간이 필요해서
+# EC2(.env 가 /opt/nook/.env)에서는 --env-file 없이 실패한다. 프로젝트 이름이 nook-deploy 로 고정이라 로컬·운영 이름이 같다.
+DB_CONTAINER="${DB_CONTAINER:-nook-deploy-db-1}"
 OUT_DIR="${1:-./backups}"
 mkdir -p "$OUT_DIR"
-FILE="$OUT_DIR/nook-$(date -u +%Y%m%dT%H%M%SZ).dump"
+FILE="${BACKUP_FILE:-$OUT_DIR/nook-$(date -u +%Y%m%dT%H%M%SZ).dump}"   # BACKUP_FILE: 호출자(db-backup-s3.sh)가 이름을 정할 때
 
 # 인자에 경로를 넘기지 않고 표준 출력으로 받는다 — Git Bash 의 경로 변환(/tmp → C:/...)을 피하고, 컨테이너에 파일을 남기지 않는다.
 # 사용자·DB 이름은 컨테이너 환경변수에서 — 비밀번호는 컨테이너 안 로컬 소켓(trust)이라 필요 없다.
-"${COMPOSE[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$FILE"
+docker exec "$DB_CONTAINER" sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$FILE"
 
-# 무결성 점검: 비었거나 형식이 깨졌으면 pg_restore --list 가 실패한다(덤프가 중간에 끊긴 경우 포함).
-if [[ ! -s "$FILE" ]] || ! "${COMPOSE[@]}" exec -T db pg_restore --list < "$FILE" > /dev/null; then
+# 무결성 점검: 비었거나 형식이 깨졌으면 pg_restore --list 가 실패한다(덤프가 중간에 끊긴 경우 포함). -i: 표준 입력을 넘긴다
+if [[ ! -s "$FILE" ]] || ! docker exec -i "$DB_CONTAINER" pg_restore --list < "$FILE" > /dev/null; then
   echo "백업 실패: 덤프가 비었거나 읽을 수 없습니다 — $FILE" >&2
   exit 1
 fi
