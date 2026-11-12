@@ -553,3 +553,21 @@
 - Claude가 대신 작성한 부분: 실패 설정·복구 커밋, **롤백 판정 기준 ①~④(사용자 요청)**, `db-backup-s3.sh`·systemd 유닛·설치 스크립트·수명 주기 JSON, `db-backup.sh`·`db-restore-check.sh` 수정, 복원 판정 기준 초안, dep-plan 결과 기록, **이 기록 전체(사용자 요청)**
 - 사실·교훈: compose `environment`는 파일을 겹칠 때 키 단위로 병합 · 롤백이 릴리스 폴더 분기를 탄 증거 = `생성: /opt/nook/.env`가 두 번 찍힘 · 배포 sha는 GitHub merge commit · `put-bucket-lifecycle-configuration`은 규칙 전체 교체 · 백업 최대 보존 28 + 7 = 35일(이미지 이전 버전 35일과 같음 → 처리방침 "약 5주") · systemd `OnCalendar`에 `Asia/Seoul`을 안 쓰면 UTC 기준 · 서비스는 `current-tag` 릴리스의 스크립트를 실행 → 스크립트 변경은 배포만으로 반영 · `pg_restore --list`는 목차만(빈 테이블도 `TABLE DATA`) · Git Bash `PATH`에 `C:/...`를 넣으면 `:` 때문에 깨진다(`/c/...`) · 후속 후보: 헬스체크 실패 사유 `(null)` 로깅, migrate `libgssapi_krb5` 경고, 백업 실패 알림 없음
 - 다음에 할 것: 04:00 KST 자동 백업이 S3에 생겼는지 확인 → DLM(주기·보존 결정) → DB 갈아 끼우기 런북 → 7단계 남은 것(`[PM]` 5개 → 443 공개) → 10단계
+
+## 2026-11-13 (DEP-9) — 자동 백업 확인, DLM, 복구 런북
+
+> 형식과 사실 항목은 Claude가 잡음. **"배운 것"도 사용자 요청으로 Claude가 작성**(DLM 핵심 3개).
+
+- 한 일: 첫 자동 백업 확인(`daily/nook-20261111T190014Z.dump` = 11-12 04:00 KST) · DLM 정책 `policy-0f3bef75d79b892ea`(매일 05:00 KST·7개) · 복구 런북 `docs/design/restore-runbook.md`(실행 안 함) · DLM 구성 그림(아티팩트)
+- 오늘 배운 것:
+  1. **복구 수단은 "무엇을 잃었나"로 나눈다.** 설정 실수는 git·롤백, DB 데이터는 pg_dump, 서버 디스크 통째(인스턴스·볼륨 손실, git 밖의 Caddy 인증서·릴리스·systemd)는 EBS 스냅샷. 스냅샷은 크래시 일관성뿐이라 데이터의 1차 수단은 여전히 pg_dump다
+  2. **스냅샷은 서버 디스크 밖에, 증분으로 쌓인다.** 매일 찍어도 20GB 볼륨 용량은 그대로이고, 첫 회만 사용 중인 블록 전체, 이후엔 바뀐 블록만 저장된다 → 비용은 보존 개수보다 하루 변경량이 좌우한다
+  3. **DLM은 태그로 대상을 고르고, 개수로 보존한다.** 태그 덕분에 새 볼륨도 따라가지만, 스냅샷에서 만든 새 볼륨엔 태그가 없어서(`CopyTags: false`) 빠뜨리면 경고 없이 백업이 멈춘다. 개수 기준이라 새 사본이 끊겨도 마지막 7개는 남는다(S3 `daily/`는 일수 기준이라 7일이면 0개) → "최근 24시간 안에 사본이 있나"를 따로 봐야 끊긴 걸 안다
+- 막힌 것:
+  - AWS 세션 만료 → `aws login --profile nook-prod`
+  - Claude가 S3 `daily/` 보존을 35일로 잘못 말함(실제 7일, 35일은 최대 보존·이미지 버킷) → 파일로 확인 후 정정
+  - Claude가 "DB 교체 런북"과 "서버 복구(EC2 RTO)"를 섞어 씀 → 한 문서 두 절(§A·§B)로 분리
+- 내가 결정한 것: DLM 매일·7개·05:00 KST · 런북 한 문서에 두 절 · 쓰기 막기 = api 컨테이너 정지 · 교체 = 새 DB 복원 후 RENAME · 서버에 없는 덤프 = 미리 서명된 URL(역할 권한 안 늘림)
+- Claude가 대신 작성한 부분: `dlm-policy.json`·`create-dlm.ps1`, 복구 런북 전체, 런북 과금 표·dep-plan·progress 갱신, DLM 구성 그림, **이 기록 전체(사용자 요청)**
+- 사실·교훈: DLM `Times`는 UTC, 지정 시각부터 1시간 안에 시작 · DLM 기본 역할 `AWSDataLifecycleManagerDefaultRole`(계정에 1번) · 덤프 3개 크기 동일(24,520 bytes) = 운영 쓰기 없음 추정 → 크기 하한은 백업 실패 알림 조건 후보 · `ALTER DATABASE … RENAME`은 두 DB 모두 연결이 0이어야 한다 · 인스턴스가 살아 있으면 루트 볼륨 교체(`create-replace-root-volume-task`)로 ID·EIP·역할 유지
+- 다음에 할 것: 첫 DLM 스냅샷 확인(`describe-snapshots`, 크기) → PR 병합 → 7단계 남은 것(`[PM]` 5개 → 443 공개) → 10단계
