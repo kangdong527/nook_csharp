@@ -20,10 +20,21 @@ x-providers: &providers
   # X-Forwarded-For를 믿을 대역 = backend 서브넷(web이 api를 부르는 곳). 아래 networks.backend.ipam과 같아야 한다
   ForwardedHeaders__KnownNetworks: 10.89.0.0/24
 
+# 로그 로테이션(DEP 9단계, 2026-11-13 결정(사용자): compose에 둔다 · 컨테이너당 10MB × 3개).
+# 기본 json-file 드라이버는 크기 제한이 없어 20GB 루트 디스크를 채운다(스냅샷 변경 블록도 늘어난다).
+# 상시 4개 × 30MB ≈ 120MB 상한. 설정은 컨테이너를 새로 만들 때 적용된다(배포의 up -d 가 바뀐 설정을 보고 다시 만든다).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
 services:
   db:
     image: postgres:17
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nook}
       POSTGRES_USER: ${POSTGRES_USER:-nook}
@@ -51,6 +62,7 @@ services:
       db:
         condition: service_healthy
     restart: "no"
+    logging: *logging
 
   api:
     build:
@@ -58,6 +70,7 @@ services:
       dockerfile: deploy/api.Dockerfile
       target: api
     restart: unless-stopped
+    logging: *logging
     environment:
       <<: [*db-connection, *providers]
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?deploy/.env에 JWT_SIGNING_KEY(32바이트 이상)를 설정하세요}
@@ -80,6 +93,7 @@ services:
       args:
         NEXT_PUBLIC_KAKAO_MAP_KEY: ${NEXT_PUBLIC_KAKAO_MAP_KEY:-}
     restart: unless-stopped
+    logging: *logging
     environment:
       NOOK_API_URL: http://api:8080
       # BFF Origin 검사의 허용 출처 — 브라우저 주소창의 출처와 같아야 한다(dep-plan §4). 없으면 운영에서 POST 전부 403
@@ -95,6 +109,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *logging
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?deploy/.env에 SITE_ADDRESS를 설정하세요}
     ports:
