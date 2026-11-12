@@ -84,8 +84,16 @@ public static class DependencyInjection
     // /health/ready(DEP 7단계): DB에 연결되는가(CanConnect — 쿼리 한 번). 태그로 live와 나눈다 — live는 의존성을 보지 않는다.
     public const string ReadyTag = "ready";
 
+    // 기본 검사(CanConnectAsync)는 연결 예외를 삼키고 false만 돌려준다 → 로그에 실패 이유가 '(null)'(2026-11-11 운영 롤백 실측).
+    // SELECT 1을 직접 실행해 예외가 올라오게 한다 → HealthCheckService가 잡아 로그에 예외를 남긴다.
+    // 응답 본문은 기본 writer라 여전히 상태 문자열만 — 예외 메시지·호스트는 밖으로 나가지 않는다.
     public static IHealthChecksBuilder AddDatabaseHealthCheck(this IHealthChecksBuilder builder) =>
-        builder.AddDbContextCheck<NookDbContext>("database", tags: [ReadyTag]);
+        builder.AddDbContextCheck<NookDbContext>("database", tags: [ReadyTag],
+            customTestQuery: async (db, ct) =>
+            {
+                await db.Database.ExecuteSqlAsync($"SELECT 1", ct);
+                return true;
+            });
 
     // 개발 전용(FE-2 이미지 A안). 재시작해도 남아 화면 확인에 쓴다. 운영은 DEP에서 S3 구현체로 교체.
     public static IServiceCollection AddLocalDiskImageStorage(this IServiceCollection services, string root) =>
