@@ -46,9 +46,17 @@ jobs:
 
           account=$(aws sts get-caller-identity --query Account --output text)
           bucket="nook-prod-backups-${account}-${AWS_REGION}-an"
-          read -r key size lm < <(aws s3api list-objects-v2 --bucket "$bucket" --prefix daily/nook- \
-            --query 'sort_by(Contents || `[]`, &LastModified)[-1].[Key,Size,LastModified]' --output text)
-          if [ -z "$key" ] || [ "$key" = "None" ]; then
+          # 조회 실패(권한·네트워크)와 "덤프 없음"을 구분한다 — < <(...) 는 안쪽 명령이 실패해도 빈 출력으로 넘어가서
+          # 권한 실수가 "백업 끊김"으로 오보된다. 출력을 변수로 받고 종료 코드를 따로 본다
+          if ! out=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix daily/nook- \
+            --query 'sort_by(Contents || `[]`, &LastModified)[-1].[Key,Size,LastModified]' --output text); then
+            echo "::error::S3 조회 실패(백업 상태 모름) — 역할 권한·버킷 이름 확인"; fail=1; key="ERROR"
+          else
+            read -r key size lm <<<"$out"
+          fi
+          if [ "$key" = "ERROR" ]; then
+            :
+          elif [ -z "$key" ] || [ "$key" = "None" ]; then
             echo "::error::S3 daily/ 에 덤프가 없다"; fail=1
           elif (( now - $(date -u -d "$lm" +%s) > max )); then
             echo "::error::최신 덤프가 $(age_h "$lm")시간 전 — $key"; fail=1
@@ -59,10 +67,16 @@ jobs:
           fi
 
           # DLM이 만든 스냅샷에는 aws:dlm:lifecycle-policy-id 태그가 붙는다 → 볼륨이 바뀌어도(런북 §B) 같은 조건으로 찾는다
-          read -r snap start vol < <(aws ec2 describe-snapshots --owner-ids self \
+          if ! out=$(aws ec2 describe-snapshots --owner-ids self \
             --filters "Name=tag:aws:dlm:lifecycle-policy-id,Values=$DLM_POLICY_ID" Name=status,Values=completed \
-            --query 'sort_by(Snapshots, &StartTime)[-1].[SnapshotId,StartTime,VolumeId]' --output text)
-          if [ -z "$snap" ] || [ "$snap" = "None" ]; then
+            --query 'sort_by(Snapshots, &StartTime)[-1].[SnapshotId,StartTime,VolumeId]' --output text); then
+            echo "::error::스냅샷 조회 실패(백업 상태 모름) — 역할 권한 확인"; fail=1; snap="ERROR"
+          else
+            read -r snap start vol <<<"$out"
+          fi
+          if [ "$snap" = "ERROR" ]; then
+            :
+          elif [ -z "$snap" ] || [ "$snap" = "None" ]; then
             echo "::error::DLM 스냅샷이 없다(정책 $DLM_POLICY_ID)"; fail=1
           elif (( now - $(date -u -d "$start" +%s) > max )); then
             echo "::error::최신 스냅샷이 $(age_h "$start")시간 전 — $snap ($vol). 볼륨 태그 nook-dlm=daily 확인"; fail=1
