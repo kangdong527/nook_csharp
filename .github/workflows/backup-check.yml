@@ -1,0 +1,87 @@
+# 백업 데드맨 스위치 — DEP 10단계, Claude 작성(2026-11-13). 결정(사용자): 확인은 서버 밖 GitHub Actions 스케줄.
+#   "실패가 있으면 알린다"(서버 OnFailure)는 서버가 꺼지거나 타이머가 비활성화되거나 DLM 태그가 빠지면 조용하다.
+#   → "성공(결과물)이 없으면 알린다": 최근 MAX_AGE_HOURS 안에 S3 daily/ 덤프와 DLM 스냅샷이 있는지 본다.
+# 알림 = 이 워크플로의 실패. GitHub가 실패한 스케줄 실행을 워크플로를 마지막으로 고친 사람에게 메일로 알린다.
+# 리포 변수: AWS_BACKUP_CHECK_ROLE_ARN (deploy/aws/create-backup-check-role.ps1 출력)
+name: Backup check
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # 22:00 UTC = 07:00 KST — 04:00 덤프·05:00 스냅샷 뒤
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      AWS_REGION: ap-northeast-2
+      MAX_AGE_HOURS: 26 # 하루 1회 + 지연 여유(DLM 시작 창 1시간, 타이머 Persistent)
+      MIN_DUMP_BYTES: 4096 # 지금 덤프 24,520 bytes. 이보다 작으면 "성공했지만 비었다"
+      DLM_POLICY_ID: policy-0f3bef75d79b892ea
+    steps:
+      - name: AWS credentials (OIDC → nook-github-backup-check)
+        env:
+          ROLE: ${{ vars.AWS_BACKUP_CHECK_ROLE_ARN }}
+        run: |
+          [ -n "$ROLE" ] || { echo "::error::리포 변수 AWS_BACKUP_CHECK_ROLE_ARN 없음"; exit 1; }
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          creds=$(aws sts assume-role-with-web-identity --role-arn "$ROLE" \
+            --role-session-name "gh-backup-$GITHUB_RUN_ID" --web-identity-token "$token" \
+            --duration-seconds 900 --query Credentials --output json)
+          ak=$(jq -r .AccessKeyId <<<"$creds"); sk=$(jq -r .SecretAccessKey <<<"$creds"); st=$(jq -r .SessionToken <<<"$creds")
+          echo "::add-mask::$ak"; echo "::add-mask::$sk"; echo "::add-mask::$st"
+          { echo "AWS_ACCESS_KEY_ID=$ak"; echo "AWS_SECRET_ACCESS_KEY=$sk"; echo "AWS_SESSION_TOKEN=$st"; } >> "$GITHUB_ENV"
+
+      # 두 검사를 모두 돌리고 마지막에 한 번 실패한다 — 하나가 실패해도 다른 쪽 상태를 같이 본다
+      - name: Check newest dump and snapshot
+        run: |
+          now=$(date -u +%s); max=$(( MAX_AGE_HOURS * 3600 )); fail=0
+          age_h() { echo $(( (now - $(date -u -d "$1" +%s)) / 3600 )); }
+
+          account=$(aws sts get-caller-identity --query Account --output text)
+          bucket="nook-prod-backups-${account}-${AWS_REGION}-an"
+          # 조회 실패(권한·네트워크)와 "덤프 없음"을 구분한다 — < <(...) 는 안쪽 명령이 실패해도 빈 출력으로 넘어가서
+          # 권한 실수가 "백업 끊김"으로 오보된다. 출력을 변수로 받고 종료 코드를 따로 본다
+          if ! out=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix daily/nook- \
+            --query 'sort_by(Contents || `[]`, &LastModified)[-1].[Key,Size,LastModified]' --output text); then
+            echo "::error::S3 조회 실패(백업 상태 모름) — 역할 권한·버킷 이름 확인"; fail=1; key="ERROR"
+          else
+            read -r key size lm <<<"$out"
+          fi
+          if [ "$key" = "ERROR" ]; then
+            :
+          elif [ -z "$key" ] || [ "$key" = "None" ]; then
+            echo "::error::S3 daily/ 에 덤프가 없다"; fail=1
+          elif (( now - $(date -u -d "$lm" +%s) > max )); then
+            echo "::error::최신 덤프가 $(age_h "$lm")시간 전 — $key"; fail=1
+          elif (( size < MIN_DUMP_BYTES )); then
+            echo "::error::최신 덤프가 ${size} bytes — 비었을 수 있다: $key"; fail=1
+          else
+            echo "덤프 OK: $key · ${size} bytes · $(age_h "$lm")시간 전"
+          fi
+
+          # DLM이 만든 스냅샷에는 aws:dlm:lifecycle-policy-id 태그가 붙는다 → 볼륨이 바뀌어도(런북 §B) 같은 조건으로 찾는다
+          if ! out=$(aws ec2 describe-snapshots --owner-ids self \
+            --filters "Name=tag:aws:dlm:lifecycle-policy-id,Values=$DLM_POLICY_ID" Name=status,Values=completed \
+            --query 'sort_by(Snapshots, &StartTime)[-1].[SnapshotId,StartTime,VolumeId]' --output text); then
+            echo "::error::스냅샷 조회 실패(백업 상태 모름) — 역할 권한 확인"; fail=1; snap="ERROR"
+          else
+            read -r snap start vol <<<"$out"
+          fi
+          if [ "$snap" = "ERROR" ]; then
+            :
+          elif [ -z "$snap" ] || [ "$snap" = "None" ]; then
+            echo "::error::DLM 스냅샷이 없다(정책 $DLM_POLICY_ID)"; fail=1
+          elif (( now - $(date -u -d "$start" +%s) > max )); then
+            echo "::error::최신 스냅샷이 $(age_h "$start")시간 전 — $snap ($vol). 볼륨 태그 nook-dlm=daily 확인"; fail=1
+          else
+            echo "스냅샷 OK: $snap · $vol · $(age_h "$start")시간 전"
+          fi
+
+          exit $fail
