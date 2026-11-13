@@ -571,3 +571,11 @@
 - Claude가 대신 작성한 부분: `dlm-policy.json`·`create-dlm.ps1`, 복구 런북 전체, 런북 과금 표·dep-plan·progress 갱신, DLM 구성 그림, **이 기록 전체(사용자 요청)**
 - 사실·교훈: DLM `Times`는 UTC, 지정 시각부터 1시간 안에 시작 · DLM 기본 역할 `AWSDataLifecycleManagerDefaultRole`(계정에 1번) · 덤프 3개 크기 동일(24,520 bytes) = 운영 쓰기 없음 추정 → 크기 하한은 백업 실패 알림 조건 후보 · `ALTER DATABASE … RENAME`은 두 DB 모두 연결이 0이어야 한다 · 인스턴스가 살아 있으면 루트 볼륨 교체(`create-replace-root-volume-task`)로 ID·EIP·역할 유지
 - 다음에 할 것: 첫 DLM 스냅샷 확인(`describe-snapshots`, 크기) → PR 병합 → 7단계 남은 것(`[PM]` 5개 → 443 공개) → 10단계
+- 추가(같은 날 이어서, Claude 정리 — 사실 위주): 10단계 C-1 백업 데드맨 스위치(PR #54) · 9단계 로그 로테이션(PR #55) · C-2 헬스체크 실패 사유(PR #56) · C-3 활동 리포트(PR #56·#57)
+  - 알림은 "실패가 있으면"(서버 `OnFailure`)이 아니라 **"성공이 없으면"(데드맨 스위치)**으로 — 서버 꺼짐·타이머 비활성·DLM 태그 누락은 실패 이벤트가 없다. 확인은 서버 밖에서, 대상은 과정이 아닌 결과물
+  - 감시 스크립트는 **"모른다"(조회 실패)와 "없다"(백업 없음)를 섞지 않는다** — `< <(...)`가 AWS CLI 오류를 빈 출력으로 삼켜 권한 실수가 "덤프 없음"으로 오보될 뻔함
+  - true/false API는 이유를 버린다 — `CanConnectAsync`가 예외를 삼켜 ready 실패 로그가 `'(null)'`. `SELECT 1`로 예외를 올려 로그에만 원인, 응답은 상태만
+  - 측정 없이 고른 값은 "관례값·임시"로 적고 **언제·무엇을 재서·어떤 공식으로** 다시 정할지 남긴다(로그 10MB×3 → 443 공개 1주 뒤)
+  - 사실: PG17 `uuid_extract_timestamp()`는 UUIDv7에 NULL(18부터) → 앞 48비트 직접 추출 · Windows에서 만든 스크립트는 git에 `100644` → `git update-index --chmod=+x` · `sudo`는 실행 비트 없는 파일을 "command not found"로 보고 · ssm-user는 docker 그룹 아님 → `sudo docker` · Git Bash엔 tzdata가 없어 `TZ=Asia/Seoul`이 무시됨 · `current-tag`는 성공한 배포만 기록
+  - 내가 결정한 것: 확인 위치 = GitHub Actions 스케줄 · 로그 상한 compose·10MB×3(측정은 공개 뒤) · 활동 보기 = 있는 데이터 집계만(개별은 DB 직접 조회)
+  - Claude가 대신 작성한 부분: 워크플로·역할 스크립트·**권한 정책(사용자 요청)**, 로그 설정, 헬스체크 수정·테스트, 활동 리포트, 문서 갱신, 이 추가분

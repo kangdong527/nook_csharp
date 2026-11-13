@@ -1,0 +1,7 @@
+# gitleaks 오탐 — 값이 아니라 "커밋:파일:규칙:줄" 지문으로 등록한다(DEP 게이트 3, 2026-11-13 확인).
+# 새 항목을 넣을 때: 실제 비밀값이 아님을 확인하고 이유를 한 줄 적는다. 진짜 비밀값이면 여기 넣지 말고 즉시 교체(런북).
+
+# 통합 테스트 전용 JWT 서명 키(운영 키는 SSM /nook/prod/JWT_SIGNING_KEY)
+dc674879b0044568081c3fb6324354aa76dd9e0a:tests/Nook.Integration.Tests/Infrastructure/NookApiFactory.cs:generic-api-key:20
+# 위조 토큰 테스트의 "공격자가 추측한 키"
+dc674879b0044568081c3fb6324354aa76dd9e0a:tests/Nook.Integration.Tests/Api/AuthorizationTests.cs:generic-api-key:60
