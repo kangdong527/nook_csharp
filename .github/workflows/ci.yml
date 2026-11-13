@@ -85,6 +85,25 @@ jobs:
             exit 1
           fi
 
+  # DEP 게이트 3(2026-11-13 사용자 결정): 리포에 비밀값이 커밋되는 것을 막는다.
+  # 이미지 Trivy secret 은 모양이 정해진 키(AKIA…·ghp_…)만 잡고 평문 DB 비밀번호는 놓친다(실측) → gitleaks(엔트로피 + 키워드)를 더한다.
+  # 히스토리 전체를 매번 본다(커밋 약 250개에 5초) — PR 범위만 보면 강제 푸시·리베이스로 빠지는 커밋을 놓칠 수 있다.
+  # 테스트 전용 키 같은 오탐은 루트 .gitleaksignore 에 지문(fingerprint)으로 등록한다(값이 아니라 위치를 등록).
+  secrets:
+    name: secrets — gitleaks (history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # 러너 사용자 uid 로 실행 — 다르면 git 이 '소유자가 다른 저장소(dubious ownership)'로 거부한다
+      - name: gitleaks
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$GITHUB_WORKSPACE:/repo" \
+            zricethezav/gitleaks:v8.28.0 git /repo --redact --no-banner --verbose
+
   images:
     name: images — build / Trivy scan
     runs-on: ubuntu-latest
@@ -106,9 +125,11 @@ jobs:
       # trivy-action 대신 버전 고정한 공식 이미지를 직접 실행한다(서드파티 액션 태그 변조 위험을 줄임)
       - name: Trivy scan
         run: |
+          # 비밀값(DEP 게이트 3, 2026-11-13 사용자 결정 "CI 상시"): 심각도 거르지 않음 — 이미지 안 비밀값은 고칠 버전을 기다릴 대상이 아니다
+          trivy() { docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache "$TRIVY_IMAGE" image --no-progress --exit-code 1 "$@"; }
           for img in nook-api:ci nook-migrate:ci nook-web:ci; do
             echo "::group::$img"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \
-              "$TRIVY_IMAGE" image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress "$img"
+            trivy --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed "$img"
+            trivy --scanners secret "$img"
             echo "::endgroup::"
           done
