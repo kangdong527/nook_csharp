@@ -18,6 +18,15 @@
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "ap-northeast-2" }
       }
+    },
+    {
+      "Sid": "ReadGuardDutyFindingsSeoulOnly",
+      "Effect": "Allow",
+      "Action": ["guardduty:ListDetectors", "guardduty:ListFindings", "guardduty:GetFindings"],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "ap-northeast-2" }
+      }
     }
   ]
 }
