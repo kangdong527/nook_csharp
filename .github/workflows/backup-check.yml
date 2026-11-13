@@ -1,9 +1,9 @@
-# 백업 데드맨 스위치 — DEP 10단계, Claude 작성(2026-11-13). 결정(사용자): 확인은 서버 밖 GitHub Actions 스케줄.
+# 매일 운영 점검(백업 데드맨 스위치 + GuardDuty 탐지) — DEP 10단계, Claude 작성(2026-11-13). 결정(사용자): 확인은 서버 밖 GitHub Actions 스케줄.
 #   "실패가 있으면 알린다"(서버 OnFailure)는 서버가 꺼지거나 타이머가 비활성화되거나 DLM 태그가 빠지면 조용하다.
 #   → "성공(결과물)이 없으면 알린다": 최근 MAX_AGE_HOURS 안에 S3 daily/ 덤프와 DLM 스냅샷이 있는지 본다.
 # 알림 = 이 워크플로의 실패. GitHub가 실패한 스케줄 실행을 워크플로를 마지막으로 고친 사람에게 메일로 알린다.
 # 리포 변수: AWS_BACKUP_CHECK_ROLE_ARN (deploy/aws/create-backup-check-role.ps1 출력)
-name: Backup check
+name: Daily ops check (backup · GuardDuty)
 
 on:
   schedule:

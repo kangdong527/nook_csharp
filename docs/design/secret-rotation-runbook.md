@@ -72,8 +72,17 @@ aws ssm get-command-invocation --command-id $cid --instance-id i-02eed84198de4f9
 
 ## C. 침해 의심 시 격리 (교체보다 먼저)
 
-언제: GuardDuty 탐지(Backup check 워크플로가 실패로 알림), 모르는 프로세스·아웃바운드, CloudTrail에 모르는 호출.
+언제: GuardDuty 탐지(Actions `Daily ops check`가 실패로 알림 — 실패한 단계가 `Check GuardDuty findings`인지 먼저 확인), 모르는 프로세스·아웃바운드, CloudTrail에 모르는 호출.
 순서 = **증거 보존 → 인바운드 차단 → 조사 → 비밀값 교체(A·B) → 복구**. 인스턴스를 **종료하지 않는다**(디스크·메모리 증거가 사라짐).
+
+**GuardDuty 알림이 왔을 때 먼저**: 콘솔 GuardDuty → 결과에서 유형·자원·시각 확인. 오탐이거나 확인을 마쳤으면 **보관 처리** → 다음 날 점검부터 조용해진다(점검은 미보관만 센다). 진짜면 아래 1부터.
+샘플(대조군)을 만든 뒤 정리 — 샘플 표시는 필터 속성이 아니라 문자열 안이라 서버 필터로 못 고른다(2026-11-13 실측):
+```powershell
+$d = "50d0e9aeea1841d0a5a9dc25fecdfa27"
+$all = aws guardduty list-findings --detector-id $d --query FindingIds --output text --profile nook-prod --region ap-northeast-2
+$ids = aws guardduty get-findings --detector-id $d --finding-ids $all.Split() --query 'Findings[?contains(Service.AdditionalInfo.Value, ''\"sample\":true'')].Id' --output text --profile nook-prod --region ap-northeast-2
+aws guardduty archive-findings --detector-id $d --finding-ids $ids.Split() --profile nook-prod --region ap-northeast-2
+```
 
 실행 위치: 전부 **로컬 PC PowerShell(nook-prod)**. SG 인바운드를 다 막아도 Session Manager는 된다(에이전트가 바깥으로 나가는 연결 — 인바운드 불필요).
 
